@@ -83,20 +83,30 @@
       rows: ['TTTTTTT^TTTTTTT', 'T.....f=f.....T', 'T.HH...=...HH.T', 'T.HD...=...DH.T', 'T......=......T', 'T.f....=....f.T', 'T....=====....T', 'T....=...=....T', 'T.HH.=...=.HH.T', 'T.HD.=...=.DH.T', 'T....=====....T', 'T......=......T', 'T..f...=...f..T', 'T......=......T', 'T~~~...=...~~~T', 'T~~~...=...~~~T', 'T......=......T', 'T.f..........fT', 'T.............T', 'T.....f.f.....T', 'T.............T', 'T.............T', 'TTTTTTTTTTTTTTT'],
       npcs: [{ id: 'elder', x: 5, y: 11 }], foes: [] },
     forest: { name: 'GREENWOOD', theme: 'grass', next: 'cave', start: [7, 21], fire: [7, 9], altar: [5, 2], boss: [7, 2], bossKind: 'forest', ally: 'knight',
-      rows: ['TTTTTTT^TTTTTTT', 'TTT...=.=...TTT', 'TT...=...=...TT', 'TT..=.....=..TT', 'T...=.TTT.=...T', 'T..==.TTT.==..T', 'T..=...T...=..T', 'T..=..f.f..=..T', 'T..=.......=..T', 'T..===...===..T', 'TT...=...=...TT', 'TTT..=.T.=..TTT', 'TT...=...=...TT', 'T...==...==...T', 'T..==..T..==..T', 'T..=...T...=..T', 'T..=..fTf..=..T', 'T..===...===..T', 'TT....=.=....TT', 'TTT...=.=...TTT', 'TTTT..=.=..TTTT', 'TTTTT.=.=.TTTTT', 'TTTTTTT.TTTTTTT'],
+      rows: ['TTTTTTT^TTTTTTT', 'TTT...=.=...TTT', 'TT...=...=...TT', 'TT..=.....=..TT', 'T...=.TTT.=...T', 'T..==.TTT.==..T', 'T..=...T...=..T', 'T..=..f.f..=..T', 'TX.=.......=..T', 'T..===...===..T', 'TT...=...=...TT', 'TTT..=.T.=..TTT', 'TT...=...=...TT', 'T...==...==...T', 'T..==..T..==..T', 'T..=...S...=..T', 'T..=..fTf..=..T', 'T..===...===..T', 'TT....=.=....TT', 'TTT...=.=...TTT', 'TTTT..=.=..TTTT', 'TTTTT.=.=.TTTTT', 'TTTTTTT.TTTTTTT'],
       foes: [{ kind: 'slime', x: 4, y: 14 }, { kind: 'wolf', x: 10, y: 6 }, { kind: 'slime', x: 11, y: 15 }] },
     cave: { name: 'GLIMMERDEEP', theme: 'cave', next: 'desert', start: [7, 21], fire: [7, 12], altar: [9, 2], boss: [7, 3], bossKind: 'cave', ally: 'mage',
-      rows: ['WWWWWWW^WWWWWWW', 'WWWccccccccCWWW', 'WWcccC.cc..ccWW', 'WccccccccccccWW', 'WcC.ccWWWcc.cCW', 'Wcc..cWWWc..ccW', 'WWcc.ccWcc.ccWW', 'WWWcc.....ccWWW', 'WWcc..C.C..ccWW', 'Wcc.........ccW', 'WcC....c....CcW', 'Wcc...ccc...ccW', 'WWcc.......ccWW', 'WWWcc.WWW.ccWWW', 'WWcc..WWW..ccWW', 'Wcc....W....ccW', 'WcC.........CcW', 'Wccc..C.C..cccW', 'WWccc.....cccWW', 'WWWccc...cccWWW', 'WWWWcc...ccWWWW', 'WWWWWcc.ccWWWWW', 'WWWWWWW.WWWWWWW'],
+      rows: ['WWWWWWW^WWWWWWW', 'WWWccccccccCWWW', 'WWcccC.cc..ccWW', 'WccccccccccccWW', 'WcC.ccWWWcc.cCW', 'Wcc..cWWWc..ccW', 'WWcc.ccWcc.ccWW', 'WWWcc.....ccWWW', 'WWcc..C.C..ccWW', 'WXc.........ccW', 'WcC....c....CcW', 'Wcc...ccc...ccW', 'WWcc.......ccWW', 'WWWcc.WWW.ccWWW', 'WWcc..WQW..ccWW', 'Wcc....S....ccW', 'WcC.........CcW', 'Wccc..C.C..cccW', 'WWccc.....cccWW', 'WWWccc...cccWWW', 'WWWWcc...ccWWWW', 'WWWWWcc.ccWWWWW', 'WWWWWWW.WWWWWWW'],
       foes: [{ kind: 'bat', x: 3, y: 9 }, { kind: 'bat', x: 11, y: 10 }, { kind: 'bat', x: 7, y: 16 }] },
     desert: { name: 'SUNKEN DUNES', theme: 'sand', next: 'titan', start: [7, 21], fire: [10, 12], altar: [4, 2], boss: [7, 3], bossKind: 'desert', ally: 'archer',
-      rows: ['PPPPPPP^PPPPPPP', 'Psss...=...sssP', 'Pss.s..=..s.ssP', 'Ps..P..=..P..sP', 'Ps.....=.....sP', 'Pss..=====..ssP', 'Ps...=...=...sP', 'Ps.P.=.P.=.P.sP', 'Ps...=...=...sP', 'Pss..=====..ssP', 'Ps.....=.....sP', 'Ps..P..=..P..sP', 'Pss....=.....sP', 'Ps..s..=..s..sP', 'Ps.....=.....sP', 'Pss.P..=..P.ssP', 'Ps.....=.....sP', 'Ps..s.===.s..sP', 'Pss...=.=...ssP', 'Ps....=.=....sP', 'Pss...=.=...ssP', 'Psss..=.=..sssP', 'PPPPPPP.PPPPPPP'],
+      rows: ['PPPPPPP^PPPPPPP', 'Psss...=...sssP', 'Pss.s..=..s.ssP', 'Ps..P..=..P..sP', 'PsX....=.....sP', 'Pss..=====..ssP', 'Ps...=...=...sP', 'Ps.P.=.P.=.P.sP', 'Ps...=...=...sP', 'Pss..=====..ssP', 'Ps.....=.....sP', 'Ps..P..=..P..sP', 'Pss....=.....sP', 'Ps..s..=..s..sP', 'Ps.....=.....sP', 'Pss.S..=..P.ssP', 'Ps.....=.....sP', 'Ps..s.===.s..sP', 'Pss...=.=...ssP', 'Ps....=.=....sP', 'Pss...=.=...ssP', 'Psss..=.=..sssP', 'PPPPPPP.PPPPPPP'],
       foes: [{ kind: 'scorp', x: 3, y: 8 }, { kind: 'scorp', x: 11, y: 14 }, { kind: 'scorp', x: 4, y: 18 }] },
     titan: { name: 'THE STONE FACE', theme: 'titan', next: null, start: [7, 21], fire: [11, 18],
       rows: ['###############', '###############', '###############', '###############', '###############', '###############', '###############', '###############', '###############', '###############', '#####.....#####', '####.......####', '###.........###', '###.........###', '##...........##', '##...........##', '##...........##', '###.........###', '###.........###', '####.......####', '#####.....#####', '######...######', '#######.#######'],
       foes: [] },
   };
   const SOLID = new Set(['T', '~', '#', 'H', 'W', 'C', 'P']);
-  const tileAt = (m, x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS) ? '#' : m.rows[y][x];
+  // things to find: a chest on each map, a secret (a tile that looks solid but has a tell) and one optional fight
+  const FINDS = {
+    'forest:1,8': { items: { POTION: 2 }, msg: 'FOUND 2 POTIONS!' },
+    'forest:7,15': { gear: 'iron', msg: 'A HOLLOW TREE! FOUND THE IRON CHARM: PARTY DEFENSE +3.' },
+    'cave:1,9': { items: { POTION: 1, ETHER: 1 }, msg: 'FOUND A POTION AND AN ETHER!' },
+    'cave:7,15': { open: true, msg: 'THE CRACKED WALL CRUMBLES. SOMETHING GLOWS BEHIND IT.' },
+    'desert:2,4': { items: { POTION: 2 }, msg: 'FOUND 2 POTIONS!' },
+    'desert:4,15': { gear: 'sun', msg: 'THE PILLAR WAS HOLLOW! FOUND THE SUNSTONE: KAEL ATTACK +4.' },
+  };
+  const GEAR = { iron: 'IRON CHARM', sun: 'SUNSTONE', mirror: 'MIRROR CHARM' };
+  const tileAt = (m, x, y) => { if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return '#'; const ch = m.rows[y][x]; return (ch === 'S' || ch === 'X' || ch === 'Q') && G.found && G.found[G.region + ':' + x + ',' + y] ? (ch === 'X' ? 'x' : '.') : ch; };
 
   function drawTile(ch, x, y, t, theme) {
     const X = x * TS, Y = MAP_Y + y * TS, hs = hash(x * 31 + y * 17);
@@ -118,6 +128,12 @@
       case 'C': rect(X, Y, TS, TS, 'n1'); cx.fillStyle = P(Math.floor(t * 2 + x) % 4 ? 'p1' : 'p2'); cx.beginPath(); cx.moveTo(X + 2, Y + 12); cx.lineTo(X + 6, Y + 1); cx.lineTo(X + 10, Y + 12); cx.fill(); px(X + 6, Y + 3, 'c3'); break;
       case 'P': rect(X, Y, TS, TS, 'd2'); rect(X + 2, Y, 8, TS, 'd1'); rect(X + 8, Y, 2, TS, 'd0'); rect(X + 1, Y, 10, 2, 'w4'); break;
       case 's': rect(X, Y, TS, TS, 'd2'); px(X + 2 + hs * 6, Y + 4, 'd1'); px(X + 7, Y + 8, 'd1'); break;
+      case 'X': case 'x': rect(X + 1, Y + 4, 10, 7, 'w1'); rect(X + 1, Y + 4, 10, 1, 'w3'); rect(X + 1, Y + 7, 10, 1, 'w0'); rect(X + 5, Y + 6, 2, 3, ch === 'X' ? 'au' : 'w0'); if (ch === 'x') rect(X + 1, Y + 2, 10, 2, 'w2'); else if (Math.floor(t * 2 + x) % 4 === 0) px(X + 9, Y + 4, 'wt'); break;
+      case 'S': if (theme === 'grass') { rect(X + 5, Y + 6, 2, 6, 'w0'); disc(X + 6, Y + 5, 5, 'g1'); disc(X + 5, Y + 4, 3, 'g2'); rect(X + 5, Y + 8, 2, 2, 'k'); }   // a hollow in the trunk
+        else if (theme === 'cave') { rect(X, Y, TS, TS, 'n0'); px(X + 3, Y + 2, 'n2'); px(X + 4, Y + 3, 'n2'); px(X + 4, Y + 4, 'n2'); px(X + 5, Y + 5, 'n2'); px(X + 7, Y + 7, 'n2'); px(X + 6, Y + 8, 'n2'); }   // cracks
+        else { rect(X, Y, TS, TS, 'd2'); rect(X + 2, Y, 8, TS, 'd1'); rect(X + 8, Y, 2, TS, 'd0'); rect(X + 1, Y, 10, 2, 'w4'); px(X + 5, Y + 5, 'd0'); px(X + 6, Y + 6, 'd0'); px(X + 5, Y + 7, 'd0'); }
+        break;
+      case 'Q': rect(X, Y, TS, TS, 'n1'); rect(X + 3, Y + 3, 6, 9, 's2'); rect(X + 4, Y + 1, 4, 3, 's3'); shard(X + 6, Y + 7, t); if (Math.floor(t * 3) % 2) px(X + 5, Y + 2, 'r2'); break;
       case '^': rect(X, Y, TS, TS, theme === 'cave' ? 'n2' : theme === 'sand' ? 'd1' : 'd0'); if (Math.floor(t * 3) % 2) { px(X + 5, Y + 3, 'wt'); rect(X + 4, Y + 4, 3, 1, 'wt'); } break;
     }
   }
@@ -140,24 +156,27 @@
     FIREBALL: { mp: 6, target: 'foe', desc: 'fire', fire: true }, HEAL: { mp: 5, target: 'ally', desc: '+30 HP' }, VOLLEY: { mp: 6, target: 'all', desc: 'hits all', pierce: true },
   };
   const FOES = {
-    slime: { name: 'SLIME', hp: 26, atk: 7, spd: 5, xp: 6, draw: 'slime' }, wolf: { name: 'WOLF', hp: 34, atk: 10, spd: 11, xp: 9, draw: 'wolf' },
-    bat: { name: 'GLOOMBAT', hp: 30, atk: 9, spd: 14, xp: 9, draw: 'bat', weak: 'pierce' }, scorp: { name: 'DUNE STINGER', hp: 44, atk: 12, spd: 9, xp: 12, draw: 'scorp', weak: 'fire' },
-    gforest: { name: 'MOSS GOLEM', hp: 120, atk: 11, spd: 4, xp: 30, draw: 'golem', tint: ['g1', 'g2'], weak: 'fire', boss: true },
-    gcave: { name: 'CRYSTAL GOLEM', hp: 170, atk: 13, spd: 5, xp: 40, draw: 'golem', tint: ['p0', 'p1'], weak: 'fire', boss: true },
-    gdesert: { name: 'SAND GOLEM', hp: 230, atk: 15, spd: 6, xp: 55, draw: 'golem', tint: ['d0', 'd1'], weak: 'pierce', boss: true },
+    slime: { name: 'SLIME', hp: 26, atk: 9, spd: 5, xp: 6, draw: 'slime' }, wolf: { name: 'WOLF', hp: 34, atk: 13, spd: 11, xp: 9, draw: 'wolf' },
+    bat: { name: 'GLOOMBAT', hp: 30, atk: 12, spd: 14, xp: 9, draw: 'bat', weak: 'pierce' }, scorp: { name: 'DUNE STINGER', hp: 44, atk: 15, spd: 9, xp: 12, draw: 'scorp', weak: 'fire' },
+    gforest: { name: 'MOSS GOLEM', hp: 170, atk: 11, spd: 4, xp: 30, draw: 'golem', tint: ['g1', 'g2'], weak: 'fire', boss: true },
+    gcave: { name: 'CRYSTAL GOLEM', hp: 300, atk: 18, spd: 5, xp: 40, draw: 'golem', tint: ['p0', 'p1'], weak: 'fire', boss: true },
+    gdesert: { name: 'SAND GOLEM', hp: 380, atk: 21, spd: 6, xp: 55, draw: 'golem', tint: ['d0', 'd1'], boss: true },
+    wraith: { name: 'SHARD WRAITH', hp: 420, atk: 23, spd: 15, xp: 60, draw: 'golem', tint: ['n1', 'p1'], weak: 'fire', boss: true },
     eye: { name: 'TITAN EYE', hp: 420, atk: 20, spd: 7, xp: 0, draw: 'eye', weak: 'shard', boss: true },
-    lhand: { name: 'LEFT HAND', hp: 120, atk: 13, spd: 9, xp: 0, draw: 'hand', boss: true }, rhand: { name: 'RIGHT HAND', hp: 120, atk: 13, spd: 10, xp: 0, draw: 'hand', boss: true },
+    lhand: { name: 'LEFT HAND', hp: 120, atk: 16, spd: 9, xp: 0, draw: 'hand', boss: true }, rhand: { name: 'RIGHT HAND', hp: 120, atk: 16, spd: 10, xp: 0, draw: 'hand', boss: true },
   };
   function newMember(id) { const b = MEMBERS[id]; return { id, name: b.name, spr: b.spr, lv: 1, xp: 0, maxhp: b.hp, hp: b.hp, maxmp: b.mp, mp: b.mp, atk: b.atk, mag: b.mag, def: b.def, spd: b.spd, skills: b.skills.slice() }; }
 
   // ---------- game state ----------
   const G = {};
   function newGame() {
-    Object.assign(G, { party: [newMember('hero')], shards: 0, region: 'village', items: { POTION: 3, ETHER: 1 }, cleared: {}, beaten: {}, flags: {}, endings: G.endings || loadEndings() });
+    Object.assign(G, { party: [newMember('hero')], shards: 0, region: 'village', items: { POTION: 3, ETHER: 1 }, cleared: {}, beaten: {}, flags: {}, found: {}, gear: {}, fireUsed: {}, endings: G.endings || loadEndings() });
     enterRegion('village', true);
   }
   function loadEndings() { try { return JSON.parse(localStorage.getItem('stonewake-endings') || '{}'); } catch (_) { return {}; } }
   function saveEndings() { try { localStorage.setItem('stonewake-endings', JSON.stringify(G.endings)); } catch (_) {} }
+  function shake(k) { S.trauma = Math.max(S.trauma || 0, k); }
+  function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (_) {} }
   const S = { mode: 'title', t: 0, mt: 0, hero: { x: 7, y: 20, px: 7, py: 20, k: 1, dir: 1 }, path: [], dialog: null, battle: null, foes: [], cut: null, keys: {}, choice: null, ending: null, flash: 0, lastStep: 0 };
 
   function enterRegion(id, fresh) {
@@ -206,9 +225,12 @@
     if (m.altar && m.altar[0] === x && m.altar[1] === y) return { type: 'altar' };
     if (m.boss && !G.cleared[G.region] && m.boss[0] === x && m.boss[1] === y) return { type: 'boss' };
     if (G.region === 'titan' && y <= 10) return { type: 'eye' };
+    const ch = tileAt(m, x, y);
+    if (ch === 'X' || ch === 'S') return { type: 'find', key: G.region + ':' + x + ',' + y };
+    if (ch === 'Q') return { type: 'shrine', key: G.region + ':' + x + ',' + y };
     return null;
   }
-  function walkable(m, x, y, isTarget) { const ch = tileAt(m, x, y); if (SOLID.has(ch)) return false; if (blocker(x, y)) return !!isTarget; return true; }
+  function walkable(m, x, y, isTarget) { const ch = tileAt(m, x, y); if (SOLID.has(ch) || ch === 'x') return false; if (blocker(x, y)) return !!isTarget; return true; }
   function tryStep(dx, dy) {
     const m = MAPS[G.region], nx = S.hero.x + dx, ny = S.hero.y + dy;
     if (dx) S.hero.dir = dx;
@@ -227,10 +249,19 @@
   }
   function interact(b) {
     if (b.type === 'npc') say([['elder', G.shards < 3 ? 'The shards. North. Hurry, child.' : 'You have them all. Go to the titan.']]);
-    else if (b.type === 'fire') { healParty(1); Audio.tone(523, .1, 'triangle', .06); Audio.tone(784, .2, 'triangle', .06, null, .1); say([[null, 'You rest by the fire. HP and MP restored.']]); }
+    else if (b.type === 'fire' && G.fireUsed[G.region]) say([[null, 'THE EMBERS ARE COLD. THEY ONLY HAD ONE NIGHT IN THEM.']]);
+    else if (b.type === 'fire') { G.fireUsed[G.region] = true; healParty(1); Audio.tone(523, .1, 'triangle', .06); Audio.tone(784, .2, 'triangle', .06, null, .1); say([[null, 'You rest by the fire. HP and MP restored.']]); }
     else if (b.type === 'boss') startBattle([MAPS[G.region].bossKind === 'forest' ? 'gforest' : MAPS[G.region].bossKind === 'cave' ? 'gcave' : 'gdesert'], 'boss');
     else if (b.type === 'altar') say([[null, G.cleared[G.region] ? 'The altar is empty now.' : 'A shard glows on the altar. A golem stands guard.']]);
     else if (b.type === 'eye') finaleChoice();
+    else if (b.type === 'find') {
+      const f = FINDS[b.key]; G.found[b.key] = true;
+      if (f.items) for (const k in f.items) G.items[k] += f.items[k];
+      if (f.gear) G.gear[f.gear] = true;
+      Audio.tone(784, .08, 'square', .05); Audio.tone(1047, .08, 'square', .05, null, .08); Audio.tone(1568, .2, 'square', .05, null, .16);
+      say([[null, f.msg]]);
+    }
+    else if (b.type === 'shrine') say([[null, 'A STATUE OF SHARDS. SOMETHING MOVES INSIDE IT.'], [null, 'IT IS STRONGER THAN ANY GOLEM. FIGHT IT?']], () => { S.choice = { opts: ['FIGHT IT', 'LEAVE IT'], sel: 0, shrine: b.key }; });
   }
   function updateMap(dt) {
     const h = S.hero;
@@ -252,7 +283,7 @@
   // ---------- battle ----------
   function startBattle(foeIds, kind) {
     const foes = foeIds.map((id, i) => { const b = FOES[id]; return { id, ...b, maxhp: b.hp, hp: b.hp, i, open: id !== 'eye' }; });
-    S.battle = { kind, foes, phase: 'intro', t: 0, turnQ: [], actor: null, menu: 0, sub: null, pick: 0, msg: null, pops: [], guard: 0, round: 0, cmd: null, ring: null, hitT: 0 };
+    S.battle = { kind, foes, phase: 'intro', t: 0, turnQ: [], actor: null, menu: 0, sub: null, pick: 0, msg: null, pops: [], guard: 0, round: 0, cmd: null, ring: null, hitT: 0, combo: 0, banner: null };
     S.mode = 'battle'; S.flash = .3;
     Audio.noise(.3, .15); [523, 659, 784, 1047].forEach((f, i) => Audio.tone(f, .08, 'square', .05, null, i * .05));
   }
@@ -265,19 +296,50 @@
       B.round++;
       if (B.foes.some(f => f.id === 'eye')) { const eye = B.foes.find(f => f.id === 'eye'); eye.open = B.round % 2 === 0; if (eye.open && eye.hp > 0) pop(B, 'THE EYE OPENS', 45, 22, 'au'); }
       B.turnQ = [...aliveParty().map(p => ({ who: 'p', p })), ...aliveFoes().map(f => ({ who: 'f', f }))].sort((a, b) => (b.p || b.f).spd - (a.p || a.f).spd);
+      if (aliveParty().length > 1) for (const f of aliveFoes()) if (f.boss && f.id !== 'lhand' && f.id !== 'rhand') B.turnQ.push({ who: 'f', f, extra: true });   // bosses act twice a round, so their threat grows with the party
+      for (const f of aliveFoes()) { f.intent = intentFor(f, B.round); if (f.intent && TRICK[f.intent].on) TRICK[f.intent].on(f); }
+      const loud = aliveFoes().find(f => f.intent); if (loud) banner(B, TRICK[loud.intent].say);
       if (B.guard > 0) B.guard--;
     }
     const nx = B.turnQ.shift();
     if (nx.who === 'p') { if (nx.p.hp <= 0) return nextTurn(); B.actor = nx.p; B.phase = 'menu'; B.menu = 0; B.sub = null; }
-    else { if (nx.f.hp <= 0) return nextTurn(); B.actor = nx.f; B.phase = 'foeWind'; B.t = 0; const ps = aliveParty(); B.victim = ps[Math.floor(hash(B.round * 7 + nx.f.i) * ps.length)]; B.blocked = null; B.big = nx.f.id === 'eye' && nx.f.open; }
+    else {
+      if (nx.f.hp <= 0) return nextTurn();
+      if (nx.f.stunned && !nx.extra) { nx.f.stunned = false; pop(B, 'STUNNED', foeX(nx.f.i), aimY(nx.f.i) - 14, 'au'); B.actor = nx.f; B.phase = 'after'; B.t = 0; return; }
+      const tr = !nx.extra && nx.f.intent && TRICK[nx.f.intent];
+      if (tr && !tr.big) { B.actor = nx.f; B.phase = 'after'; B.t = 0; return; }   // shell / burrow / phase: the trick is its turn
+      B.actor = nx.f; B.phase = 'foeWind'; B.t = 0; const ps = aliveParty(); B.victim = ps[Math.floor(hash(B.round * 7 + nx.f.i) * ps.length)]; B.blocked = null;
+      B.big = tr ? tr.big : 0; B.aoe = !!(tr && tr.aoe);
+      if (tr && nx.f.intent === 'erupt') nx.f.burrowed = false;
+      if (nx.extra && nx.f.burrowed) { B.phase = 'after'; B.t = 0; return; }
+    }
   }
   function pop(B, s, x, y, c = 'wt') { B.pops.push({ s, x, y, c, t: S.t }); }
+  function banner(B, s) { B.banner = { s, t: S.t }; }
+  // each boss has a trick, announced at the start of the round it happens in (the party is faster, so it can answer)
+  const TRICK = {
+    slam: { say: 'IT WINDS UP A SLAM! TAP AS IT LANDS TO BLOCK!', big: 2.6 },
+    shell: { say: 'CRYSTALS GROW OVER IT! ONLY SHARD STRIKE BREAKS THEM.', on: f => { f.shell = true; } },
+    rain: { say: 'CRYSTAL RAIN ON EVERYONE! GUARD OR BLOCK!', big: 1.0, aoe: true },
+    burrow: { say: 'IT SINKS INTO THE SAND! ONLY FIREBALL CAN REACH IT.', on: f => { f.burrowed = true; } },
+    erupt: { say: 'THE SAND BOILS! IT WILL ERUPT UNDER EVERYONE!', big: 1.8, aoe: true },
+    phase: { say: 'IT TURNS TO LIGHT! ONLY A SHARD STRIKE CAN PIN IT.', on: f => { f.phased = true; } },
+    glare: { say: 'THE EYE OPENS! TAP AS IT LANDS TO BLOCK!', big: 2.2 },
+  };
+  function intentFor(f, r) {
+    if (f.id === 'gforest') return r % 3 === 0 ? 'slam' : null;
+    if (f.id === 'gcave') return r % 3 === 1 ? 'shell' : r % 3 === 0 ? 'rain' : null;
+    if (f.id === 'gdesert') return f.burrowed ? 'erupt' : r % 3 === 1 ? 'burrow' : null;
+    if (f.id === 'wraith') return r % 2 === 1 ? 'phase' : 'slam';
+    if (f.id === 'eye') return f.open ? 'glare' : null;
+    return null;
+  }
   function choose(cmd) {
     const B = S.battle, a = B.actor;
     if (cmd === 'FIGHT') { B.cmd = { kind: 'fight' }; B.phase = 'target'; B.pick = firstAlive(); }
     else if (cmd === 'SKILL') { B.sub = 'skill'; B.menu = 0; }
     else if (cmd === 'ITEM') { B.sub = 'item'; B.menu = 0; }
-    else if (cmd === 'RUN') { if (B.kind === 'foe') { Audio.tone(300, .2, 'square', .05, 600); S.battle = null; S.mode = 'map'; } else pop(B, "CAN'T RUN", 45, 50, 'r2'); }
+    else if (cmd === 'RUN') { if (B.kind === 'foe' || B.kind === 'optional') { Audio.tone(300, .2, 'square', .05, 600); S.battle = null; S.mode = 'map'; } else pop(B, "CAN'T RUN", 45, 50, 'r2'); }
     else if (SKILL[cmd]) {
       const sk = SKILL[cmd];
       if (a.mp < sk.mp) { pop(B, 'NOT ENOUGH MP', 45, 50, 'r2'); return; }
@@ -299,17 +361,24 @@
   }
   function timingTap() {
     const B = S.battle;
-    if (B.phase === 'timing' && B.hitT === null) { B.hitT = B.t; const q = Math.abs(B.t - B.ring.dur); const grade = q < .07 ? 1.6 : q < .16 ? 1.25 : 1; pop(B, grade > 1.5 ? 'PERFECT!' : grade > 1 ? 'GOOD' : 'OK', 45, 54, grade > 1.5 ? 'au' : grade > 1 ? 'c3' : 's4'); Audio.tone(grade > 1.5 ? 1320 : 990, .06, 'square', .06); B.grade = grade; }
-    else if (B.phase === 'foeWind' && B.blocked === null) { const q = B.t - .9; B.blocked = q > -.2 && q < .06; if (B.blocked) { pop(B, 'BLOCK!', 66, 70, 'c3'); Audio.tone(1500, .05, 'square', .06); } else Audio.tone(200, .05, 'square', .03); }
+    if (B.phase === 'timing' && B.hitT === null) { B.hitT = B.t; const q = Math.abs(B.t - B.ring.dur); const grade = q < .07 ? 1.6 : q < .16 ? 1.25 : 1; B.combo = grade > 1.5 ? (B.combo || 0) + 1 : 0; pop(B, grade > 1.5 ? (B.combo > 1 ? `PERFECT x${B.combo}` : 'PERFECT!') : grade > 1 ? 'GOOD' : 'OK', 45, 54, grade > 1.5 ? 'au' : grade > 1 ? 'c3' : 's4'); if (grade > 1.5) { S.hitstop = .08; shake(.35); buzz(20); } Audio.tone(grade > 1.5 ? 1320 : 990, .06, 'square', .06); B.grade = grade; }
+    else if (B.phase === 'foeWind' && B.blocked === null) { const q = B.t - .9; B.blocked = q > (G.gear.mirror ? -.3 : -.2) && q < (G.gear.mirror ? .1 : .06); if (B.blocked) { pop(B, 'BLOCK!', 66, 70, 'c3'); Audio.tone(1500, .05, 'square', .06); S.hitstop = .05; buzz(15); } else Audio.tone(200, .05, 'square', .03); }
     else if (B.phase === 'calm' && B.hitT === null) { B.hitT = B.t; }
   }
   function resolveAction(target, grade) {
     const B = S.battle, a = B.actor, c = B.cmd;
-    const dmg = (base, f, kind) => { let d = Math.max(1, Math.round(base * grade * (0.9 + hash(Math.floor(S.t * 100)) * .2))); if (f.weak && f.weak === kind) { d = Math.round(d * 1.5); pop(B, 'WEAK!', foeX(f.i), aimY(f.i) - 14, 'n6'); } if (f.id === 'eye' && !f.open) { d = Math.round(d * .15); pop(B, 'CLOSED', foeX(f.i), aimY(f.i) - 14, 's3'); } f.hp = Math.max(0, f.hp - d); pop(B, String(d), foeX(f.i), aimY(f.i) - 6, 'wt'); return d; };
-    if (c.kind === 'fight') { const f = B.foes[target]; dmg(a.atk * 1.4, f, a.id === 'archer' ? 'pierce' : 'phys'); Audio.noise(.08, .2); }
+    const dmg = (base, f, kind) => {
+      if (f.burrowed && kind !== 'fire') { pop(B, 'UNDERGROUND', foeX(f.i), aimY(f.i) - 6, 's4'); return 0; }
+      if (f.phased && kind !== 'shard') { pop(B, 'PASSES THROUGH', foeX(f.i), aimY(f.i) - 6, 's4'); return 0; }
+      let d = Math.max(1, Math.round(base * grade * (1 + .1 * Math.min(5, Math.max(0, B.combo - 1))) * (0.9 + hash(Math.floor(S.t * 100)) * .2)));
+      if (f.shell) { if (kind === 'shard') { f.shell = false; pop(B, 'SHATTERED!', foeX(f.i), aimY(f.i) - 22, 'c3'); shake(.7); } else { d = Math.max(1, Math.round(d * .1)); pop(B, 'SHELL', foeX(f.i), aimY(f.i) - 22, 'c2'); } }
+      if (f.burrowed && kind === 'fire') { f.burrowed = false; f.stunned = true; pop(B, 'GLASSED!', foeX(f.i), aimY(f.i) - 22, 'n6'); shake(.7); }
+      if (f.phased && kind === 'shard') { f.phased = false; pop(B, 'PINNED!', foeX(f.i), aimY(f.i) - 22, 'g4'); }
+      f.hurtT = S.t; if (f.weak && f.weak === kind) { d = Math.round(d * 1.5); pop(B, 'WEAK!', foeX(f.i), aimY(f.i) - 14, 'n6'); } if (f.id === 'eye' && !f.open) { d = Math.round(d * .15); pop(B, 'CLOSED', foeX(f.i), aimY(f.i) - 14, 's3'); } f.hp = Math.max(0, f.hp - d); pop(B, String(d), foeX(f.i), aimY(f.i) - 6, 'wt'); return d; };
+    if (c.kind === 'fight') { const f = B.foes[target]; dmg((a.atk + (a.id === 'hero' && G.gear.sun ? 4 : 0)) * 1.4, f, a.id === 'archer' ? 'pierce' : 'phys'); Audio.noise(.08, .2); }
     else if (c.kind === 'skill') {
       const sk = SKILL[c.name]; a.mp -= sk.mp;
-      if (c.name === 'SHARD STRIKE') { const f = B.foes[target]; const kind = f.id === 'eye' ? 'shard' : 'phys'; dmg(a.atk * (1.6 + G.shards * .8), f, kind); Audio.tone(1800, .3, 'square', .06, 400); B.fx = { kind: 'shard', t: S.t, i: target }; }
+      if (c.name === 'SHARD STRIKE') { const f = B.foes[target]; dmg((a.atk + (G.gear.sun ? 4 : 0)) * (1.3 + G.shards * .4), f, 'shard'); Audio.tone(1800, .3, 'square', .06, 400); B.fx = { kind: 'shard', t: S.t, i: target }; }
       else if (c.name === 'FIREBALL') { const f = B.foes[target]; dmg(a.mag * 2.2, f, 'fire'); Audio.noise(.4, .2); B.fx = { kind: 'fire', t: S.t, i: target }; }
       else if (c.name === 'VOLLEY') { for (const f of aliveFoes()) dmg(a.atk * 1.0, f, 'pierce'); Audio.tone(2400, .2, 'square', .04, 900); B.fx = { kind: 'volley', t: S.t }; }
       else if (c.name === 'GUARD') { B.guard = 2; pop(B, 'GUARD UP', 66, 50, 'c3'); Audio.tone(440, .2, 'triangle', .07); }
@@ -322,13 +391,16 @@
     B.phase = 'after'; B.t = 0;
   }
   function foeHit() {
-    const B = S.battle, f = B.actor, v = B.victim;
-    let d = Math.round((B.big ? f.atk * 2.2 : f.atk) * (0.9 + hash(Math.floor(S.t * 100) + 3) * .2) - v.def * .5);
-    if (B.blocked) d = Math.round(d * .35);
-    if (B.guard > 0) d = Math.round(d * .5);
-    d = Math.max(1, d); v.hp = Math.max(0, v.hp - d);
-    pop(B, String(d), memberX(G.party.indexOf(v)) + 4, memberY(G.party.indexOf(v)) - 2, B.blocked ? 'c3' : 'r2');
-    Audio.noise(.1, B.blocked ? .08 : .2); S.flash = B.blocked ? 0 : .08;
+    const B = S.battle, f = B.actor;
+    for (const v of B.aoe ? aliveParty() : [B.victim]) {
+      let d = Math.round((B.big ? f.atk * B.big : f.atk) * (0.9 + hash(Math.floor(S.t * 100) + 3 + v.spd) * .2) - (v.def + (G.gear.iron ? 3 : 0)) * .5);
+      if (B.blocked) d = Math.round(d * .35);
+      if (B.guard > 0) d = Math.round(d * .5);
+      d = Math.max(1, d); v.hp = Math.max(0, v.hp - d);
+      pop(B, String(d), memberX(G.party.indexOf(v)) + 4, memberY(G.party.indexOf(v)) - 2, B.blocked ? 'c3' : 'r2');
+    }
+    Audio.noise(.1, B.blocked ? .08 : .2); S.flash = B.blocked ? 0 : .06;
+    shake(B.blocked ? .25 : B.big ? .8 : .45); if (B.big && !B.blocked) { S.hitstop = .1; buzz(40); }
     B.phase = 'after'; B.t = 0;
   }
   function winBattle() {
@@ -349,6 +421,7 @@
       say([[null, `YOU GOT SHARD ${G.shards}/3!`], ...lines, [null, `${MEMBERS[ally].name} JOINED THE PARTY!`]]);
     }
     if (B.kind === 'finale') ending('fell');
+    if (B.kind === 'optional') { G.found[S.shrineKey] = true; G.gear.mirror = true; Audio.tone(1047, .1, 'square', .05); Audio.tone(1568, .3, 'square', .05, null, .1); say([[null, 'THE WRAITH BREAKS APART. IN ITS LIGHT: THE MIRROR CHARM.'], [null, 'BLOCKING IS EASIER NOW: THE WINDOW IS WIDER.']]); }
   }
 
   // ---------- the finale ----------
@@ -357,7 +430,8 @@
     say([['hero', 'Three shards. Its heart. What do we do with it?'], ['knight', 'We fight.'], ['mage', 'Or we give it back. It was asleep before.']], () => { S.choice = { opts: ['FIGHT IT', 'CALM IT'], sel: 0 }; });
   }
   function pickChoice(i) {
-    S.choice = null;
+    const c = S.choice; S.choice = null;
+    if (c && c.shrine) { if (i === 0) { S.shrineKey = c.shrine; startBattle(['wraith'], 'optional'); } return; }
     if (i === 0) startBattle(['lhand', 'eye', 'rhand'], 'finale');
     else { S.mode = 'calm'; S.calm = { n: 0, t: 0, hitT: null, fails: 0, res: null }; }
   }
@@ -382,6 +456,8 @@
 
   // ---------- update ----------
   function update(dt) {
+    S.trauma = Math.max(0, (S.trauma || 0) - dt * 1.8);
+    if (S.hitstop > 0) { S.hitstop -= dt; return; }   // hit-stop: the world holds still for a few frames on a big hit
     S.t += dt; S.mt += dt; S.flash = Math.max(0, S.flash - dt);
     if (S.mode === 'cut') { S.cut.t += dt; if (S.cut.t > 6.5) endCut(); return; }
     if (S.mode === 'map') { if (!S.dialog && !S.choice) updateMap(dt); return; }
@@ -392,16 +468,21 @@
     const auto = API.autopilot;
     if (B.phase === 'intro' && B.t > .7) nextTurn();
     else if (B.phase === 'menu' && auto) {   // tests: fight the first open foe, use shard strike on an open eye
-      const eye = B.foes.find(f => f.id === 'eye' && f.open && f.hp > 0);
-      if (eye && B.actor.id === 'hero' && B.actor.mp >= 6) { B.cmd = { kind: 'skill', name: 'SHARD STRIKE' }; startTiming(B.foes.indexOf(eye)); }
+      const eye = B.foes.find(f => f.id === 'eye' && f.open && f.hp > 0), shelled = B.foes.find(f => f.shell && f.hp > 0), sunk = B.foes.find(f => f.burrowed && f.hp > 0), lit = B.foes.find(f => f.phased && f.hp > 0);
+      const rainy = B.foes.find(f => f.hp > 0 && f.intent && TRICK[f.intent].aoe), a = B.actor, can = n => a.skills.includes(n) && a.mp >= SKILL[n].mp;
+      if (auto === 'perfect' && eye && a.id === 'hero' && a.mp >= 6) { B.cmd = { kind: 'skill', name: 'SHARD STRIKE' }; startTiming(B.foes.indexOf(eye)); }
+      else if (auto === 'perfect' && shelled && a.id === 'hero' && G.shards > 0 && can('SHARD STRIKE')) { B.cmd = { kind: 'skill', name: 'SHARD STRIKE' }; startTiming(B.foes.indexOf(shelled)); }
+      else if (auto === 'perfect' && sunk && can('FIREBALL')) { B.cmd = { kind: 'skill', name: 'FIREBALL' }; startTiming(B.foes.indexOf(sunk)); }
+      else if (auto === 'perfect' && rainy && can('GUARD') && !B.guard) { B.cmd = { kind: 'skill', name: 'GUARD' }; startTiming(null); }
+      else if (auto === 'perfect' && lit && a.id === 'hero' && G.shards > 0 && can('SHARD STRIKE')) { B.cmd = { kind: 'skill', name: 'SHARD STRIKE' }; startTiming(B.foes.indexOf(lit)); }
       else { B.cmd = { kind: 'fight' }; startTiming(firstAlive()); }
     }
     else if (B.phase === 'timing') {
-      if (auto === 'perfect' && B.hitT === null && B.t >= B.ring.dur - .01) timingTap();
+      if ((auto === 'perfect' || auto === 'fightonly') && B.hitT === null && B.t >= B.ring.dur - .01) timingTap();
       if (B.t > B.ring.dur + .3) { const g = B.hitT === null ? 1 : B.grade; if (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'all') resolveAction(null, g); else resolveAction(B.target, g); }
     }
     else if (B.phase === 'foeWind') {
-      if (auto === 'perfect' && B.blocked === null && B.t >= .88) timingTap();
+      if ((auto === 'perfect' || auto === 'fightonly') && B.blocked === null && B.t >= .88) timingTap();
       if (B.t > .9) foeHit();
     }
     else if (B.phase === 'after' && B.t > .55) nextTurn();
@@ -421,10 +502,13 @@
   function drawFoe(f, t) {
     const [x, y] = foePos(f.i), hurt = S.battle.pops.some(p => S.t - p.t < .3 && Math.abs(p.x - x) < 3);
     if (f.hp <= 0) return;
-    if (f.draw === 'golem') { cx.save(); cx.translate(x, y); cx.scale(.62, .62); golemArt(0, 0, t, f.tint, hurt); cx.restore(); }
+    const kb = f.hurtT && S.t - f.hurtT < .15 ? -2 : 0, sink = f.burrowed ? 14 : 0;
+    if (f.draw === 'golem') { cx.save(); cx.translate(x + kb, y + sink); cx.scale(.62, .62); if (f.phased) cx.globalAlpha = .45; golemArt(0, 0, t, f.tint, hurt); cx.restore(); if (sink) rect(x - 20, y - 2, 40, 6, 'd1'); }
     else if (f.draw === 'eye') { const oh = f.open ? 12 : 2; rect(x - 30, y - 18, 60, 3, 's0'); for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(28 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(x - w, y + dy, w * 2 + 1, 1, dy < -oh / 2 ? 'n6' : 'n7'); } if (f.open) rect(x - 2, y - oh + 2, 5, oh * 2 - 3, 'k'); }
     else if (f.draw === 'hand') { const bob = Math.round(Math.sin(t * 3 + f.i) * 2); rect(x - 9, y - 16 + bob, 18, 13, 's1'); for (let k = 0; k < 4; k++) rect(x - 9 + k * 5, y - 23 + bob + (k % 2) * 2, 4, 8, 's2'); rect(x - 9, y - 16 + bob, 18, 2, 's3'); }
     else spr(f.draw, x - 6, y - 10, Math.floor(t * 4) % 2);
+    if (f.shell) { for (let i = 0; i < 7; i++) px(x - 12 + i * 4, y - 22 + (i % 2) * 3, 'c3'); rect(x - 13, y - 24, 26, 1, 'c2'); }
+    if (f.intent && TRICK[f.intent].big && Math.floor(t * 4) % 2) { rect(x - 1, y - 34, 3, 6, 'r2'); rect(x - 1, y - 26, 3, 2, 'r2'); }   // ! the trick is coming this round
     const bw = f.boss ? 26 : 14, by = f.id === 'eye' ? y + 15 : y + 3; rect(x - bw / 2, by, bw, 2, 'k'); rect(x - bw / 2, by, bw * f.hp / f.maxhp, 2, f.hp / f.maxhp < .3 ? 'r1' : 'g3');
   }
   function drawField(t) {
@@ -445,8 +529,8 @@
       for (let a = 0; a < 40; a++) { const q = a / 40 * 6.28; px(tx + Math.cos(q) * 6, ty + Math.sin(q) * 6, 'au'); if (B.hitT === null) px(tx + Math.cos(q) * r, ty + Math.sin(q) * r, 'wt'); }
     }
     if (B.phase === 'foeWind') {   // a marker drops onto the victim: tap as it lands to block
-      const i = G.party.indexOf(B.victim), x = memberX(i) + 5, y = memberY(i) - 2, k = clamp(B.t / .9);
-      rect(x - 1, Math.round(mix(y - 26, y, k)), 3, 3, B.big ? 'r2' : 'n6'); rect(x - 4, y + 15, 9, 1, 'au');
+      for (const v of B.aoe ? aliveParty() : [B.victim]) { const i = G.party.indexOf(v), x = memberX(i) + 5, y = memberY(i) - 2, k = clamp(B.t / .9);
+      rect(x - 1, Math.round(mix(y - 26, y, k)), 3, 3, B.big ? 'r2' : 'n6'); rect(x - 4, y + 15, 9, 1, 'au'); }
       if (B.actor.draw !== 'eye') { if (Math.floor(t * 8) % 2) rect(foeX(B.actor.i) - 1, aimY(B.actor.i) - 14, 3, 3, 'r2'); }
     }
     if (B.phase === 'target' && Math.floor(t * 4) % 2) { const i = B.pick; if (B.foes[i] && B.foes[i].hp > 0) rect(foeX(i) - 2, aimY(i) - 16, 5, 4, 'au'); }
@@ -454,10 +538,13 @@
   function drawBattle(t) {
     const B = S.battle;
     cx = fieldCx; cx.setTransform(1, 0, 0, 1, 0, 0); drawField(t); cx = mainCx;
-    cx.imageSmoothingEnabled = false; cx.drawImage(field, 0, 0, FW, FH, 0, 0, FW * 2, FH * 2);
+    const tr = (S.trauma || 0) ** 2, ox = Math.round((hash(Math.floor(S.t * 60)) - .5) * 8 * tr), oy = Math.round((hash(Math.floor(S.t * 60) + 7) - .5) * 8 * tr);   // trauma^2 shake
+    cx.imageSmoothingEnabled = false; rect(0, 0, W, FH * 2, 'k'); cx.drawImage(field, 0, 0, FW, FH, ox, oy, FW * 2, FH * 2);
     for (const p of B.pops) { const k = (S.t - p.t) / .9; if (k < 1) text(p.s, p.x * 2, p.y * 2 - k * 14, p.c, 'center'); }
-    if (B.phase === 'timing' && B.t < .4) text('TAP!', 90, 6, 'au', 'center');
-    if (B.phase === 'foeWind') text(B.big ? 'GLARE! BLOCK IT!' : 'BLOCK!', 90, 6, B.big ? 'r2' : 'n6', 'center');
+    if (B.banner && S.t - B.banner.t < 2.6) { const ls = wrap(B.banner.s, 21); rect(0, 0, W, 4 + ls.length * 10, 'k'); ls.forEach((l, i) => text(l, 90, 3 + i * 10, 'au', 'center')); }
+    else if (B.phase === 'timing' && B.t < .4) text('TAP!', 90, 6, 'au', 'center');
+    if (B.combo > 1) text(`COMBO x${B.combo}`, 176, 186, 'au', 'right');
+    if (B.phase === 'foeWind' && !(B.banner && S.t - B.banner.t < 2.6)) text(B.big ? 'BIG HIT! BLOCK IT!' : 'BLOCK!', 90, 6, B.big ? 'r2' : 'n6', 'center');
     panel(0, 196, W, 124, 'b1');
     text('HP', 82, 200, 's3', 'right', null); text('MP', 112, 200, 's3', 'right', null);
     G.party.forEach((p, i) => { const y = 210 + i * 10; text(p.name, 6, y, B.actor === p ? 'au' : p.hp <= 0 ? 's2' : 'wt'); text(`${p.hp}`, 82, y, p.hp < p.maxhp * .3 ? 'r2' : 'wt', 'right'); text(`${p.mp}`, 112, y, 'c2', 'right'); });
@@ -483,7 +570,7 @@
       for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(52 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(ex - w, ey + dy, w * 2 + 1, 1, dy < -oh * .4 ? 'n6' : 'n7'); }
       rect(ex - 3, ey - oh + 2, 7, oh * 2 - 3, 'k');
     }
-    if (m.fire) campfire(m.fire[0], m.fire[1], t);
+    if (m.fire) { if (G.fireUsed[G.region]) { const X = m.fire[0] * TS + 6, Y = MAP_Y + m.fire[1] * TS + 8; rect(X - 4, Y + 2, 8, 2, 'w0'); px(X, Y + 1, 's3'); } else campfire(m.fire[0], m.fire[1], t); }
     if (m.altar) altar(m.altar[0], m.altar[1], t, !G.cleared[G.region]);
     for (const n of m.npcs || []) spr(n.id, n.x * TS + 1, MAP_Y + n.y * TS - 3, 0, S.hero.x < n.x);
     if (m.boss && !G.cleared[G.region]) { const [bx, by] = m.boss; cx.save(); cx.translate(bx * TS + 6, MAP_Y + by * TS + 11); cx.scale(.45, .45); golemArt(0, 0, t, FOES['g' + m.bossKind].tint, false); cx.restore(); }
@@ -687,7 +774,7 @@
 
   // ---------- test hooks ----------
   const API = {
-    G, S, MAPS, newGame, enterRegion, startBattle, pickChoice, autopilot: null, step: n => game.step(n),
+    G, S, MAPS, FINDS, newGame, enterRegion, startBattle, pickChoice, autopilot: null, step: n => game.step(n),
     get state() { return S.mode; },
     // give the party a region's companion without playing it (tests jump straight to later fights)
     recruit(id) { if (!G.party.some(p => p.id === id)) G.party.push(newMember(id)); },
