@@ -53,7 +53,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 480);
   await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
-  await page.frames().find(f => f.url().includes('stickswarm')).evaluate(() => Engine.Audio.sfx('win'));
+  // the game frame's scripts may still be loading on a slow machine: wait for its engine before marking a win
+  const gf = page.frameLocator('#play'); await gf.locator('canvas').waitFor();
+  const swarm = page.frames().find(f => f.url().includes('stickswarm'));
+  await swarm.waitForFunction(() => !!window.Engine && !!window.__game, null, { timeout: 8000 });
+  await swarm.evaluate(() => Engine.Audio.sfx('win'));
   await page.waitForTimeout(200);
   await page.frameLocator('#play').locator('a.back').click();
   await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
