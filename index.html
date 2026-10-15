@@ -5,96 +5,181 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-  :root { --bg1: #12082e; --bg2: #2a0e5a; --ink: #f4f0ff; --dim: #9a8cc8; --hot: #ffe14a; --sel: #ff5ab0; }
+  :root { --bg: #0c0620; --ink: #f4f0ff; --dim: #9a8cc8; --hot: #ffe14a; --sel: #ff5ab0; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100vh; min-height: 100dvh; background: var(--bg1); color: var(--ink); font-family: 'Press Start 2P', 'Courier New', monospace; }
-  body { background: radial-gradient(ellipse at 50% 0%, var(--bg2), var(--bg1) 70%); overflow-x: hidden; }
-  body::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 2px, transparent 2px 4px); }
-  main { max-width: 760px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 40px; }
-  header { display: flex; align-items: center; gap: 22px; margin-bottom: 28px; }
-  .disc { width: 112px; height: 112px; flex: none; border-radius: 50%; animation: spin 4s linear infinite;
-    background: radial-gradient(circle, var(--bg1) 0 12%, #c8c8d8 12% 14%, transparent 14%),
-      conic-gradient(from 0deg, #ff5ab0, #ffe14a, #4ad05a, #3a96ff, #b05aff, #ff5ab0); box-shadow: 0 0 0 4px #fff3, 0 0 30px #ff5ab066; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .disc { animation: none; } }
-  h1 { font-size: clamp(18px, 5vw, 30px); line-height: 1.3; margin: 0; color: var(--hot); text-shadow: 3px 3px 0 #000; }
-  .sub { font-size: 10px; color: var(--dim); margin-top: 10px; line-height: 1.8; }
-  h2 { font-size: 12px; color: var(--dim); margin: 26px 0 12px; letter-spacing: 2px; }
-  .list { display: grid; gap: 12px; }
-  .item { display: flex; gap: 14px; align-items: center; padding: 14px; border: 3px solid #fff3; background: #0008; color: var(--ink); text-decoration: none; }
-  .item .tag { flex: none; font-size: 9px; padding: 6px 7px; background: #fff2; color: var(--hot); }
-  .item .name { font-size: 13px; line-height: 1.5; }
-  .item .desc { font-size: 9px; color: var(--dim); line-height: 1.8; margin-top: 6px; font-family: 'Press Start 2P', monospace; }
-  .item.sel, .item:focus-visible { border-color: var(--sel); background: #ff5ab022; outline: none; }
-  .item.sel .name::before { content: '▶ '; color: var(--sel); }
-  .controls { margin-top: 30px; font-size: 9px; color: var(--dim); line-height: 2; }
-  .blink { animation: blink 1s steps(2) infinite; color: var(--hot); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: 'Press Start 2P', 'Courier New', monospace; overflow: hidden; overscroll-behavior: none; }
+  body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50; background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 2px, transparent 2px 4px); }
+
+  /* ---------- carousel: one tile per game, swipe left/right, snap to one ---------- */
+  #rail { position: fixed; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #rail::-webkit-scrollbar { display: none; }
+  .tile { flex: 0 0 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; position: relative; display: grid; place-items: center; }
+  .frame { position: relative; height: min(100dvh, calc(100vw * 16 / 9)); aspect-ratio: 9 / 16; max-width: 100vw; background: #000; overflow: hidden; cursor: pointer; }
+  .frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 16px max(18px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, #000d 40%); text-align: center; pointer-events: none; }
+  .bar .name { font-size: clamp(12px, 3.6vw, 16px); color: var(--hot); text-shadow: 2px 2px 0 #000; line-height: 1.4; }
+  .bar .desc { font-size: 9px; color: var(--ink); margin: 10px 0 14px; line-height: 1.7; }
+  .bar .play { display: inline-block; font-size: 11px; padding: 12px 18px; background: var(--sel); color: #000; box-shadow: 4px 4px 0 #000; animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  .top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 14px; z-index: 10; pointer-events: none; }
+  .top .title { font-size: 10px; color: var(--hot); text-shadow: 2px 2px 0 #000; }
+  .top button { pointer-events: auto; font: inherit; font-size: 10px; padding: 8px 10px; background: #000a; color: var(--ink); border: 2px solid #fff4; cursor: pointer; }
+  .dots { position: fixed; left: 0; right: 0; bottom: max(6px, env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 8px; z-index: 10; pointer-events: none; }
+  .dots i { width: 8px; height: 8px; background: #fff4; }
+  .dots i.on { background: var(--sel); }
+  .arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 10; font: inherit; font-size: 18px; width: 44px; height: 64px; background: #0008; color: var(--ink); border: 2px solid #fff3; cursor: pointer; }
+  .arrow.l { left: 8px; } .arrow.r { right: 8px; }
+  @media (hover: none) { .arrow { display: none; } }
+
+  /* ---------- splash: ZANEPAUL STUDIO ... STUPIDO ---------- */
+  #splash { position: fixed; inset: 0; z-index: 40; background: #000; display: grid; place-items: center; cursor: pointer; transition: opacity .5s; }
+  #splash.gone { opacity: 0; pointer-events: none; }
+  .logo { text-align: center; }
+  .logo .who { font-size: clamp(16px, 6vw, 34px); color: var(--ink); letter-spacing: 4px; opacity: 0; animation: fadeUp .6s .2s forwards; }
+  .word { position: relative; display: inline-flex; margin-top: 22px; height: 1.4em; font-size: clamp(22px, 9vw, 52px); color: var(--hot); text-shadow: 4px 4px 0 #c0307a; }
+  .word span { display: inline-block; width: 1em; text-align: center; transition: transform .25s cubic-bezier(.3,1.6,.5,1); opacity: 0; animation: fadeUp .4s forwards; }
+  .word .p { position: absolute; left: 0; top: 0; opacity: 1; animation: none; transform: translateY(-120vh); color: var(--sel); text-shadow: 4px 4px 0 #6a1a8a; }
+  .word.bump { animation: bump .25s; }
+  @keyframes bump { 30% { transform: translateY(6px) rotate(-2deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .tm { font-size: 9px; color: var(--dim); margin-top: 26px; opacity: 0; transition: opacity .4s; }
+  .tap { font-size: 10px; color: var(--hot); margin-top: 34px; opacity: 0; }
+  .tap.on { animation: blink 1s steps(2) infinite; opacity: 1; }
   @keyframes blink { 50% { opacity: 0; } }
-  dialog { border: 3px solid var(--sel); background: #000; padding: 0; max-width: min(92vw, 420px); }
-  dialog video { display: block; width: 100%; max-height: 80dvh; background: #000; }
-  dialog button { font: inherit; font-size: 10px; width: 100%; padding: 12px; background: var(--sel); color: #000; border: 0; cursor: pointer; }
-  dialog::backdrop { background: #000c; }
+  @media (prefers-reduced-motion: reduce) { .bar .play, .tap.on { animation: none; } }
 </style></head>
-<body><main>
-  <header>
-    <div class="disc" role="img" aria-label="Spinning demo disc"></div>
-    <div><h1>DEMO DISC<br>VOL. 1</h1><div class="sub">2 PLAYABLE DEMOS · 2 TRAILERS<br><span class="blink">PRESS START</span></div></div>
-  </header>
-  <h2>— PLAYABLE DEMOS —</h2>
-  <div class="list" id="demos"></div>
-  <h2>— TRAILERS —</h2>
-  <div class="list" id="trailers"></div>
-  <div class="controls">↑ ↓ SELECT · ENTER / A START · ESC / B BACK<br>TOUCH: TAP TO START</div>
-</main>
-<dialog id="player"><video id="vid" controls playsinline></video><button id="close">◀ BACK TO DISC</button></dialog>
+<body>
+<div id="rail"></div>
+<div class="top"><span class="title">DEMO DISC VOL.1</span><button id="snd" aria-label="Toggle sound">🔇 SOUND</button></div>
+<button class="arrow l" id="prev" aria-label="Previous game">◀</button>
+<button class="arrow r" id="next" aria-label="Next game">▶</button>
+<div class="dots" id="dots"></div>
+
+<div id="splash" role="button" aria-label="Tap to start">
+  <div class="logo">
+    <div class="who">ZANEPAUL</div>
+    <div class="word" id="word"></div>
+    <div class="tm" id="tm">EST. WHENEVER · NO REFUNDS</div>
+    <div class="tap" id="tap">TAP TO START</div>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
-  const entries = [
-    { list: 'demos', tag: 'PLAY', name: 'ONLY 1% CAN SAVE HIM', desc: 'Pull the pins. Save the knight. 3 levels.', href: 'games/only1/index.html' },
-    { list: 'demos', tag: 'PLAY', name: 'STICK SWARM 3D', desc: 'Pick the gates. Grow the swarm. Beat the giant.', href: 'games/stickswarm/index.html' },
-    { list: 'trailers', tag: 'VIDEO', name: 'ONLY 1% CAN SAVE HIM', desc: 'Trailer · 0:41', href: 'trailers/only1.mp4', video: true },
-    { list: 'trailers', tag: 'VIDEO', name: 'STICK SWARM 3D', desc: 'Trailer · 0:25', href: 'trailers/stickswarm.mp4', video: true },
+  const games = [
+    { name: 'ONLY 1% CAN SAVE HIM', desc: 'Pull the pins. Save the knight.<br>Lose the gold. 3 levels.', href: 'games/only1/index.html', trailer: 'trailers/only1.mp4' },
+    { name: 'STICK SWARM 3D', desc: 'Pick the gates. Grow the swarm.<br>Beat the giant. 3 levels.', href: 'games/stickswarm/index.html', trailer: 'trailers/stickswarm.mp4' },
   ];
-  const els = entries.map((e, i) => {
-    const a = document.createElement('a'); a.className = 'item'; a.href = e.href; a.tabIndex = 0;
-    a.innerHTML = `<span class="tag">${e.tag}</span><span><div class="name">${e.name}</div><div class="desc">${e.desc}</div></span>`;
-    a.addEventListener('click', ev => { if (e.video) { ev.preventDefault(); play(e.href); } });
-    a.addEventListener('mouseenter', () => select(i));
-    document.getElementById(e.list).appendChild(a); return a;
+
+  // ---------- audio blips (never block) ----------
+  let ac = null, sound = false;
+  function beep(f, d = .07, type = 'square', vol = .05) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, ac.currentTime); g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + d);
+      o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + d + .01);
+    } catch (_) {}
+  }
+
+  // ---------- tiles ----------
+  const rail = document.getElementById('rail'), dots = document.getElementById('dots');
+  const tiles = games.map((g, i) => {
+    const t = document.createElement('section'); t.className = 'tile'; t.dataset.i = i;
+    t.innerHTML = `<a class="frame" href="${g.href}" aria-label="Play ${g.name}">
+      <video src="${g.trailer}" poster="${g.trailer.replace('.mp4', '.jpg')}" muted loop playsinline preload="metadata"></video>
+      <div class="bar"><div class="name">${g.name}</div><div class="desc">${g.desc}</div><span class="play">▶ TAP TO PLAY</span></div></a>`;
+    t.querySelector('a').addEventListener('click', ev => { ev.preventDefault(); launch(i); });
+    rail.appendChild(t); dots.appendChild(document.createElement('i')); return t;
   });
-  let sel = 0;
-  function select(i) { sel = (i + els.length) % els.length; els.forEach((el, j) => el.classList.toggle('sel', j === sel)); beep(660); }
-  function start() { const e = entries[sel]; beep(990); if (e.video) play(e.href); else location.href = e.href; }
-  const dlg = document.getElementById('player'), vid = document.getElementById('vid');
-  function play(src) { vid.src = src; dlg.showModal(); vid.play().catch(() => {}); }
-  function closeVid() { vid.pause(); dlg.close(); }
-  document.getElementById('close').onclick = closeVid;
-  dlg.addEventListener('close', () => vid.pause());
-  // menu owns its own input: keys act only while the video dialog is closed
+  const vids = tiles.map(t => t.querySelector('video'));
+  let cur = 0, started = false, playing = -1;
+
+  // only the centred tile's ad plays; the rest pause and rewind
+  function focusTile(i) {
+    cur = i;
+    [...dots.children].forEach((d, j) => d.classList.toggle('on', j === i));
+    vids.forEach((v, j) => {
+      if (j !== i) { v.pause(); v.currentTime = 0; return; }
+      if (!started) return;
+      playing = i;
+      v.muted = !sound;
+      v.play().catch(() => { v.muted = true; sound = false; paintSound(); v.play().catch(() => {}); });
+    });
+  }
+  const io = new IntersectionObserver(es => {
+    for (const e of es) if (e.isIntersecting && e.intersectionRatio > .6) { const i = +e.target.dataset.i; if (i !== cur) beep(660); focusTile(i); }
+  }, { root: rail, threshold: [.6] });
+  tiles.forEach(t => io.observe(t));
+  function go(i) { i = Math.max(0, Math.min(tiles.length - 1, i)); rail.scrollTo({ left: i * rail.clientWidth, behavior: 'smooth' }); }
+  function launch(i) { beep(990, .12); vids.forEach(v => v.pause()); setTimeout(() => { location.href = games[i].href; }, 120); }
+  document.getElementById('prev').onclick = () => go(cur - 1);
+  document.getElementById('next').onclick = () => go(cur + 1);
+
+  const sndBtn = document.getElementById('snd');
+  function paintSound() { sndBtn.textContent = sound ? '🔊 SOUND' : '🔇 SOUND'; }
+  sndBtn.onclick = () => { sound = !sound; paintSound(); vids[cur].muted = !sound; if (sound) vids[cur].play().catch(() => {}); };
+
+  // ---------- splash: STUDIO, then a stray P lands and makes it STUPIDO ----------
+  const splash = document.getElementById('splash'), word = document.getElementById('word');
+  const letters = 'STUDIO'.split('').map((c, i) => { const s = document.createElement('span'); s.textContent = c; s.style.animationDelay = (.6 + i * .08) + 's'; word.appendChild(s); return s; });
+  const P = document.createElement('span'); P.className = 'p'; P.textContent = 'P'; word.appendChild(P);
+  word.style.width = '7em';
+  const place = (el, slot) => { el.style.left = slot + 'em'; el.style.position = 'absolute'; };
+  // STUDIO centred in 7 slots, then S T U P I D O
+  letters.forEach((s, i) => place(s, i + .5));
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  let splashDone = false, gagDone = false;
+  at(1300, () => beep(880, .25, 'triangle', .06));
+  at(2300, () => { P.style.transition = 'transform .45s cubic-bezier(.55,0,1,.45)'; place(P, 3.5); P.style.transform = 'translateY(0)'; beep(220, .3, 'sawtooth', .03); });
+  at(2750, () => {
+    beep(90, .2, 'square', .09); word.classList.add('bump');
+    // S T U | P | I D O  (D and I trade places as the P shoves in)
+    const slots = { 0: 0, 1: 1, 2: 2, 3: 5, 4: 4, 5: 6 };
+    letters.forEach((s, i) => { s.style.transition = 'left .25s cubic-bezier(.3,1.6,.5,1)'; place(s, slots[i]); });
+    P.style.transition = 'left .25s'; place(P, 3);
+  });
+  at(3300, () => { document.getElementById('tm').style.opacity = 1; gagDone = true; });
+  at(3800, () => document.getElementById('tap').classList.add('on'));
+  function endSplash() {
+    if (splashDone) return; splashDone = true; timers.forEach(clearTimeout);
+    splash.classList.add('gone'); started = true; sound = true; paintSound(); beep(990, .1);
+    try { sessionStorage.setItem('disc-splash', '1'); } catch (_) {}
+    focusTile(cur); setTimeout(() => splash.remove(), 600);
+  }
+  // the tap that ends the splash is the gesture that lets the ad play with sound
+  splash.addEventListener('pointerup', endSplash);
+  let seen = false; try { seen = sessionStorage.getItem('disc-splash') === '1'; } catch (_) {}
+  if (seen) { splashDone = true; splash.remove(); started = true; sound = false; paintSound(); }
+
+  // ---------- keys + gamepad ----------
   window.addEventListener('keydown', e => {
-    if (dlg.open) { if (e.key === 'Escape' || e.key === 'Backspace') closeVid(); return; }
-    if (e.key === 'ArrowDown') { select(sel + 1); e.preventDefault(); }
-    else if (e.key === 'ArrowUp') { select(sel - 1); e.preventDefault(); }
-    else if (e.key === 'Enter' || e.key === ' ') { start(); e.preventDefault(); }
+    if (!splashDone) { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') endSplash(); return; }
+    if (e.key === 'ArrowRight') { go(cur + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { go(cur - 1); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { launch(cur); e.preventDefault(); }
   });
-  // gamepad: poll every frame; D-pad and stick (debounced) both navigate
   let prev = {}, stickT = 0;
   (function poll(t) {
     for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) {
       if (!p) continue;
       const press = (i, fn) => { const d = !!(p.buttons[i] && p.buttons[i].pressed); if (d && !prev[i]) fn(); prev[i] = d; };
-      if (dlg.open) { press(1, closeVid); continue; }
-      press(12, () => select(sel - 1)); press(13, () => select(sel + 1)); press(0, start); press(9, start);
-      const ay = p.axes[1] || 0; if (Math.abs(ay) > .6 && t - stickT > 220) { select(sel + (ay > 0 ? 1 : -1)); stickT = t; }
+      if (!splashDone) { press(0, endSplash); press(9, endSplash); continue; }
+      press(14, () => go(cur - 1)); press(15, () => go(cur + 1)); press(0, () => launch(cur)); press(9, () => launch(cur));
+      const ax = p.axes[0] || 0; if (Math.abs(ax) > .6 && t - stickT > 260) { go(cur + (ax > 0 ? 1 : -1)); stickT = t; }
     }
     requestAnimationFrame(poll);
   })(0);
-  // tiny menu blip; audio never blocks anything
-  let ac = null;
-  function beep(f) { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume().catch(() => {}); const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.05, ac.currentTime); g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + .06); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + .07); } catch (_) {} }
-  select(0);
-  window.__menu = { entries };
+
+  focusTile(0);
+  window.__menu = {
+    entries: games.flatMap(g => [{ href: g.href }, { href: g.trailer }]),
+    go, get cur() { return cur; }, get playing() { return playing; }, endSplash, get gagDone() { return gagDone; },
+    word: () => [...word.children].sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left)).map(s => s.textContent).join(''),
+  };
 })();
 </script>
 </body></html>

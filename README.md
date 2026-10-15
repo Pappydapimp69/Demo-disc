@@ -1,6 +1,8 @@
 # DEMO DISC VOL. 1
 
 An old-school demo disc of playable spoof mobile games, built from the ad parodies in this project.
+Boots with the ZANEPAUL STUDIO splash (it doesn't stay STUDIO for long), then one tile per game: swipe left/right and each tile plays that game's spoof ad; tap the tile to play the game.
+
 Open `index.html` in a browser (no build step, no dependencies), or serve the folder with any static server.
 
 ## On the disc
@@ -8,21 +10,21 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 |---|---|---|
 | **PLAY** | **ONLY 1% CAN SAVE HIM** | Pin puzzle with real liquid physics: lava + water = stone, lava melts gold, lava on the knight = FAIL. 3 levels. Fail a level 3 times and the knight gives up on you and solves it himself. |
 | **PLAY** | **STICK SWARM 3D** | Crowd runner: steer through math gates, dodge saws, out-number the giant. 3 levels. Winning has a price. |
-| **VIDEO** | Trailers | The original 9:16 spoof ads for both games. |
+
 
 ## Controls
-- **Menu:** ↑ ↓ select, Enter/A start, Esc/B back. Touch: tap.
+- **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
 - **Stick Swarm:** drag left/right, or ← → / A D, or the gamepad stick.
 - **Esc** in any game returns to the disc menu.
 
 ## Layout
 ```
-index.html            disc menu (keyboard, gamepad, touch)
+index.html            splash + swipeable game tiles (touch, keyboard, gamepad)
 shared/engine.js      fixed-timestep loop, unified input, Web Audio synth, test hook
 games/only1/          pin puzzle (particle liquids)
 games/stickswarm/     crowd runner (pseudo-3D)
-trailers/             the spoof ads (mp4)
+trailers/             the spoof ads (mp4) + poster frames
 tests/smoke.mjs       boot + completability tests (Playwright)
 ```
 

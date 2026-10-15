@@ -44,11 +44,12 @@
     window.addEventListener('keyup', e => onKey && onKey(e.key, false));
 
     // ---- loop ----
-    let acc = 0, last = null, ticks = 0, running = true;
+    let acc = 0, last = null, ticks = 0, running = true, manual = false;
     function frame(nowMs) {
       const now = Math.round(nowMs * 1000);
       if (last === null) last = now;
       acc += Math.min(now - last, 250000); last = now; // clamp long stalls (tab switches)
+      if (manual) acc = 0; // a test driving step() owns the clock
       while (acc >= TICK_US) { update(DT); ticks++; acc -= TICK_US; }
       render(ctx);
       if (running) requestAnimationFrame(frame);
@@ -78,7 +79,7 @@
       ctx, width, height, DT,
       get ticks() { return ticks; },
       // test hook: advance the simulation deterministically without waiting on frames
-      step(n = 1) { for (let i = 0; i < n; i++) { update(DT); ticks++; } render(ctx); },
+      step(n = 1) { manual = true; for (let i = 0; i < n; i++) { update(DT); ticks++; } render(ctx); },
       stop() { running = false; },
     };
     return api;

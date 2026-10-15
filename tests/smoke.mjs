@@ -33,10 +33,25 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
 
 // ---------- menu ----------
 {
-  const { page, errors } = await open('index.html', { width: 900, height: 700 });
+  const { page, errors } = await open('index.html');
   const entries = await page.evaluate(() => window.__menu.entries.map(e => e.href));
   for (const href of entries) check(fs.existsSync(path.join(root, href.split('#')[0])), `menu entry resolves: ${href}`);
+  await page.waitForFunction(() => window.__menu.gagDone, null, { timeout: 8000 });
+  await page.screenshot({ path: path.join(shots, 'splash.png') });
+  check((await page.evaluate(() => window.__menu.word())) === 'STUPIDO', 'splash: STUDIO becomes STUPIDO');
+  await page.mouse.click(270, 480);
+  await page.waitForTimeout(700);
+  check(await page.evaluate(() => !document.getElementById('splash')), 'tap dismisses splash');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => window.__menu.cur === 1, null, { timeout: 4000 }).catch(() => {});
+  check((await page.evaluate(() => window.__menu.cur)) === 1, 'right moves to the next tile');
+  // headless Chromium has no H.264 decoder, so check the intent: tile 2 is the one asked to play, tile 1 stopped
+  check(await page.evaluate(() => window.__menu.playing === 1 && document.querySelectorAll('video')[0].paused), 'only the centred tile plays its ad');
+  await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(shots, 'menu.png') });
+  await page.mouse.click(270, 480);
+  await page.waitForURL(/stickswarm/, { timeout: 4000 }).catch(() => {});
+  check(page.url().includes('games/stickswarm/'), 'tapping a tile opens its game');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
