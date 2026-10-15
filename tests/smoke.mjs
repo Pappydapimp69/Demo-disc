@@ -407,6 +407,19 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- THE INTERN ----------
+{
+  const { page, errors } = await open('games/intern/index.html');
+  for (let i = 0; i < 3; i++) for (const [pol, want, stars] of [['good', 'win', 3], ['unplug', 'win', 1], [null, 'fail', 0]]) {
+    await page.evaluate(([i, pol]) => { window.__game.load(i); window.__game.autopilot = pol; }, [i, pol]);
+    await runUntil(page, () => window.__game.state !== 'play', 6000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, stars: window.__game.S.stars }));
+    check(st.s === want && (want !== 'win' || st.stars === stars), `intern day ${i + 1} ${pol || 'idle'} -> ${st.s} ${st.stars}*`);
+  }
+  check(errors.length === 0, `intern runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
