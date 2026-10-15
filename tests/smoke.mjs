@@ -368,6 +368,21 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- SOAP OPERA SOLITAIRE ----------
+{
+  const { page, errors } = await open('games/soap/index.html');
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'solve'; }, i);
+    await runUntil(page, () => window.__game.state !== 'play', 6000, 60);
+    check((await page.evaluate(() => window.__game.state)) === 'win', `soap season ${i + 1}: the solver's line clears the board`);
+  }
+  // no stock and nothing playable: the season is cancelled
+  const st = await page.evaluate(() => { const g = window.__game, S = g.S; g.load(0); S.stock = []; S.waste = [{ r: 7, s: 'S' }]; S.tab = S.tab.map(c => c.joker ? { r: 1, s: 'S' } : { r: 1, s: c.s }); g.draw(); return S.state; });
+  check(st === 'fail', 'soap: out of stock with no plays loses');
+  check(errors.length === 0, `soap runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
