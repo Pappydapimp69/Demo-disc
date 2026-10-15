@@ -12,14 +12,14 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **STICK SWARM 3D** | The ad: twenty thousand stickmen run through math gates. The game: a 2D sort puzzle with a few stickmen lying in jars. One colour per jar. 3 levels. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
 | **PLAY** | **BLOCKING** | Stage-blocking puzzle: drag the actors so every seat in the house sees every actor. Seats go red while a sightline is cut. A small nudge isn't a stagger. 4 scenes, the last on a thrust stage. |
-| **PLAY** | **HAIR SALON ASMR** | Real haircuts. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter, but a bad cut never blocks you: move on or try again. 5 customers. |
+| **PLAY** | **HAIR SALON ASMR** | Real haircuts, with the rituals: cape on, pump the chair, spray the hair; afterwards brush the neck, cape off, clean the clippers. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter, but a bad cut never blocks you: move on or try again. 5 customers. |
 | **PLAY** | **THE BOSS'S BAD DAY** | You are the dragon, and your daughter loves the knight. Let him win, but keep it dramatic: near-miss fire, roars, a lowered head. 3 levels. |
 
 
 ## Controls
 - **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
-- **Hair Salon:** drag to shave. Tap a guard in the tray, or keys `0`–`8` / Tab. Enter or DONE finishes the cut.
+- **Hair Salon:** tap through each ritual step, then drag to shave. Tap a guard in the tray, or keys `0`–`8` / Tab. Enter or DONE finishes the cut.
 - **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
 - **Stick Swarm:** tap a jar, then tap where its top stickman goes. Keys: ← → and Enter, `U` undo, `R` restart.
 - **Esc** in any game returns to the disc menu.

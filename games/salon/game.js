@@ -142,15 +142,69 @@
     Audio.tone(1300 - i * 60, .03, 'triangle', .14, null, .05); Audio.noise(.01, .28, .05);
   }
 
+  // ---------- salon foley: the rituals around the cut ----------
+  const FX = {
+    buf: null,
+    // filtered noise with a sweep: the raw material of fabric, air, bristles and hydraulics
+    src(f0, f1, q, dur, gain, type = 'bandpass', at = 0) {
+      const c = Audio.ctx; if (!c || Audio.muted) return;
+      try {
+        if (!this.buf) { const n = c.sampleRate * 2, b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; this.buf = b; }
+        const t = c.currentTime + at, sr = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+        sr.buffer = this.buf; f.type = type; f.Q.value = q; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + Math.min(.04, dur * .3)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+        sr.connect(f).connect(g).connect(Cozy.on ? Cozy.out : c.destination); sr.start(t, Math.random()); sr.stop(t + dur + .05);
+      } catch (_) {}
+    },
+    whoosh(at = 0) { this.src(300, 2400, 1.2, .4, .35, 'bandpass', at); },
+    snap(at = 0) { this.src(3200, 2800, 2, .04, .45, 'bandpass', at); Audio.tone(1800, .02, 'square', .08, null, at); },
+    velcro(at = 0) { for (let i = 0; i < 10; i++) this.src(2400 + i * 160, 1900, 3, .035, .28, 'bandpass', at + i * .026); },
+    pump(k) { Audio.tone(82 - k * 4, .16, 'sine', .3, 45); this.src(5200, 3400, .7, .24, .14, 'highpass', .08); Audio.tone(240 + k * 30, .05, 'triangle', .05, null, .02); },
+    spray() { this.src(7400, 5200, .6, .3, .34, 'highpass'); Audio.tone(900, .02, 'square', .04); },
+    brush() { this.src(2400, 5200, .8, .38, .3); },
+    knock() { Audio.tone(220, .06, 'triangle', .22, 140); Audio.tone(200, .06, 'triangle', .2, 130, .14); },
+  };
+  const RITUALS = {
+    prep: [{ id: 'cape', taps: 1, text: 'TAP TO PUT ON THE CAPE' }, { id: 'pump', taps: 4, text: 'TAP TO PUMP UP THE CHAIR' }, { id: 'spray', taps: 3, text: 'TAP TO SPRAY THE HAIR' }],
+    finish: [{ id: 'brush', taps: 3, text: 'TAP TO BRUSH OFF THE NECK' }, { id: 'capeoff', taps: 1, text: 'TAP TO TAKE OFF THE CAPE' }, { id: 'clean', taps: 4, text: 'TAP TO CLEAN THE CLIPPERS' }],
+  };
+  function startRitual(kind) { S.rit = { kind, i: 0, n: 0, t: 9 }; }
+  function ritTap() {
+    const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st || R.n >= st.taps || R.t < .2) return;
+    R.n++; R.t = 0;
+    const neck = () => { for (let k = 0; k < 14; k++) S.bits.push({ x: 290 + Math.random() * 140, y: 790, a: Math.random() * 6, l: 6 + Math.random() * 10, t: S.t, c: Math.random(), vx: (Math.random() - .5) * 160 }); };
+    switch (st.id) {
+      case 'cape': S.capeTo = 1; FX.whoosh(); FX.velcro(.3); FX.snap(.62); break;
+      case 'pump': S.liftTo = R.n / st.taps; FX.pump(R.n); break;
+      case 'spray': FX.spray(); for (let k = 0; k < 26; k++) S.mist.push({ x: 600, y: 400, vx: -260 - Math.random() * 260, vy: (Math.random() - .5) * 220, t: S.t }); break;
+      case 'brush': FX.brush(); S.brushT = 0; neck(); break;
+      case 'capeoff': S.capeTo = 0; FX.snap(); FX.velcro(.05); FX.whoosh(.32); for (let k = 0; k < 4; k++) neck(); break;
+      case 'clean': if (R.n === st.taps) FX.knock(); else if (R.n % 2) FX.spray(); else FX.brush(); S.brushT = 0; break;
+    }
+  }
+  function ritUpdate(dt) {
+    const R = S.rit, list = RITUALS[R.kind], st = list[R.i];
+    R.t += dt;
+    if (API.autopilot && R.t > .25) ritTap();
+    if (R.n >= st.taps && R.t > .5) {
+      R.i++; R.n = 0; R.t = 9;
+      if (R.i >= list.length) {
+        if (R.kind === 'prep') { S.state = 'play'; S.lt = 0; }
+        else { S.state = 'result'; S.resT = 0; if (S.result.stars && Cozy.on) Cozy.chime(); else Audio.sfx(S.result.stars ? 'win' : 'fail'); }
+      }
+    }
+  }
+
   // ---------- state ----------
-  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false };
+  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false, rit: null, cape: 0, capeTo: 0, lift: 0, liftTo: 0, mist: [], brushT: 9 };
   function load(i) {
     Object.assign(S, { li: i, L: LEVELS[i], strands: deal(i), bits: [], equipT: 9, lt: 0,   // the guard stays on between customers
-      state: 'play', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false });
+      state: 'prep', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false, cape: 0, capeTo: 0, lift: 0, liftTo: 0, mist: [], brushT: 9 });
+    startRitual('prep');
     API.autopilot = null;
   }
   function equip(k) {
-    if (!G(k) || S.state !== 'play') return;
+    if (!G(k) || S.state === 'result' || S.state === 'done') return;
     if (k !== S.guard) { S.guard = k; S.equipT = 0; snapClick(GUARDS.indexOf(G(k))); }
   }
   // cut every strand under the head down to the guard's length; return how many got shorter
@@ -175,8 +229,8 @@
   }
   function finish() {
     if (S.state !== 'play') return;
-    S.result = score(); S.state = 'result'; S.resT = 0; S.down = false; motor(false);
-    if (S.result.stars && Cozy.on) Cozy.chime(); else Audio.sfx(S.result.stars ? 'win' : 'fail');
+    S.result = score(); S.state = 'finish'; S.down = false; motor(false);   // score the cut, then tidy up before the verdict
+    startRitual('finish');
   }
   function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else S.state = 'done'; }
 
@@ -184,7 +238,7 @@
   function autopilot() {
     if (!S.ap) S.ap = { order: zones(S.L).sort((a, b) => G(b.g).mm - G(a.g).mm), zi: 0 };
     const z = S.ap.order[S.ap.zi];
-    if (!z) { S.down = false; S.apDone = true; return; }
+    if (!z) { S.down = false; S.apDone = true; if (API.autopilot === 'style') finish(); return; }
     if (S.guard !== z.g) { S.down = false; equip(z.g); return; }
     const mm = G(z.g).mm;
     const want = s => G(S.L.style[s.z]).mm;
@@ -202,10 +256,12 @@
   function update(dt) {
     S.t += dt; S.lt += dt; S.equipT += dt;
     Cozy.start(); Cozy.tick();
-    S.bits = S.bits.filter(b => S.t - b.t < 1.2);
+    S.bits = S.bits.filter(b => S.t - b.t < 1.2); S.mist = S.mist.filter(m => S.t - m.t < .7); S.brushT += dt;
+    S.cape += (S.capeTo - S.cape) * Math.min(1, dt * 7); S.lift += (S.liftTo - S.lift) * Math.min(1, dt * 9);
     if (S.state === 'result') { S.resT += dt; return; }
+    if (S.state === 'prep' || S.state === 'finish') { ritUpdate(dt); return; }
     if (S.state !== 'play') return;
-    if (API.autopilot) autopilot();
+    if (API.autopilot === 'style') autopilot();
     else {
       const dx = (S.keys.ArrowRight ? 1 : 0) - (S.keys.ArrowLeft ? 1 : 0), dy = (S.keys.ArrowDown ? 1 : 0) - (S.keys.ArrowUp ? 1 : 0);
       if (dx || dy) { S.ptr = { x: clamp(S.ptr.x + dx * 420 * dt, 0, W), y: clamp(S.ptr.y + dy * 420 * dt, 0, H) }; S.down = true; S.kb = true; }
@@ -226,13 +282,48 @@
   }
   function customer(skin, mood) {
     cx.save(); cx.translate(HX, HY);
-    cx.fillStyle = '#e8e8f0'; cx.beginPath(); cx.moveTo(-250, 720); cx.quadraticCurveTo(-220, 230, 0, 230); cx.quadraticCurveTo(220, 230, 250, 720); cx.fill();   // cape
+    cx.fillStyle = skin; cx.fillRect(-45, 150, 90, 110);   // neck
+    cx.fillStyle = '#4a7ad0'; cx.beginPath(); cx.moveTo(-230, 720); cx.quadraticCurveTo(-210, 250, 0, 250); cx.quadraticCurveTo(210, 250, 230, 720); cx.fill();   // shirt
+    if (S.cape > .01) {   // the cape rises into place and drops away
+      cx.save(); cx.translate(Math.sin(S.t * 3) * 8 * (1 - S.cape), (1 - S.cape) * 560); cx.globalAlpha = Math.min(1, S.cape * 1.6);
+      cx.fillStyle = '#e8e8f0'; cx.beginPath(); cx.moveTo(-250, 720); cx.quadraticCurveTo(-220, 230, 0, 230); cx.quadraticCurveTo(220, 230, 250, 720); cx.fill();
+      cx.strokeStyle = '#c8c8d8'; cx.lineWidth = 3; for (const k of [-120, -40, 40, 120]) { cx.beginPath(); cx.moveTo(k * .4, 280); cx.quadraticCurveTo(k * .9, 480, k * 1.4, 720); cx.stroke(); }
+      cx.fillStyle = '#333'; circ(0, 236, 9); cx.restore();
+    }
     cx.fillStyle = skin; cx.beginPath(); cx.ellipse(0, 0, 150, 190, 0, 0, 7); cx.fill(); circ(-150, 10, 30); circ(150, 10, 30);
     cx.fillStyle = '#fff'; circ(-55, -10, 24); circ(55, -10, 24);
     cx.fillStyle = '#222'; circ(-55, -6, 11); circ(55, -6, 11);
     cx.strokeStyle = '#7a3a2a'; cx.lineWidth = 7; cx.lineCap = 'round'; cx.beginPath();
     if (mood > 0) cx.arc(0, 60, 36, .3, Math.PI - .3); else if (mood < 0) cx.arc(0, 112, 36, Math.PI + .4, -.4); else { cx.moveTo(-30, 80); cx.lineTo(30, 80); }
     cx.stroke(); cx.restore();
+  }
+  function props() {
+    const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st) return;
+    const k = clamp(R.t / .35), pump = st.id === 'pump';
+    // the chair pedal, bottom left: it dips on every pump
+    if (S.state === 'prep') { cx.fillStyle = '#555'; rr(20, 1030, 130, 26, 8); cx.fill(); cx.fillStyle = pump ? '#ffd23a' : '#888'; cx.save(); cx.translate(40, 1030); cx.rotate(pump && k < 1 ? Math.sin(k * Math.PI) * .25 : 0); rr(-10, -70, 110, 22, 8); cx.fill(); cx.restore(); }
+    if (st.id === 'spray' || (st.id === 'clean' && R.n % 2 === 1)) {   // spray bottle
+      const x = st.id === 'spray' ? 640 : 520, y = st.id === 'spray' ? 400 : 860, sq = k < 1 ? Math.sin(k * Math.PI) * 6 : 0;
+      cx.fillStyle = '#5ab8ff'; rr(x - 10, y + 10, 52, 90, 14); cx.fill(); cx.fillStyle = '#fff'; rr(x - 26, y - 14, 50, 26, 6); cx.fill(); cx.fillStyle = '#ff5ab0'; rr(x - 4 - sq, y - 4, 16, 34, 6); cx.fill();
+    }
+    for (const m of S.mist) { const q = (S.t - m.t) / .7; cx.globalAlpha = .5 * (1 - q); cx.fillStyle = '#d8f0ff'; circ(m.x + m.vx * q, m.y + m.vy * q, 4 + q * 8); }
+    cx.globalAlpha = 1;
+    if (st.id === 'brush' || (st.id === 'clean' && R.n % 2 === 0 && R.n)) {   // neck duster / clipper brush sweeping across
+      const q = clamp(S.brushT / .35), x = st.id === 'brush' ? 260 + q * 200 : 300 + q * 140, y = st.id === 'brush' ? 790 : 860;
+      cx.save(); cx.translate(x, y); cx.rotate(-.3 + q * .6); cx.fillStyle = '#a0603a'; rr(-8, -90, 16, 70, 6); cx.fill(); cx.fillStyle = '#f0e0c0'; rr(-26, -26, 52, 34, 12); cx.fill(); cx.restore();
+    }
+    if (st.id === 'clean') {   // the clippers laid on a towel, getting looked after
+      cx.fillStyle = '#ffffff'; rr(200, 880, 320, 90, 16); cx.fill(); cx.fillStyle = '#c8e0f0'; for (let i = 0; i < 4; i++) cx.fillRect(210, 892 + i * 20, 300, 6);
+      const knock = R.n === st.taps && k < 1 ? Math.sin(k * Math.PI * 2) * 10 : 0;
+      cx.save(); cx.translate(360, 900 - Math.abs(knock)); cx.rotate(Math.PI / 2); cx.fillStyle = '#2a2a34'; rr(-22, -60, 44, 120, 14); cx.fill(); cx.fillStyle = '#c8c8d8'; rr(-26, -76, 52, 22, 4); cx.fill(); cx.restore();
+    }
+    // the prompt
+    const steps = RITUALS[R.kind];
+    cx.fillStyle = '#000c'; rr(50, 1080, 620, 160, 26); cx.fill();
+    cx.font = '800 22px system-ui'; cx.textAlign = 'center'; cx.fillStyle = '#ffe14a';
+    cx.fillText(`${R.kind === 'prep' ? 'GETTING READY' : 'FINISHING UP'} · ${R.i + 1}/${steps.length}`, W / 2, 1118);
+    Draw.bigText(cx, st.text, W / 2, 1160, 32, '#fff');
+    for (let i = 0; i < st.taps; i++) { cx.fillStyle = i < R.n ? '#4ad05a' : '#ffffff44'; circ(W / 2 + (i - (st.taps - 1) / 2) * 34, 1210, 10); }
   }
   const hairCol = s => `hsl(${20 + S.L.hair}, 50%, ${14 + s.c * 22}%)`;
   function hairDraw() {
@@ -326,10 +417,13 @@
       Draw.bigText(cx, 'TAP OR PRESS ESC FOR THE DISC MENU', W / 2, 820, 24, '#9ad8ff');
       return;
     }
-    const res = S.result;
+    const res = S.state === 'result' ? S.result : null;
     salonBack();
+    cx.save(); cx.translate(0, (1 - S.lift) * 150);   // the chair pumps them up to working height
     customer(S.L.skin, res ? (res.stars >= 2 ? 1 : res.stars ? 0 : -1) : 0);
-    hairDraw(); if (S.state === 'play') guideLines();
+    hairDraw(); cx.restore();
+    if (S.state === 'play') guideLines();
+    if (S.state === 'prep' || S.state === 'finish') { props(); if (S.state === 'prep' && S.rit.i === 0) bubble(S.L.ask, 360, 330); return; }
     if (S.state === 'play') {
       if (S.ptr) clipper(S.ptr.x, S.ptr.y, S.down);
       hud();
@@ -357,6 +451,7 @@
   function onPointer(type, x, y) {
     if (S.state === 'done') { if (type === 'down') Engine.exit(); return; }
     if (S.state === 'result') { if (type === 'down') proceed(hit(RES.retry, x, y)); return; }
+    if (S.state === 'prep' || S.state === 'finish') { if (type === 'down') { Audio.unlock(); ritTap(); } return; }
     if (type === 'down') {
       Audio.unlock();
       const gi = GUARDS.findIndex((g, i) => hit(barRect(i), x, y)); if (gi >= 0) { equip(GUARDS[gi].k); return; }
@@ -369,6 +464,7 @@
     S.keys[key] = down; if (!down) return;
     if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     if (S.state === 'result') { if (key === 'Enter' || key === ' ') proceed(false); else if (key === 'r' || key === 'R') proceed(true); return; }
+    if (S.state === 'prep' || S.state === 'finish') { if (key === 'Enter' || key === ' ') ritTap(); return; }
     if (G(key)) equip(key);
     else if (key === 'Tab') { const i = GUARDS.indexOf(G(S.guard)); equip(GUARDS[(i + 1) % GUARDS.length].k); }
     else if (key === 'Enter') finish();

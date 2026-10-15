@@ -170,20 +170,24 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(new Set(lens).size === lens.length && lens.every((l, i) => !i || l > lens[i - 1]), `salon: every guard cuts to its own length (${lens.join(', ')} mm)`);
   for (let i = 0; i < n; i++) {
     // cutting to the order wins
+    // the autopilot taps through the rituals (cape, chair, spray), cuts to the order, then tidies up
     await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'style'; }, i);
-    await runUntil(page, () => window.__game.S.apDone, 3000, 30);
-    await page.evaluate(() => { window.__game.autopilot = null; window.__game.finish(); });
+    if (i === 0) { await runUntil(page, () => window.__game.S.rit.i === 1, 300, 5); await page.screenshot({ path: path.join(shots, 'salon-ritual-chair.png') }); }
+    await runUntil(page, () => window.__game.state === 'result', 4000, 30);
     await runUntil(page, () => false, 90);
     await page.screenshot({ path: path.join(shots, `salon-L${i + 1}-done.png`) });
     const r = await page.evaluate(() => ({ s: window.__game.state, stars: window.__game.S.result.stars, all: window.__game.S.result.all }));
     check(r.s === 'result' && r.stars >= 2, `salon L${i + 1} cut to the order earns ${r.stars} stars (${Math.round(r.all * 100)}% to style)`);
   }
   // shaving everything with no guard is not what anyone asked for
-  const bad = await page.evaluate(() => { const g = window.__game; g.load(2); g.equip('0'); for (let x = 150; x < 580; x += 20) for (let y = 300; y < 680; y += 20) g.cutAt(x, y); g.finish(); return g.S.result; });
+  await page.evaluate(() => { window.__game.load(2); window.__game.autopilot = 'rituals'; });
+  await runUntil(page, () => window.__game.state === 'play', 600, 10);
+  const bad = await page.evaluate(() => { const g = window.__game; g.equip('0'); for (let x = 150; x < 580; x += 20) for (let y = 300; y < 680; y += 20) g.cutAt(x, y); g.finish(); return g.S.result; });
+  await runUntil(page, () => window.__game.state === 'result', 600, 10);
   check(bad.stars === 0 && bad.short > 0, `salon: going too short scores no stars (${Math.round(bad.all * 100)}%, ${bad.short} too short)`);
   await runUntil(page, () => false, 90);
   await page.keyboard.press('Enter');
-  check(await page.evaluate(() => window.__game.S.li === 3 && window.__game.state === 'play'), 'salon: a bad cut still moves on to the next customer');
+  check(await page.evaluate(() => window.__game.S.li === 3 && window.__game.state === 'prep'), 'salon: a bad cut still moves on to the next customer');
   check(await page.evaluate(() => window.__game.S.guard === '0'), 'salon: the guard stays on between customers');
   check(errors.length === 0, `salon runs without errors ${errors.join(' | ')}`);
   await page.close();
