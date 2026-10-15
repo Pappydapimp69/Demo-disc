@@ -271,6 +271,36 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- VEER (the ad is a draw-the-path puzzle; the game is a foggy walk played by ear) ----------
+{
+  const { page, errors } = await open('games/veer/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  // the sound model: a forest costs ~23 dB per 100 m in Deep Woods, so a whistle dies near 150 m there but carries ~1.3 km in the open
+  const snd = await page.evaluate(() => { const g = window.__game; g.load(3);
+    const f = g.forestLoss(400, 760, 300, 760), near = g.levelAt(400, 760, 260, 760).L, far = g.levelAt(400, 760, 220, 760).L; g.load(0);
+    const open = 100 - 20 * Math.log10(1300) - 13; return { f, near, far, open }; });
+  check(Math.abs(snd.f - 23) < 1.5 && snd.near > 20 && snd.far < 20 && snd.open > 20, `veer: 100 m of deep forest costs ${snd.f.toFixed(1)} dB; heard at 140 m (${snd.near.toFixed(1)} dB) not 180 m (${snd.far.toFixed(1)} dB); open ground still carries 1.3 km`);
+  // with no sun, walking "straight" curves away on its own
+  const drift = await page.evaluate(() => { const g = window.__game; g.load(2); g.autopilot = 'straight'; g.step(60); const th0 = g.S.th; g.step(60 * 40); const S = g.S; return { turned: Math.abs(((S.th - th0 + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI), ratio: Math.hypot(S.x - S.L.start[0], S.y - S.L.start[1]) / S.walked }; });
+  check(drift.turned > .3 && drift.ratio < .98, `veer: no sun, walking straight still drifts (${(drift.turned * 57.3).toFixed(0)} degrees off, ${(drift.ratio * 100).toFixed(0)}% as far as walked)`);
+  // the wanderer stops once they hear you
+  const wand = await page.evaluate(() => { const g = window.__game; g.load(5); g.start(); const F = g.S.friend; g.S.x = F.x + 60; g.S.y = F.y; g.step(40); g.whistle(); g.step(30); return F.stay; });
+  check(wand, 'veer: the wanderer stays put once they hear your whistle');
+  for (let i = 0; i < n; i++) {
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'clearing'; }, i);
+    await runUntil(page, () => ['win', 'dark'].includes(window.__game.state), 40000, 600);
+    const st = await page.evaluate(() => ({ s: window.__game.state, used: Math.round(window.__game.S.L.time - window.__game.S.timeLeft), of: window.__game.S.L.time, walked: Math.round(window.__game.S.walked) }));
+    await runUntil(page, () => false, 180, 60);
+    await page.screenshot({ path: path.join(shots, `veer-L${i + 1}-found.png`) });
+    check(st.s === 'win', `veer L${i + 1} found by whistling and listening (${st.s}, ${st.used}/${st.of} s, walked ${st.walked} m)`);
+  }
+  // a tap right as a level opens doesn't skip its intro
+  await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'veer: an accidental tap as the level opens is ignored');
+  check(errors.length === 0, `veer runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
