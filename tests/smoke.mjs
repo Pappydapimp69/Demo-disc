@@ -39,9 +39,10 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForFunction(() => window.__menu.gagDone, null, { timeout: 8000 });
   await page.screenshot({ path: path.join(shots, 'splash.png') });
   check((await page.evaluate(() => window.__menu.word())) === 'STUPIDO', 'splash: STUDIO becomes STUPIDO');
-  await page.mouse.click(270, 480);
-  await page.waitForTimeout(700);
+  await page.mouse.click(270, 480, { delay: 250 }); // a slow tap must not fall through to a tile
+  await page.waitForTimeout(1000);
   check(await page.evaluate(() => !document.getElementById('splash')), 'tap dismisses splash');
+  check(page.url().endsWith('index.html') && await page.evaluate(() => window.__menu.cur === 0), 'tapping the splash lands on the ad catalog, not a game');
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => window.__menu.cur === 1, null, { timeout: 4000 }).catch(() => {});
   check((await page.evaluate(() => window.__menu.cur)) === 1, 'right moves to the next tile');
@@ -54,6 +55,18 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(page.url().includes('games/stickswarm/'), 'tapping a tile opens its game');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
+}
+
+// a real touch tap on the splash must land on the catalog, not fall through to a tile's game
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.goto('file://' + path.join(root, 'index.html'));
+  await page.waitForFunction(() => window.__menu && window.__menu.gagDone, null, { timeout: 8000 });
+  await page.touchscreen.tap(195, 500);
+  await page.waitForTimeout(1500);
+  check(page.url().endsWith('/index.html') && page.url().split('/').slice(-2)[0] !== 'only1', `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
+  await ctx.close();
 }
 
 // ---------- ONLY 1% ----------

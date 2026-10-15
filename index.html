@@ -33,7 +33,7 @@
 
   /* ---------- splash: ZANEPAUL STUDIO ... STUPIDO ---------- */
   #splash { position: fixed; inset: 0; z-index: 40; background: #000; display: grid; place-items: center; cursor: pointer; transition: opacity .5s; }
-  #splash.gone { opacity: 0; pointer-events: none; }
+  #splash.gone { opacity: 0; }
   .logo { text-align: center; }
   .logo .who { font-size: clamp(16px, 6vw, 34px); color: var(--ink); letter-spacing: 4px; opacity: 0; animation: fadeUp .6s .2s forwards; }
   .word { position: relative; display: inline-flex; margin-top: 22px; height: 1.4em; font-size: clamp(22px, 9vw, 52px); color: var(--hot); text-shadow: 4px 4px 0 #c0307a; }
@@ -115,7 +115,8 @@
   }, { root: rail, threshold: [.6] });
   tiles.forEach(t => io.observe(t));
   function go(i) { i = Math.max(0, Math.min(tiles.length - 1, i)); rail.scrollTo({ left: i * rail.clientWidth, behavior: 'smooth' }); }
-  function launch(i) { beep(990, .12); vids.forEach(v => v.pause()); setTimeout(() => { location.href = games[i].href; }, 120); }
+  let splashEnd = -1e9;
+  function launch(i) { if (!splashDone || performance.now() - splashEnd < 700) return; beep(990, .12); vids.forEach(v => v.pause()); setTimeout(() => { location.href = games[i].href; }, 120); }
   document.getElementById('prev').onclick = () => go(cur - 1);
   document.getElementById('next').onclick = () => go(cur + 1);
 
@@ -146,13 +147,13 @@
   at(3300, () => { document.getElementById('tm').style.opacity = 1; gagDone = true; });
   at(3800, () => document.getElementById('tap').classList.add('on'));
   function endSplash() {
-    if (splashDone) return; splashDone = true; timers.forEach(clearTimeout);
+    if (splashDone) return; splashDone = true; splashEnd = performance.now(); timers.forEach(clearTimeout);
     splash.classList.add('gone'); started = true; sound = true; paintSound(); beep(990, .1);
     try { sessionStorage.setItem('disc-splash', '1'); } catch (_) {}
     focusTile(cur); setTimeout(() => splash.remove(), 600);
   }
-  // the tap that ends the splash is the gesture that lets the ad play with sound
-  splash.addEventListener('pointerup', endSplash);
+  // the tap that ends the splash is the gesture that lets the ad play with sound; it must not fall through to a tile
+  splash.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); endSplash(); });
   let seen = false; try { seen = sessionStorage.getItem('disc-splash') === '1'; } catch (_) {}
   if (seen) { splashDone = true; splash.remove(); started = true; sound = false; paintSound(); }
 
