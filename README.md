@@ -80,9 +80,9 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 
 ## Lab games
 IQ Test 2026 and Pop It are real experiments, built so Brain can learn from players instead of from autopilots
-(Brain's tension T9: a headless sim proves systems, not feel). `shared/lab.js` assigns the condition, keeps an
-event log on the player's device only, and the end screen's SEND MY DATA saves it as a JSON file (or copies it).
-Nothing is sent anywhere automatically. `?lab-miss=reset|drop` or `?lab-juice=on|off` pins a condition for testing.
+(Brain's tension T9: a headless sim proves systems, not feel). `shared/lab.js` assigns the condition and keeps the full
+event log on the player's device; results go out automatically as anonymous counts through the play stats (no player
+id), e.g. `game/iqtest/lab-iq-drop-d7-10of12` or `game/popit/lab-pop-on-rate4`, and each game says so on screen. `?lab-miss=reset|drop` or `?lab-juice=on|off` pins a condition for testing.
 
 
 ## Play stats

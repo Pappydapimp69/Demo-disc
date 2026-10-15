@@ -1,6 +1,6 @@
 // DEMO DISC lab kit: the few games that run a real experiment on their players use this.
-// It assigns a condition (an "arm") per player or per round, keeps an event log on this device only, and
-// exports it as a JSON file the player can choose to send. Nothing leaves the device on its own.
+// It assigns a condition (an "arm") per player or per round and keeps the full event log on this device. Results
+// leave only as anonymous counts through the disc's play stats (report), which the games disclose on screen.
 // Storage can be missing (private mode, file://, blocked site data); then the log lives in memory for the visit.
 (function () {
   'use strict';
@@ -42,6 +42,8 @@
         if (st.events.length > MAX_EVENTS) st.events.splice(0, st.events.length - MAX_EVENTS);
         save();
       },
+      // an anonymous result count through the disc's play stats (an event name only: no player id, no log)
+      report(name) { lab.log('report', { name }); try { Engine.track(name); } catch (_) {} },
       // game state that must survive a reload (e.g. a schedule over days) rides along in the same store
       get data() { return st.data || (st.data = {}); },
       save,

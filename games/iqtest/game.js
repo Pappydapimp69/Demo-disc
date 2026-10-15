@@ -36,7 +36,7 @@
   })();
 
   const lab = Lab.create('iqtest');
-  const S = { state: 'intro', t: 0, lockUntil: 0, rule: null, day: 0, q: null, opts: [], pick: -1, shownAt: 0, fb: 0, sent: '', examScore: null };
+  const S = { state: 'intro', t: 0, lockUntil: 0, rule: null, day: 0, q: null, opts: [], pick: -1, shownAt: 0, fb: 0, examScore: null };
   const D = () => lab.data;
   // local calendar day (a new day at local midnight, not 24 h after the last session)
   const calDay = ms => Math.floor((ms - new Date(ms).getTimezoneOffset() * 60000) / 864e5);
@@ -48,7 +48,7 @@
   function open() {
     S.rule = lab.arm('miss', RULES);
     const d = D();
-    if (d.startDay === undefined) { d.startDay = calDay(lab.clock()); d.cards = MEANINGS.map((_, id) => ({ id, box: 0, due: 0, intro: null })); d.exams = {}; d.done = {}; lab.log('start', { rule: S.rule }); }
+    if (d.startDay === undefined) { d.startDay = calDay(lab.clock()); d.cards = MEANINGS.map((_, id) => ({ id, box: 0, due: 0, intro: null })); d.exams = {}; d.done = {}; lab.log('start', { rule: S.rule }); lab.report(`lab-iq-${S.rule}-start`); }
     S.day = today();
     const s = d.session;
     if (s && s.day === S.day && s.i < s.queue.length) { S.state = 'intro'; S.resume = true; }
@@ -104,12 +104,12 @@
     const d = D(); d.session.i++;
     // an exam's last item closes it
     const s = d.session, cur = s.queue[s.i - 1], nx = s.queue[s.i];
-    if (cur.kind === 'exam' && (!nx || nx.kind !== 'exam')) { const r = d.examRun[cur.exam]; d.exams[cur.exam] = { right: r.right, n: r.n, day: S.day }; S.examScore = d.exams[cur.exam]; lab.log('exam', { day: S.day, exam: cur.exam, right: r.right, n: r.n, rule: S.rule }); lab.save(); S.state = 'examDone'; Audio.sfx('win'); pause(.8); return; }
+    if (cur.kind === 'exam' && (!nx || nx.kind !== 'exam')) { const r = d.examRun[cur.exam]; d.exams[cur.exam] = { right: r.right, n: r.n, day: S.day }; S.examScore = d.exams[cur.exam]; lab.log('exam', { day: S.day, exam: cur.exam, right: r.right, n: r.n, rule: S.rule }); lab.report(`lab-iq-${S.rule}-d${cur.exam}-${r.right}of${r.n}`); lab.save(); S.state = 'examDone'; Audio.sfx('win'); pause(.8); return; }
     lab.save(); nextItem();
   }
   function finishDay() {
     const d = D(), s = d.session; d.done[S.day] = { right: s.right, asked: s.asked };
-    lab.log('done', { day: S.day, right: s.right, asked: s.asked, boxes: d.cards.map(c => c.box) }); lab.save();
+    lab.log('done', { day: S.day, right: s.right, asked: s.asked, boxes: d.cards.map(c => c.box) }); lab.report(`lab-iq-${S.rule}-day${S.day + 1}-${s.right}of${s.asked}`); lab.save();
     S.state = 'done'; Audio.sfx('win'); pause(.8);
   }
 
@@ -127,7 +127,7 @@
   // ---------- drawing ----------
   let ctx;
   const BTN = k => ({ x: 40 + (k % 2) * 240, y: 600 + Math.floor(k / 2) * 92, w: 220, h: 76 });
-  const BIG = { x: 120, y: 790, w: 300, h: 84 }, SEND = { x: 120, y: 840, w: 300, h: 66 };
+  const BIG = { x: 120, y: 790, w: 300, h: 84 };
   function glyph(id, cx, cy, s, col) {
     const pt = q => [cx + (q % 3 - 1) * s, cy + (Math.floor(q / 3) - 1) * s];
     ctx.strokeStyle = col; ctx.lineWidth = s * .26; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -165,7 +165,7 @@
         text('THE AD SAID TEN MINUTES TO GENIUS.', W / 2, 200, 24, '#c0283a', 900);
         text('REAL MEMORY TAKES A WEEK. LEARN THE TWELVE SYMBOLS OF A LOST ALPHABET, A FEW MINUTES A DAY. ON DAY 7, A TEST.', W / 2, 260, 22, '#1a2340');
         GLYPHS.slice(0, 6).forEach((_, i) => glyph(i, 70 + i * 80, 440, 18, '#1a2340'));
-        text('THIS GAME IS ALSO A REAL EXPERIMENT ON HOW TO REVIEW. YOUR ANSWERS STAY ON THIS DEVICE UNLESS YOU CHOOSE TO SEND THEM.', W / 2, 540, 16, '#5a6aa0', 600, 440);
+        text('THIS GAME IS ALSO A REAL EXPERIMENT ON HOW TO REVIEW. SCORES ARE SHARED ANONYMOUSLY TO HELP ANSWER IT.', W / 2, 540, 16, '#5a6aa0', 600, 440);
       } else {
         const ex = examDue(), q = buildQueue();
         text(S.resume ? 'PICK UP WHERE YOU LEFT OFF.' : ex !== undefined ? `DAY ${ex} TEST FIRST: EVERY SYMBOL, NO HINTS.` : 'TODAY\'S REVIEW', W / 2, 220, 26, '#1a2340', 900);
@@ -215,8 +215,7 @@
       const taken = EXAMS.filter(e => d.exams[e]).map(e => `DAY ${e}: ${d.exams[e].right}/${d.exams[e].n}`).join(' · ');
       text(taken || (next ? `THE TEST: IN ${next - S.day} DAY${next - S.day > 1 ? 'S' : ''}` : ''), W / 2, 580, 20, '#3a5bff', 800);
       if (next && taken) text(`NEXT TEST IN ${next - S.day} DAYS`, W / 2, 612, 18, '#5a6aa0');
-      text('A REAL EXPERIMENT: PLAYERS ARE SPLIT BETWEEN TWO RULES FOR WHAT A MISS DOES. SENDING YOUR FILE HELPS SETTLE WHICH ONE WINS.', W / 2, 680, 15, '#5a6aa0', 600, 440);
-      button(SEND, S.sent || 'SEND MY DATA', '#5a6aa0', !!S.sent, 22);
+      text('A REAL EXPERIMENT: PLAYERS ARE SPLIT BETWEEN TWO RULES FOR WHAT A MISS DOES. DAILY SCORES ARE SHARED ANONYMOUSLY TO SETTLE WHICH ONE WINS.', W / 2, 680, 15, '#5a6aa0', 600, 440);
     }
   }
 
@@ -229,7 +228,6 @@
     else if (S.state === 'quiz' && x !== null) { for (let k = 0; k < 6; k++) if (hit(BTN(k), x, y)) answer(k); }
     else if (S.state === 'feedback') advance();
     else if (S.state === 'examDone' && (x === null || hit(BIG, x, y))) nextItem();
-    else if (S.state === 'done' && x !== null && hit(SEND, x, y)) { const how = lab.download(); S.sent = how === 'clipboard' ? 'COPIED: PASTE IT TO US' : how === 'download' ? 'SAVED: SEND THE FILE' : 'COULD NOT SAVE'; lab.log('export', { how }); }
   }
   function onPointer(type, x, y) { if (type === 'down') press(x, y); }
   function onKey(key, down) {
