@@ -272,6 +272,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const st = await page.evaluate(() => ({ s: window.__game.state, r: window.__game.S.reason }));
     check(st.s === want, `lastnote L${i + 1} ${pol} -> ${st.s} ${st.r}`);
   }
+  // the rules are on screen before the song: it waits on the how-to card until you tap
+  const intro = await page.evaluate(() => { const g = window.__game; g.load(0); g.step(240); return { st: g.state, tilesPlayed: g.S.tiles.filter(x => x.res).length }; });
+  check(intro.st === 'intro' && intro.tilesPlayed === 0, 'lastnote: each funeral opens on a how-to card and waits for a tap');
   check(errors.length === 0, `lastnote runs without errors ${errors.join(' | ')}`);
   await page.close();
 }

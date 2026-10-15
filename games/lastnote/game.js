@@ -19,7 +19,19 @@
   const g = v => { const c = Math.round(clamp(v) * 255); return `rgb(${c},${c},${c})`; };
   function rect(x, y, w, h, v) { cx.fillStyle = g(v); cx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
   function circ(x, y, r, v) { cx.fillStyle = g(v); cx.beginPath(); cx.arc(x, y, Math.max(0, r), 0, 7); cx.fill(); }
-  function text(s, x, y, size, v, align = 'center') { cx.font = `bold ${size}px "Courier New", monospace`; cx.textAlign = align; cx.fillStyle = g(v); cx.fillText(s, Math.round(x), Math.round(y)); }
+  // text is NOT drawn into the 1-bit buffer (dithering at this size made it unreadable): it is queued with its
+  // on-screen position and drawn crisp at full resolution on top, in the same two inks
+  const TQ = [];
+  function text(s, x, y, size, v, align = 'center') { const m = cx.getTransform(); TQ.push({ s, x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f, size: Math.max(8, size) * Math.hypot(m.a, m.b), v, align, a: cx.globalAlpha }); }
+  function drawText(ctx) {
+    for (const q of TQ) {
+      const ink = q.v >= .5 ? PAPER : INK, edge = q.v >= .5 ? INK : PAPER, px = q.size * SCALE * 1.05;
+      ctx.save(); ctx.globalAlpha = q.a; ctx.font = `900 ${px}px Inter, system-ui, sans-serif`; ctx.textAlign = q.align; ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(3, px * .22); ctx.strokeStyle = `rgb(${edge})`; ctx.strokeText(q.s, q.x * SCALE, q.y * SCALE);
+      ctx.fillStyle = `rgb(${ink})`; ctx.fillText(q.s, q.x * SCALE, q.y * SCALE); ctx.restore();
+    }
+    TQ.length = 0;
+  }
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   let B = .75;   // seconds per beat; the characters bob to it
 
@@ -125,7 +137,7 @@ function hand(x, y, press) {
     // the melody picks the lane: low notes left, high notes right, like a keyboard
     const lo = Math.min(...L.mel), hi = Math.max(...L.mel);
     for (let k = 0; k < L.tiles; k++) { const m = L.mel[k % L.mel.length]; tiles.push({ t: 2.4 + k * B, lane: Math.min(3, Math.floor((m - lo) / (hi - lo + 1) * 4)), m, res: null, at: 0, n: k }); }
-    Object.assign(S, { li: i, L, B, tiles, t: 0, state: 'play', groove: 0, anger: 0, last: null, roll: 0, pops: [], endT: 0, reason: '', press: [-1, -1, -1, -1], beatN: -1 });
+    Object.assign(S, { li: i, L, B, tiles, t: 0, state: 'intro', lockUntil: 0, solemn: 0, groove: 0, anger: 0, last: null, roll: 0, pops: [], endT: 0, reason: '', press: [-1, -1, -1, -1], beatN: -1 });
     API.autopilot = null;
   }
   const fallSpeed = () => 150 * (S.B / .75);   // px per second: one beat is always the same height on screen
@@ -172,8 +184,8 @@ function hand(x, y, press) {
     const d = S.t - best.t;
     best.at = S.t;
     if (Math.abs(d) < ON) {
-      best.res = 'on'; S.anger = Math.max(0, S.anger - 6);
-      organ(best.m, S.B * .9);
+      best.res = 'on'; S.anger = Math.max(0, S.anger - 6); S.solemn++;
+      organ(best.m, S.B * .9); pop('TOO STIFF');
     } else if (d > LATE_MIN && d < LATE_MAX) {
       best.res = 'late'; S.groove++;
       lead(best.m, S.B * .5);
@@ -194,8 +206,10 @@ function hand(x, y, press) {
   }
   function fail(reason) { if (S.state !== 'play') return; S.state = 'fail'; S.reason = reason; S.endT = 0; Audio.sfx('fail'); }
 
+  function start() { S.state = 'play'; S.t = 0; S.lockUntil = .4; }
   function update(dt) {
     S.t += dt;
+    if (S.state === 'intro') { if (API.autopilot) start(); return; }
     if (S.state !== 'play') { S.endT += dt; return; }
     S.roll = Math.min(S.roll + dt * .8, S.groove / S.L.need);
     // a soft pedal note on every beat so there is a beat to be late against
@@ -247,7 +261,7 @@ function hand(x, y, press) {
     const dragging = S.roll > .08 && !(won && e > .3);
     grandma(dragging ? leadX : 64, 214, t, dragging ? (won ? .3 : 1) : 0, S.anger > 40);
     if (!(won && e > 1.2)) casket(cxp, casketY, S.roll > 0 && S.roll < 1 ? t : 0);
-    for (const p of S.pops) { const d = t - p.t; if (d < .7) text(p.text, camX() , p.big ? 120 - d * 10 : 118 - d * 30, p.big ? 18 : 11, p.big ? 0 : 1); }
+    for (const p of S.pops) { const d = t - p.t; if (d < .7) text(p.text, camX(), p.big ? 168 - d * 10 : 166 - d * 30, p.big ? 14 : 10, p.big ? 0 : 1); }
   }
   const camX = () => mix(112, 158, ease(S.roll)) + (S.state === 'win' ? 12 * lin(S.endT, .2, 1.1) : 0);
 
@@ -257,8 +271,9 @@ function hand(x, y, press) {
     rect(0, LANES_Y, W, H - LANES_Y, 0);
     for (let l = 0; l <= 4; l++) rect(LANE_X(l) - 1, LANES_Y, 1, H - LANES_Y, .3);
     // two targets: the thin BEAT line (solemn) and, just below it, the bold GROOVE line (late = groove)
-    rect(20, HIT_Y, 200, 1, .55); text('beat', 228, HIT_Y + 3, 7, .55, 'left');
-    rect(20, GY - 1, 200, 3, 1); text('GROOVE', 3, GY + 3, 7, 1, 'left');
+    // the last note is played ON the beat, so during it the labels swap
+    rect(20, HIT_Y, 200, 1, .55); text(S.last ? 'LAST NOTE: TAP HERE' : 'too early', 222, HIT_Y + (S.last ? 14 : 3), S.last ? 8 : 7, S.last ? 1 : .7, 'right');
+    rect(20, GY - 1, 200, 3, S.last ? .3 : 1); if (!S.last) text('TAP HERE', 222, GY + 13, 8, 1, 'right');
     for (let l = 0; l < 4; l++) if (t - S.press[l] < .12) rect(LANE_X(l) + 2, GY - 5, 46, 10, .7);
     for (const x of S.tiles) {
       if (x.res === 'skip') continue;
@@ -283,12 +298,21 @@ function hand(x, y, press) {
     rect(0, 0, W, 40, 0);
     text(`${S.li + 1}/${LEVELS.length} ${S.L.name} '${String(S.L.year).slice(2)}`, 234, 13, 9, 1, 'right');
     // groove bar (casket to the door) and Grandma's patience
-    rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text('GROOVE', 20, 36, 8, 1, 'left');
-    rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text('GRANDMA', 124, 36, 8, 1, 'left');
-    if (S.t < 4.8 && S.state === 'play' && S.groove === 0) { rect(8, 220, 224, 56, 0); text(`${S.L.who}'S LAST REQUEST:`, 120, 233, 9, .85); text(`${S.L.name} (${S.L.year})`, 120, 248, 11, 1); text('TAP AS TILES HIT GROOVE', 120, 266, 9, .85); }
-    if (S.last && S.last.res === null) text('TAP ANYWHERE WHEN IT HITS THE LINE', 120, 228, 8, 1);
+    rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text(`CASKET ▸ DOOR ${Math.min(S.groove, S.L.need)}/${S.L.need}`, 20, 36, 8, 1, 'left');
+    rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text(`GRANDMA'S PATIENCE`, 124, 36, 8, 1, 'left');
+    if (S.t < 2.4 && S.state === 'play' && S.groove === 0) { rect(8, 224, 224, 46, 0); text(`${S.L.who}'S LAST REQUEST`, 120, 240, 10, 1); text('TAP EACH TILE ON THE BOLD LINE', 120, 260, 10, 1); }
+    if (S.last && S.last.res === null) text('ON THE BEAT THIS TIME. TAP ANYWHERE.', 120, 300, 9, 1);
   }
   function overlay() {
+    if (S.state === 'intro') {
+      rect(0, 0, W, H, 0); rect(10, 30, 220, 360, 1); rect(12, 32, 216, 356, 0);
+      text(`FUNERAL ${S.li + 1}/${LEVELS.length}`, 120, 58, 11, 1);
+      text(`${S.L.who}'S LAST REQUEST:`, 120, 82, 10, 1);
+      text(`"${S.L.name}" (${S.L.year})`, 120, 100, 11, 1);
+      const rules = ['HOW TO PLAY', 'TILES FALL IN 4 LANES.', 'TAP A TILE AS IT REACHES', 'THE BOLD LINE: A LITTLE LATE.', 'LATE = GROOVE. THE MOURNERS', 'DANCE AND THE CASKET ROLLS', 'TOWARD THE DOOR.', 'ON THE BEAT = TOO STIFF.', 'WRONG LANE OR MISSED TILES', 'ANNOY GRANDMA.', `GROOVE ${S.L.need} TIMES, THEN TAP`, 'THE LAST NOTE TO FINISH.'];
+      rules.forEach((r, i) => text(r, 120, 132 + i * 17 + (i ? 6 : 0), i ? 9 : 11, i ? .85 : 1));
+      if (S.t > .6) text('TAP TO START', 120, 370, 12, Math.sin(S.t * 5) > -.3 ? 1 : .7);
+    }
     if (S.state === 'win') {
       const e = S.endT;
       if (e > 1.4) { rect(20, 60, 200, 60, 0); const k = back(lin(e, 1.4, 1.8)); cx.save(); cx.translate(120, 88); cx.scale(k, k); text('PERFECT', 0, 0, 22, 1); cx.restore(); text('★ ★ ★', 120, 110, 12, 1); }
@@ -311,8 +335,8 @@ function hand(x, y, press) {
     cx.putImageData(img, 0, 0);
   }
   function render(ctx) {
-    cx.setTransform(1, 0, 0, 1, 0, 0); rect(0, 0, W, H, 0);
-    if (S.state !== 'done') {
+    TQ.length = 0; cx.setTransform(1, 0, 0, 1, 0, 0); rect(0, 0, W, H, 0);
+    if (S.state !== 'done' && S.state !== 'intro') {
       const sh = S.groove > 4 && S.state === 'play' && !S.last ? Math.round(Math.sin(S.t * 40)) : 0;
       cx.save(); cx.beginPath(); cx.rect(0, 40, W, LANES_Y - 40); cx.clip(); cx.translate(120, 206 + sh); cx.scale(1.7, 1.7); cx.translate(-camX(), -214); chapel(); cx.restore();
       lanes(); hud();
@@ -321,6 +345,7 @@ function hand(x, y, press) {
     dither();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(low, 0, 0, W, H, 0, 0, LW, LH);
+    drawText(ctx);
   }
 
   // ---------- input ----------
@@ -328,6 +353,8 @@ function hand(x, y, press) {
   function onPointer(type, x, y) {
     if (type !== 'down') return;
     const lx = x / SCALE, ly = y / SCALE;
+    if (S.state === 'intro') { if (S.t > .6) start(); return; }
+    if (S.state === 'play' && S.t < S.lockUntil) return;
     if (S.state === 'done') { Engine.exit(); return; }
     if (S.state === 'fail' && S.endT > .6) { load(S.li); return; }
     if (S.state === 'win' && S.endT > 2.6) { next(); return; }
@@ -336,13 +363,14 @@ function hand(x, y, press) {
   const KEYS = { d: 0, D: 0, f: 1, F: 1, j: 2, J: 2, k: 3, K: 3, ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 };
   function onKey(key, down) {
     if (!down) return;
+    if (S.state === 'intro') { if (S.t > .6 && (key === 'Enter' || key === ' ')) start(); return; }
     if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     if (S.state === 'fail' && S.endT > .6 && (key === 'Enter' || key === ' ')) { load(S.li); return; }
     if (S.state === 'win' && S.endT > 2.6 && (key === 'Enter' || key === ' ')) { next(); return; }
     if (key in KEYS) tap(KEYS[key]);
   }
 
-  const API = { LEVELS, S, load, tap, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, tap, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: LW, height: LH, update, render, onPointer, onKey });
   window.__game = API;
