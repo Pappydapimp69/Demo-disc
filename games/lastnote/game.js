@@ -105,39 +105,68 @@ function hand(x, y, press) {
     eighths: [[0, 0], [.5, 0], [1, 0], [1.5, 0], [2, 0], [2.5, 0], [3, 0], [3.5, 0]],
     funk: [[0, 0], [.5, 12], [.75, 0], [1.5, 10], [2, 0], [2.5, 12], [3.25, 7], [3.5, 10]],
   };
+  // ten funerals, ten requests: a famous PUBLIC-DOMAIN tune played in the style of the deceased's favourite era
+  // (folk songs, nursery tunes and 19th-century classics; no copyrighted melody). song = [midi, beats]...;
+  // chords = one root per bar (looping), minor = 1 for a minor bar.
+  const N = (str) => str.trim().split(/\s+/).map(t => { const [n, d] = t.split(':'); return [+n, +(d || 1)]; });
   const LEVELS = [
-    { who: 'AUNT DEB', name: 'LIGHTERS UP', year: 1987, bpm: 72, chords: [50, 45, 47, 43], minor: [0, 0, 1, 0], drums: 'ballad', bass: 'ballad', lead: 'triangle', pad: true,
-      mel: [66, 69, 71, 69, 66, 64, 62, 64, 66, 69, 74, 73, 71, 69, 71, 69] },
-    { who: 'UNCLE RAY', name: 'NEON GOODBYE', year: 1984, bpm: 80, chords: [57, 53, 48, 55], minor: [1, 0, 0, 0], drums: 'synthpop', bass: 'octaves', lead: 'square',
-      mel: [76, 72, 74, 76, 79, 76, 74, 72, 69, 72, 74, 72, 71, 67, 71, 74] },
-    { who: 'COUSIN VINNIE', name: 'STREETLIGHT STRUT', year: 1983, bpm: 84, chords: [52, 50, 48, 50], minor: [1, 0, 0, 0], drums: 'dance', bass: 'synco', lead: 'square',
-      mel: [71, 71, 74, 76, 74, 71, 69, 67, 71, 74, 76, 79, 76, 74, 71, 74] },
-    { who: 'BIG MIKE', name: 'BOOM BOX BOOGIE', year: 1991, bpm: 88, chords: [43, 48, 43, 48], minor: [1, 0, 1, 0], drums: 'swing', bass: 'swing', lead: 'sawtooth',
-      mel: [67, 70, 72, 70, 74, 72, 70, 67, 65, 67, 70, 72, 70, 67, 65, 67] },
-    { who: 'MISS PEARL', name: 'VELVET FLIP PHONE', year: 2004, bpm: 92, chords: [53, 46, 51, 44], minor: [1, 1, 0, 0], drums: 'rnb', bass: 'rnb', lead: 'triangle', pad: true,
-      mel: [72, 75, 77, 75, 72, 70, 68, 70, 72, 77, 80, 77, 75, 72, 70, 72] },
-    { who: 'ABUELA ROSA', name: 'TROPICAL WAKE', year: 2017, bpm: 96, chords: [47, 43, 50, 45], minor: [1, 0, 0, 0], drums: 'dembow', bass: 'dembow', lead: 'square',
-      mel: [71, 74, 76, 74, 71, 69, 66, 69, 71, 74, 78, 76, 74, 73, 71, 73] },
-    { who: 'AUNTIE GLO', name: 'RAVE RECEPTION', year: 1995, bpm: 100, chords: [48, 44, 51, 46], minor: [1, 0, 0, 0], drums: 'four', bass: 'offbeat', lead: 'square',
-      mel: [72, 75, 79, 77, 75, 72, 70, 72, 75, 77, 79, 82, 80, 79, 75, 77] },
-    { who: 'LIL TONY', name: 'SKATE PARK SKYLINE', year: 2003, bpm: 104, chords: [52, 47, 49, 45], minor: [0, 0, 1, 0], drums: 'punk', bass: 'eighths', lead: 'sawtooth',
-      mel: [76, 76, 78, 80, 80, 78, 76, 73, 71, 73, 76, 78, 76, 73, 71, 73] },
-    { who: 'DR. LOU', name: 'BRASS SUIT SWAGGER', year: 2014, bpm: 112, chords: [50, 55, 50, 55], minor: [1, 0, 1, 0], drums: 'funk', bass: 'funk', lead: 'sawtooth',
-      mel: [74, 77, 74, 72, 69, 72, 74, 77, 79, 77, 74, 72, 74, 72, 69, 72] },
-    { who: 'GRANDPA', name: 'SUNSET DROP', year: 2013, bpm: 120, chords: [53, 48, 50, 46], minor: [0, 0, 1, 0], drums: 'four', bass: 'offbeat', lead: 'square',
-      mel: [77, 81, 84, 81, 79, 77, 76, 72, 74, 77, 81, 79, 77, 76, 74, 76] },
+    { who: 'AUNT DEB', name: 'TWINKLE TWINKLE', style: "AS AN '87 POWER BALLAD", year: 1987, bpm0: 66, bpm1: 92, drums: 'ballad', bass: 'ballad', lead: 'triangle', pad: true,
+      song: N('60 60 67 67 69 69 67:2 65 65 64 64 62 62 60:2 67 67 65 65 64 64 62:2 67 67 65 65 64 64 62:2 60 60 67 67 69 69 67:2 65 65 64 64 62 62 60:2'),
+      chords: [48, 53, 53, 55, 48, 55, 48, 55, 48, 53, 53, 48], minor: [0] },
+    { who: 'UNCLE RAY', name: 'ODE TO JOY', style: "AS '84 SYNTH-POP", year: 1984, bpm0: 72, bpm1: 104, drums: 'synthpop', bass: 'octaves', lead: 'square',
+      song: N('64 64 65 67 67 65 64 62 60 60 62 64 64:1.5 62:.5 62:2 64 64 65 67 67 65 64 62 60 60 62 64 62:1.5 60:.5 60:2'),
+      chords: [48, 55, 48, 55, 48, 55, 48, 48], minor: [0] },
+    { who: 'COUSIN VINNIE', name: 'JINGLE BELLS', style: "AS '83 DANCE (IN JULY)", year: 1983, bpm0: 76, bpm1: 112, drums: 'dance', bass: 'synco', lead: 'square',
+      song: N('64 64 64:2 64 64 64:2 64 67 60:1.5 62:.5 64:4 65 65 65:1.5 65:.5 65 64 64 64:.5 64:.5 64 62 62 64 62:2 67:2 64 64 64:2 64 64 64:2 64 67 60:1.5 62:.5 64:4 65 65 65 65 65 64 64 64:.5 64:.5 67 67 65 62 60:4'),
+      chords: [48, 48, 48, 48, 53, 48, 50, 55, 48, 48, 48, 48, 53, 48, 55, 48], minor: [0, 0, 0, 0, 0, 0, 1, 0] },
+    { who: 'BIG MIKE', name: 'YANKEE DOODLE', style: "AS '91 BOOM BAP", year: 1991, bpm0: 76, bpm1: 104, drums: 'swing', bass: 'swing', lead: 'sawtooth',
+      song: N('60 60 62 64 60 64 62 55 60 60 62 64 60:2 59:2 60 60 62 64 65 64 62 60 59 55 57 59 60:2 60:2'),
+      chords: [48, 55, 48, 55, 48, 53, 55, 48], minor: [0] },
+    { who: 'MISS PEARL', name: 'FUR ELISE', style: "AS A 2004 SLOW JAM", year: 2004, bpm0: 60, bpm1: 84, drums: 'rnb', bass: 'rnb', lead: 'triangle', pad: true,
+      song: N('76:.5 75:.5 76:.5 75:.5 76:.5 71:.5 74:.5 72:.5 69:1.5 60:.5 64:.5 69:.5 71:1.5 64:.5 68:.5 71:.5 72:1.5 64:.5 76:.5 75:.5 76:.5 75:.5 76:.5 71:.5 74:.5 72:.5 69:1.5 60:.5 64:.5 69:.5 71:1.5 64:.5 72:.5 71:.5 69:3'),
+      chords: [45, 45, 52, 45, 45, 45, 52, 45], minor: [1, 1, 0, 1, 1, 1, 0, 1] },
+    { who: 'ABUELA ROSA', name: 'LA CUCARACHA', style: 'AS 2017 REGGAETON', year: 2017, bpm0: 80, bpm1: 108, drums: 'dembow', bass: 'dembow', lead: 'square',
+      song: N('67:.5 67:.5 67:.5 72:1.5 76:1 67:.5 67:.5 67:.5 72:1.5 76:2 72:1 72:.5 71:.5 71:.5 69:.5 69:.5 67:2.5 67:.5 67:.5 67:.5 71:1.5 74:1 67:.5 67:.5 67:.5 71:1.5 74:2 79:1 81:.5 79:.5 77:.5 76:.5 74:.5 72:2.5'),
+      chords: [48, 48, 48, 55, 55, 55, 55, 48], minor: [0] },
+    { who: 'AUNTIE GLO', name: 'IN THE HALL OF THE MOUNTAIN KING', style: "AS '95 RAVE", year: 1995, bpm0: 70, bpm1: 132, drums: 'four', bass: 'offbeat', lead: 'square',
+      song: N('59:.5 61:.5 62:.5 64:.5 66:.5 62:.5 66 65:.5 61:.5 65 64:.5 60:.5 64 59:.5 61:.5 62:.5 64:.5 66:.5 62:.5 66:.5 71:.5 69:.5 66:.5 62:.5 66:.5 69:2'),
+      chords: [47, 54, 52, 47, 47, 47, 54, 54], minor: [1, 0, 1, 1, 1, 1, 0, 0] },
+    { who: 'LIL TONY', name: 'HAPPY BIRTHDAY', style: "AS 2003 SKATE PUNK (HE'D WANT IT)", year: 2003, bpm0: 80, bpm1: 116, drums: 'punk', bass: 'eighths', lead: 'sawtooth',
+      song: N('67:.75 67:.25 69 67 72 71:2 67:.75 67:.25 69 67 74 72:2 67:.75 67:.25 79 76 72 71 69:2 77:.75 77:.25 76 72 74 72:3'),
+      chords: [48, 55, 55, 48, 48, 53, 48, 48], minor: [0] },
+    { who: 'DR. LOU', name: 'WHEN THE SAINTS GO MARCHING IN', style: 'AS 2014 BRASS FUNK', year: 2014, bpm0: 84, bpm1: 116, drums: 'funk', bass: 'funk', lead: 'sawtooth',
+      song: N('60 64 65 67:4 60 64 65 67:4 60 64 65 67:2 64:2 60:2 64:2 62:4 64 64 62 60:3 60 64:2 67:2 67 65:3 64 65 67:2 64:2 60:2 62:2 60:4'),
+      chords: [48, 48, 48, 48, 48, 48, 55, 55, 48, 48, 53, 53, 48, 55, 48, 48], minor: [0] },
+    { who: 'GRANDPA', name: "CHOPIN'S FUNERAL MARCH", style: 'WITH A DROP. HE INSISTED.', year: 2013, bpm0: 56, bpm1: 128, drums: 'four', bass: 'offbeat', lead: 'square',
+      song: N('58 58:.75 58:.25 58:2 61 60:.75 60:.25 58:.75 58:.25 57:.75 58:1.25 58 58:.75 58:.25 58:2 61 60:.75 60:.25 58:.75 58:.25 57:.75 58:1.25'),
+      chords: [46, 46, 46, 46, 46, 46, 41, 46], minor: [1, 1, 1, 1, 1, 1, 0, 1] },
   ];
-  LEVELS.forEach((L, i) => { L.tiles = 30 + i * 2; L.need = Math.round(8 + i * 1.2); });
+  const SONG_LEN = 56, RAMP = 48;   // seconds of song per funeral; the tempo climbs over the first RAMP seconds
   const LANE_X = l => 20 + l * 50, HIT_Y = 322, TILE_H = 32, LANES_Y = 215, KEYS_Y = 386, GROOVE_AT = .27;
   const ON = .09, LATE_MIN = .09, LATE_MAX = .55, DROP = .6;   // forgiving: almost any tap that isn't dead on the beat grooves
 
   const S = {};
   function load(i) {
-    const L = LEVELS[i], tiles = []; B = 60 / L.bpm;
-    // the melody picks the lane: low notes left, high notes right, like a keyboard
-    const lo = Math.min(...L.mel), hi = Math.max(...L.mel);
-    for (let k = 0; k < L.tiles; k++) { const m = L.mel[k % L.mel.length]; tiles.push({ t: 2.4 + k * B, lane: Math.min(3, Math.floor((m - lo) / (hi - lo + 1) * 4)), m, res: null, at: 0, n: k }); }
-    Object.assign(S, { li: i, L, B, tiles, t: 0, state: 'intro', lockUntil: 0, solemn: 0, groove: 0, anger: 0, last: null, roll: 0, pops: [], endT: 0, reason: '', press: [-1, -1, -1, -1], beatN: -1 });
+    const L = LEVELS[i], T0 = 2.4;
+    // the beat clock: tempo climbs from bpm0 to bpm1, so every funeral starts slow and gets faster
+    const beats = [T0]; while (beats[beats.length - 1] < T0 + SONG_LEN + 4) { const t = beats[beats.length - 1], bpm = L.bpm0 + (L.bpm1 - L.bpm0) * clamp((t - T0) / RAMP); beats.push(t + 60 / bpm); }
+    const timeAt = b => { const n = Math.floor(b), f = b - n; return n + 1 < beats.length ? beats[n] + (beats[n + 1] - beats[n]) * f : beats[beats.length - 1]; };
+    // the song, repeated to fill the minute: each note is either a TILE (you play it) or an auto note (the band does)
+    const lo = Math.min(...L.song.map(x => x[0])), hi = Math.max(...L.song.map(x => x[0]));
+    const tiles = [], auto = []; let sb = 0, lastTile = -9, k = 0;
+    for (let rep = 0; rep < 40; rep++) {
+      for (const [m, d] of L.song) {
+        const t = timeAt(sb); if (t > T0 + SONG_LEN) { rep = 99; break; }
+        const prog = (t - T0) / SONG_LEN, gap = prog < .3 ? 1.0 : prog < .65 ? .55 : .32;   // seconds between tiles: slow, then medium, then fast
+        const onGrid = Math.abs(sb * 2 - Math.round(sb * 2)) < 1e-6;
+        if (onGrid && d >= .5 && t - lastTile >= gap - 1e-6) { tiles.push({ t, lane: Math.min(3, Math.floor((m - lo) / (hi - lo + 1) * 4)), m, d, res: null, at: 0, n: k++ }); lastTile = t; }
+        else auto.push({ t, m, d, done: false });
+        sb += d;
+      }
+    }
+    L.need = Math.round(tiles.length * .7);   // room to miss a few
+    Object.assign(S, { li: i, L, B: beats[1] - beats[0], beats, tiles, auto, t: 0, state: 'intro', lockUntil: 0, solemn: 0, groove: 0, anger: 0, last: null, roll: 0, pops: [], endT: 0, reason: '', press: [-1, -1, -1, -1], beatN: -1 });
+    B = S.B;
     API.autopilot = null;
   }
   const fallSpeed = () => 150 * (S.B / .75);   // px per second: one beat is always the same height on screen
@@ -145,11 +174,12 @@ function hand(x, y, press) {
   function organ(m, d, g = .05) { const f = 440 * 2 ** ((m - 69) / 12); Audio.tone(f, d, 'sine', g); Audio.tone(f * 2, d, 'sine', g * .45); Audio.tone(f * 3, d * .8, 'sine', g * .25); Audio.tone(f / 2, d, 'triangle', g * .5); }
 
   const hz = m => 440 * 2 ** ((m - 69) / 12);
-  function lead(m, d) { const t = S.L.lead; Audio.tone(hz(m), d, t, t === 'triangle' ? .09 : .045); Audio.tone(hz(m) * 1.005, d, t, t === 'triangle' ? .03 : .02); }
-  function chordOf(bar) { const r = S.L.chords[bar % 4] + 12, mi = S.L.minor[bar % 4]; return [r, r + (mi ? 3 : 4), r + 7]; }
+  function lead(m, d, soft) { const t = S.L.lead, k = soft ? .3 : 1; Audio.tone(hz(m), d, t, (t === 'triangle' ? .26 : .14) * k); Audio.tone(hz(m) * 1.005, d, t, (t === 'triangle' ? .08 : .05) * k); if (!soft) { Audio.noise(.03, .12); Audio.tone(hz(m) * 2, .06, 'sine', .06); } }
+  const rootOf = bar => S.L.chords[((bar % S.L.chords.length) + S.L.chords.length) % S.L.chords.length], minorOf = bar => S.L.minor[((bar % S.L.minor.length) + S.L.minor.length) % S.L.minor.length];
+  function chordOf(bar) { const r = rootOf(bar) + 12, mi = minorOf(bar); return [r, r + (mi ? 3 : 4), r + 7]; }
   // one beat of the band, scheduled ahead with the audio clock's own delay; it fades in as the chapel grooves
   function backing(bn) {
-    const L = S.L, bar = Math.floor(bn / 4), bib = ((bn % 4) + 4) % 4, root = L.chords[((bar % 4) + 4) % 4], B = S.B;
+    const L = S.L, bar = Math.floor(bn / 4), bib = ((bn % 4) + 4) % 4, root = rootOf(bar), B = S.B;
     const band = clamp(S.groove / Math.max(1, L.need * .6)) * .9;
     Audio.tone(hz(root - 12), B * .6, 'sine', .05);                                   // the organ pedal: always there, so there is a beat
     if (band <= 0) return;
@@ -168,7 +198,7 @@ function hand(x, y, press) {
     if (S.last) {
       const d = S.t - S.last.t;
       // the last note spans every lane: tap anywhere when it reaches the line
-      if (Math.abs(d) < .3) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; chordOf(0).concat(S.L.chords[0] - 12).forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
+      if (Math.abs(d) < .3) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; chordOf(0).concat(rootOf(0) - 12).forEach(m => organ(m, 2.2, .07)); Audio.sfx('win'); }
       else if (d > -1.2) bump();
       return;
     }
@@ -185,10 +215,10 @@ function hand(x, y, press) {
     best.at = S.t;
     if (Math.abs(d) < ON) {
       best.res = 'on'; S.anger = Math.max(0, S.anger - 6); S.solemn++;
-      organ(best.m, S.B * .9); pop('TOO STIFF');
+      organ(best.m, S.B * .9, .12); pop('TOO STIFF');
     } else if (d > LATE_MIN && d < LATE_MAX) {
       best.res = 'late'; S.groove++;
-      lead(best.m, S.B * .5);
+      lead(best.m, Math.max(.2, S.B * best.d * .9));
       pop(S.groove < 2 ? 'groove?' : S.groove < 5 ? 'GROOVE!' : `GROOVE x${S.groove}`);
       if (S.groove >= S.L.need && !S.last) spawnLast();
     } else { best.res = 'sour'; sour(); }
@@ -213,8 +243,9 @@ function hand(x, y, press) {
     if (S.state !== 'play') { S.endT += dt; return; }
     S.roll = Math.min(S.roll + dt * .8, S.groove / S.L.need);
     // a soft pedal note on every beat so there is a beat to be late against
-    const bn = Math.floor((S.t - 2.0) / S.B);
-    if (!S.last && bn !== S.beatN && bn >= -1 && bn < S.L.tiles) { S.beatN = bn; backing(bn + 1); }
+    let bn = S.beatN; while (bn + 1 < S.beats.length && S.t >= S.beats[bn + 1]) bn++;
+    if (bn !== S.beatN && bn >= 0) { S.beatN = bn; S.B = S.beats[bn + 1] - S.beats[bn]; B = S.B; if (!S.last) backing(bn); }
+    if (!S.last) for (const a of S.auto) if (!a.done && S.t >= a.t) { a.done = true; if (S.t - a.t < .1) lead(a.m, Math.max(.15, S.B * a.d * .9), true); }
     const auto = API.autopilot; if (auto) autopilot(auto);
     // dropped tiles are sour
     for (const x of S.tiles) if (x.res === null && S.t - x.t > DROP) { x.res = 'miss'; S.anger += 6; if (S.anger >= 100) { fail('GRANDMA THREW YOU OUT.'); return; } }
@@ -296,7 +327,7 @@ function hand(x, y, press) {
   }
   function hud() {
     rect(0, 0, W, 40, 0);
-    text(`${S.li + 1}/${LEVELS.length} ${S.L.name} '${String(S.L.year).slice(2)}`, 234, 13, 9, 1, 'right');
+    text(`${S.li + 1}/${LEVELS.length} ${S.L.name}`, 234, 13, S.L.name.length > 20 ? 7 : 9, 1, 'right');
     // groove bar (casket to the door) and Grandma's patience
     rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text(`CASKET ▸ DOOR ${Math.min(S.groove, S.L.need)}/${S.L.need}`, 20, 36, 8, 1, 'left');
     rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text(`GRANDMA'S PATIENCE`, 124, 36, 8, 1, 'left');
@@ -308,7 +339,7 @@ function hand(x, y, press) {
       rect(0, 0, W, H, 0); rect(10, 30, 220, 360, 1); rect(12, 32, 216, 356, 0);
       text(`FUNERAL ${S.li + 1}/${LEVELS.length}`, 120, 58, 11, 1);
       text(`${S.L.who}'S LAST REQUEST:`, 120, 82, 10, 1);
-      text(`"${S.L.name}" (${S.L.year})`, 120, 100, 11, 1);
+      text(`"${S.L.name}"`, 120, 100, S.L.name.length > 20 ? 9 : 11, 1); text(S.L.style, 120, 116, 8, .85);
       const rules = ['HOW TO PLAY', 'TILES FALL IN 4 LANES.', 'TAP A TILE AS IT REACHES', 'THE BOLD LINE: A LITTLE LATE.', 'LATE = GROOVE. THE MOURNERS', 'DANCE AND THE CASKET ROLLS', 'TOWARD THE DOOR.', 'ON THE BEAT = TOO STIFF.', 'WRONG LANE OR MISSED TILES', 'ANNOY GRANDMA.', `GROOVE ${S.L.need} TIMES, THEN TAP`, 'THE LAST NOTE TO FINISH.'];
       rules.forEach((r, i) => text(r, 120, 132 + i * 17 + (i ? 6 : 0), i ? 9 : 11, i ? .85 : 1));
       if (S.t > .6) text('TAP TO START', 120, 370, 12, Math.sin(S.t * 5) > -.3 ? 1 : .7);
