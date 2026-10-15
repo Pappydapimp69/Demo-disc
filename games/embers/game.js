@@ -9,13 +9,14 @@
   const { createGame, Audio, Draw, back, clamp } = Engine;
   const W = 540, H = 960, HOR = 430, FOV = 1.75;        // horizon y, field of view (rad)
   const GLANCE = 2, STARE = 17, BLEACH_T = 5;           // night-minutes of re-adaptation: a glance, a full stare, and how fast a look grows from one to the other
+  const HEAT = 9, HEAT_RAMP = .8;                      // warmth per second once your hands have caught the heat, and how long that takes (a flick of a glance barely warms)
 
   const LEVELS = [
-    { name: 'FIRST NIGHT', tip: "DON'T LOOK AT THE FIRE. YOUR EYES NEED THE DARK. TAP WHAT COMES OUT OF THE TREES.", len: 60, cold: 1.4, spawn: 7, speed: .06, pack: 1, torch: 0 },
-    { name: 'COLD SNAP', tip: 'IT IS COLDER. WARM YOUR HANDS, BUT EVERY LOOK AT THE FIRE COSTS YOU YOUR EYES.', len: 70, cold: 3.2, spawn: 6, speed: .07, pack: 1, torch: 0 },
-    { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. LISTEN FOR THE TWIGS AND TURN TOWARD THEM.', len: 75, cold: 3.0, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
-    { name: 'RED LIGHT', tip: 'A RED TORCH DOES NOT SPOIL NIGHT SIGHT, BUT IT ONLY REACHES WHAT IS CLOSE.', len: 80, cold: 3.4, spawn: 6, speed: .08, pack: 2, torch: 25 },
-    { name: 'THE LONGEST NIGHT', tip: 'EVERYTHING AT ONCE. UNTIL DAWN.', len: 100, cold: 3.6, spawn: 5.5, speed: .085, pack: 2, torch: 20 },
+    { name: 'FIRST NIGHT', tip: "DON'T LOOK AT THE FIRE. YOUR EYES NEED THE DARK. TAP WHAT COMES OUT OF THE TREES.", len: 60, cold: 1.0, spawn: 7, speed: .06, pack: 1, torch: 0 },
+    { name: 'COLD SNAP', tip: 'IT IS COLDER. WARM YOUR HANDS, BUT EVERY LOOK AT THE FIRE COSTS YOU YOUR EYES. HANDS TAKE A MOMENT TO CATCH THE HEAT.', len: 70, cold: 1.8, spawn: 6, speed: .07, pack: 1, torch: 0 },
+    { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. LISTEN FOR THE TWIGS AND TURN TOWARD THEM.', len: 75, cold: 1.8, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
+    { name: 'RED LIGHT', tip: 'A RED TORCH DOES NOT SPOIL NIGHT SIGHT, BUT IT ONLY REACHES WHAT IS CLOSE.', len: 80, cold: 2.0, spawn: 6, speed: .08, pack: 2, torch: 25 },
+    { name: 'THE LONGEST NIGHT', tip: 'EVERYTHING AT ONCE. UNTIL DAWN.', len: 100, cold: 2.2, spawn: 5.5, speed: .085, pack: 2, torch: 20 },
   ];
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -23,6 +24,8 @@
   const lookCost = e => STARE - (STARE - GLANCE) * Math.exp(-Math.max(0, e - .4) / BLEACH_T);
   // night sight from the re-adaptation still owed: dark-adapted at 0, nearly blind at a full stare
   const sight = debt => 1 - Math.sqrt(clamp(debt / STARE));
+  // how fast your hands warm after e seconds at the fire: they take a moment to catch the heat
+  const heatRate = e => HEAT * (1 - Math.exp(-e / HEAT_RAMP));
   // what you can make out at closeness d (0 = treeline, 1 = at the fire): far needs good night sight
   const canSee = (v, d) => v > .95 - .9 * d;
 
@@ -31,7 +34,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', lt: 0, look: 0, warming: false, expo: 0, debt: 0, warmth: 100, lives: 3, night: 0, beasts: [], rng: mkRng(300 + i * 31),
-      torch: false, battery: L.torch, nextSpawn: 3, flash: [], hurt: 0, ap: null, looks: 0, warmTime: 0, why: null, endT: 0 });
+      torch: false, battery: L.torch, nextSpawn: 3, flash: [], hurt: 0, ap: null, looks: 0, warmTime: 0, why: null, endT: 0, shivered: false });
     pause();
   }
   function pause() { S.lockUntil = S.t + .6; S.warming = false; }
@@ -50,9 +53,10 @@
     if (S.warming) {
       S.expo += dt; S.warmTime += dt;
       S.debt = Math.max(S.debt, lookCost(S.expo));            // bleaching saturates: a new look doesn't stack on the old debt
-      S.warmth = Math.min(100, S.warmth + 8 * dt);
+      S.warmth = Math.min(100, S.warmth + heatRate(S.expo) * dt);
     } else S.debt = Math.max(0, S.debt - dt);                 // one night-minute of recovery per second
     S.warmth -= S.L.cold * dt;
+    if (S.warmth < 25 && !S.shivered) { S.shivered = true; Snd.shiver(); } else if (S.warmth > 40) S.shivered = false;
   }
 
   // ---------- what comes out of the trees ----------
@@ -137,6 +141,7 @@
     lunge() { Audio.tone(110, .5, 'sawtooth', .2, 60); this.burst(400, .8, .5, .4); },
     fire(on) { const c = this.ctx(); if (!c) return; if (!this.fg) { const s = c.createBufferSource(); s.buffer = this.noise(c); s.loop = true; const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1500; this.fg = c.createGain(); this.fg.gain.value = .02; s.connect(f).connect(this.fg).connect(c.destination); s.start(); } this.fg.gain.setTargetAtTime(on ? .12 : .03, c.currentTime, .1); },
     ambience(on) { const c = this.ctx(); if (!c) return; this.fire(S.warming); if (!this.cr) { this.cr = c.createGain(); this.cr.gain.value = 0; const o = c.createOscillator(); o.frequency.value = 4400; const l = c.createOscillator(); l.frequency.value = 22; const lg = c.createGain(); lg.gain.value = 1; l.connect(lg.gain); o.connect(lg).connect(this.cr).connect(c.destination); o.start(); l.start(); } this.cr.gain.setTargetAtTime(on ? .006 : 0, c.currentTime, .5); },
+    shiver() { for (let i = 0; i < 4; i++) this.burst(300 + i * 40, 2, .09, .1, (i % 2 ? .3 : -.3), i * .11); },
     dawn() { [60, 64, 67, 72, 76].forEach((m, i) => Audio.tone(440 * 2 ** ((m - 69) / 12), .8, 'sine', .12, null, i * .15)); },
   };
 
@@ -186,12 +191,13 @@
     for (let i = 0; i < 7; i++) { const x = 140 + i * 45, h = 180 + Math.sin(S.t * 9 + i * 1.7) * 50; ctx.fillStyle = i % 2 ? '#ff6a1a' : '#ffd23a'; ctx.beginPath(); ctx.moveTo(x - 30, 700); ctx.quadraticCurveTo(x, 700 - h * 1.3, x + 30, 700); ctx.fill(); }
     ctx.fillStyle = '#5a2a0a'; ctx.save(); ctx.translate(W / 2, 720); ctx.rotate(.25); Draw.rr(ctx, -200, -20, 400, 40, 20); ctx.fill(); ctx.rotate(-.5); Draw.rr(ctx, -200, -20, 400, 40, 20); ctx.fill(); ctx.restore();
     Draw.bigText(ctx, `NIGHT SIGHT GONE: ${Math.round(S.debt)} MIN`, W / 2, 200, 26, '#fff', '#5a1a00');
+    Draw.bigText(ctx, S.expo < HEAT_RAMP ? 'HANDS CATCHING THE HEAT…' : 'HANDS WARMING', W / 2, 240, 18, '#ffe8c0', '#5a1a00');
   }
   const WARM = { x: 30, y: H - 150, w: 200, h: 110 }, TORCH = { x: W - 230, y: H - 150, w: 200, h: 110 };
   function hud() {
     Draw.bigText(ctx, `${S.li + 1}/${LEVELS.length} · ${S.L.name}`, W / 2, 70, 24, '#ffd8a0', '#000');
     const bar = (y, label, k, col) => { ctx.fillStyle = '#0008'; Draw.rr(ctx, 130, y, 280, 16, 8); ctx.fill(); ctx.fillStyle = col; Draw.rr(ctx, 130, y, 280 * clamp(k), 16, 8); ctx.fill(); ctx.font = '800 13px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'right'; ctx.fillText(label, 122, y + 13); };
-    bar(96, 'WARMTH', S.warmth / 100, S.warmth < 25 ? '#ff4a4a' : '#ff9a3a');
+    bar(96, 'WARMTH', S.warmth / 100, S.warmth < 25 ? (Math.sin(S.t * 8) > 0 ? '#ff4a4a' : '#ff9a3a') : '#ff9a3a');
     bar(120, 'NIGHT SIGHT', V(), '#9ab8ff');
     bar(144, 'DAWN', S.night / S.L.len, '#ffe14a');
     ctx.font = '800 22px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = '#ff6a6a'; ctx.fillText('♥'.repeat(Math.max(0, S.lives)), 424, 160);
@@ -199,6 +205,12 @@
     btn(WARM, 'WARM HANDS', 'HOLD · LOOKS AT THE FIRE', S.warming, '#ff7a2a');
     if (S.L.torch) btn(TORCH, 'RED TORCH', `${Math.ceil(S.battery)} S LEFT`, S.torch, '#c02a2a');
     if (S.lt < 6 && S.state === 'play' && !S.looks) { ctx.font = '800 16px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'center'; ctx.fillText('DRAG TO LOOK AROUND · TAP WHAT YOU SEE', W / 2, H - 175); }
+    // the cold creeping in at the edges, and a nudge before it's too late
+    if (S.state === 'play' && S.warmth < 30 && !S.warming) {
+      const k = clamp((30 - S.warmth) / 30), fv = ctx.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 620);
+      fv.addColorStop(0, 'rgba(160,200,255,0)'); fv.addColorStop(1, `rgba(170,210,255,${.15 + k * .4})`); ctx.fillStyle = fv; ctx.fillRect(0, 0, W, H);
+      if (S.warmth < 20) { ctx.globalAlpha = .6 + .4 * Math.sin(S.t * 6); Draw.bigText(ctx, 'YOUR HANDS ARE GOING NUMB', W / 2, H - 205, 18, '#cfe4ff', '#000'); ctx.globalAlpha = 1; }
+    }
     if (S.hurt > 0) { ctx.fillStyle = `rgba(160,0,0,${S.hurt * .5})`; ctx.fillRect(0, 0, W, H); }
   }
   function wrapText(s, x, y, maxW, lh, font, col) {
@@ -264,7 +276,7 @@
     S.turn = (keys.ArrowRight || keys.d || keys.D ? 1 : 0) - (keys.ArrowLeft || keys.a || keys.A ? 1 : 0);
   }
 
-  const API = { LEVELS, S, load, start, lookCost, sight, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, lookCost, sight, heatRate, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   Audio.unlock();

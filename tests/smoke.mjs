@@ -346,6 +346,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     for (const pol of ['glance', 'stare']) { g.load(4); g.autopilot = pol; for (let k = 0; k < 80 && !['dawn', 'lost'].includes(g.state); k++) g.step(120); out[pol] = { s: g.state, why: g.S.why, lives: g.S.lives }; }
     return out; });
   check(tr.glance.why === 'THE COLD GOT YOU' && tr.stare.lives < 3, `embers: glancing froze (${tr.glance.why}), staring got hurt (${tr.stare.lives} lives left)`);
+  // pacing: a full bar lasts at least 45 s of every night, and a flick of a glance barely warms (hands take a moment to catch the heat)
+  const pace = await page.evaluate(() => { const g = window.__game; return { last: Math.min(...g.LEVELS.map(L => 100 / L.cold)), flick: g.heatRate(.3), held: g.heatRate(3) }; });
+  check(pace.last >= 45 && pace.flick < pace.held / 2, `embers: a full bar of warmth lasts ${Math.round(pace.last)} s at worst; hands warm ${pace.flick.toFixed(1)}/s at a flick vs ${pace.held.toFixed(1)}/s held`);
   // you can only drive off what you can see
   const sh = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.S.debt = 17; g.S.beasts = [{ a: g.S.look, d: .2, v: 0, flee: 0, snapT: 9, id: 1 }]; g.step(1); return g.S.beasts[0]; });
   await page.mouse.click(270, 440);
