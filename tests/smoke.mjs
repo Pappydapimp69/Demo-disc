@@ -107,19 +107,26 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
-// ---------- STICK SWARM ----------
-if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
+// ---------- STICK SWARM (the ad is a crowd runner; the game is a sort puzzle) ----------
+{
   const { page, errors } = await open('games/stickswarm/index.html');
   const n = await page.evaluate(() => window.__game.LEVELS.length);
   for (let i = 0; i < n; i++) {
-    for (const policy of ['best', 'worst']) {
-      await page.evaluate(([i, policy]) => { window.__game.load(i); window.__game.autopilot = policy; }, [i, policy]);
-      await runUntil(page, () => ['win', 'fail'].includes(window.__game.state), 6000, 60);
-      const st = await page.evaluate(() => ({ s: window.__game.state, c: window.__game.S.count, hp: window.__game.S.L.boss }));
-      if (policy === 'best') await page.screenshot({ path: path.join(shots, `swarm-L${i + 1}-end.png`) });
-      check(st.s === (policy === 'best' ? 'win' : 'fail'), `swarm L${i + 1} ${policy} gates -> ${st.s} (count ${st.c} vs boss ${st.hp})`);
-    }
+    await page.evaluate(i => window.__game.load(i), i);
+    await page.screenshot({ path: path.join(shots, `swarm-L${i + 1}-start.png`) });
+    const ok = await page.evaluate(() => { const S = window.__game.S; return S.jars.every(j => j.length === 0 || j.length === 4) && !!window.__game.solve(); });
+    check(ok, `swarm L${i + 1} deals a solvable board`);
+    await page.evaluate(() => { window.__game.autopilot = 'solve'; });
+    await runUntil(page, () => window.__game.state !== 'play', 8000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, m: window.__game.S.movesN }));
+    await page.screenshot({ path: path.join(shots, `swarm-L${i + 1}-end.png`) });
+    check(st.s === 'win', `swarm L${i + 1} the solver's moves sort it (${st.s}, ${st.m} moves)`);
   }
+  // a stickman can't land on another colour, and undo puts him back
+  const r = await page.evaluate(() => { const g = window.__game; g.load(1); const J = g.S.jars, a = J.findIndex(j => j.length), b = J.findIndex((j, k) => k !== a && j.length && j[j.length - 1] !== J[a][J[a].length - 1]);
+    const before = JSON.stringify(g.S.jars); g.act(a); const moved = g.act(b); const same = JSON.stringify(g.S.jars) === before;
+    const e = g.S.jars.findIndex(j => !j.length); g.act(a); g.act(e); g.undo(); return { moved, same, undone: JSON.stringify(g.S.jars) === before }; });
+  check(!r.moved && r.same && r.undone, 'swarm: wrong-colour drop is refused and undo restores the board');
   check(errors.length === 0, `swarm runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
