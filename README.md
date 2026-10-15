@@ -9,7 +9,7 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | | | |
 |---|---|---|
 | **PLAY** | **ONLY 1% CAN SAVE HIM** | Pin puzzle with real liquid physics: lava + water = stone, lava melts gold, lava on the knight = FAIL. 3 levels. Fail a level 3 times and the knight gives up on you and solves it himself. |
-| **PLAY** | **STICK SWARM 3D** | The ad: twenty thousand stickmen run through math gates. The game: a 2D sort puzzle with a few stickmen lying in jars. One colour per jar. 3 levels. |
+| **PLAY** | **STICK SWARM 3D** | The ad: twenty thousand stickmen run through math gates. The game: a 2D sort puzzle with a few stickmen lying in jars. One colour per jar; a finished jar's crew stands up and cheers. Hints from the built-in solver, stars against its par. 8 levels, up to 8 colours, tall jars and a one-spare-jar level. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
 | **PLAY** | **BLOCKING** | Stage-blocking puzzle: drag the actors so every seat in the house sees every actor. Seats go red while a sightline is cut. A small nudge isn't a stagger. 4 scenes, the last on a thrust stage. |
 | **PLAY** | **HAIR SALON ASMR** | Real haircuts, with the rituals: cape on, pump the chair to the customer's height (a timing minigame: full strokes only when the pedal is back up, hold RELEASE if you overshoot, hold it in the green), spray the hair; afterwards brush the neck, cape off, clean the clippers. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter, but a bad cut never blocks you: move on or try again. 5 customers. |
@@ -34,7 +34,7 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 - **Embers:** drag to look around, tap what you see, hold WARM HANDS to look at the fire, RED TORCH toggles. Keys: ← → look, ↓ warm, Space shoo, T torch.
 - **Veer:** hold to walk, drag sideways to turn, tap WHISTLE. Keys: ↑/W walk, ← → turn, Space whistle. Headphones help.
 - **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
-- **Stick Swarm:** tap a jar, then tap where its top stickman goes. Keys: ← → and Enter, `U` undo, `R` restart.
+- **Stick Swarm:** tap a jar, then tap where its top stickman goes. HINT shows a good next move (3 per level). Keys: ← → and Enter, `U` undo, `H` hint, `R` restart.
 - **Esc** in any game returns to the disc menu.
 
 ## Layout

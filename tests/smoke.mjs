@@ -114,7 +114,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   for (let i = 0; i < n; i++) {
     await page.evaluate(i => window.__game.load(i), i);
     await page.screenshot({ path: path.join(shots, `swarm-L${i + 1}-start.png`) });
-    const ok = await page.evaluate(() => { const S = window.__game.S; return S.jars.every(j => j.length === 0 || j.length === 4) && !!window.__game.solve(); });
+    const ok = await page.evaluate(() => { const S = window.__game.S; return S.jars.every(j => j.length === 0 || j.length === S.L.cap) && !!window.__game.solve(); });
     check(ok, `swarm L${i + 1} deals a solvable board`);
     await page.evaluate(() => { window.__game.autopilot = 'solve'; });
     await runUntil(page, () => window.__game.state !== 'play', 8000, 60);
@@ -127,6 +127,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const before = JSON.stringify(g.S.jars); g.act(a); const moved = g.act(b); const same = JSON.stringify(g.S.jars) === before;
     const e = g.S.jars.findIndex(j => !j.length); g.act(a); g.act(e); g.undo(); return { moved, same, undone: JSON.stringify(g.S.jars) === before }; });
   check(!r.moved && r.same && r.undone, 'swarm: wrong-colour drop is refused and undo restores the board');
+  // a hint shows the solver's next move from where you are, and following hints alone sorts the board
+  const h = await page.evaluate(() => { const g = window.__game; g.load(2); let used = 0;
+    for (let k = 0; k < 200 && g.state === 'play'; k++) { g.S.hints = 0; g.hint(); used++; const m = g.S.hint; if (!m) break; g.act(m.a); g.act(m.b); g.step(12); }
+    return { st: g.state, used, par: g.S.par, moves: g.S.movesN }; });
+  check(h.st === 'win' && h.moves === h.par, `swarm: following the hints sorts the board at par (${h.moves}/${h.par} moves)`);
   check(errors.length === 0, `swarm runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
