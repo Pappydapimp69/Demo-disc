@@ -103,7 +103,7 @@
     t.innerHTML = `<a class="frame" href="${g.href}" aria-label="Play ${g.name}">
       <video src="${g.trailer}" poster="${g.trailer.replace('.mp4', '.jpg')}" muted loop playsinline preload="metadata"></video>
       <div class="bar"><div class="name">${g.name}</div><div class="desc">${g.desc}</div><span class="play">▶ TAP TO PLAY</span>
-      <div class="swipe"><b>◀</b> SWIPE FOR MORE GAMES <b>▶</b></div></div></a>`;
+      <div class="swipe"><b>◀</b> SWIPE FOR MORE ADS <b>▶</b></div></div></a>`;
     t.querySelector('a').addEventListener('click', ev => { ev.preventDefault(); launch(i); });
     rail.appendChild(t); dots.appendChild(document.createElement('i')); return t;
   });
