@@ -1,7 +1,9 @@
 // Smoke + completability tests. Steps the simulation through window.__game (no real-time waits):
 // every level must be winnable by its stated solution and lost by its trap, the hint must solve it,
 // and every page must boot without errors.
-import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+// Playwright from node_modules when installed (CI), else this container's global copy
+let chromium;
+try { ({ chromium } = await import('playwright')); } catch (_) { ({ chromium } = await import('/opt/node-tools/node_modules/playwright/index.mjs')); }
 import path from 'path';
 import fs from 'fs';
 
