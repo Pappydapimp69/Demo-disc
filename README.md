@@ -67,3 +67,7 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every veer level is found by an autopilot that only whistles, listens and walks (and the sound and drift models check out)
 - every blocking scene refuses its opening layout and is won by its solution
 - nothing logs an error
+
+## Play stats
+
+The disc counts anonymously, with no cookies and no ids: which ads get watched and for how long (`ad/<game>/2-5s|5-15s|15s+|full`), which get played (`play/<game>`), wins and losses inside a game (`game/<game>/win|fail`), and time played (`time/<game>/under-10s|10-60s|1-5min|5min+`), plus `start` when someone opens the disc. Set `GC_CODE` in `shared/stats.js` to a free [GoatCounter](https://www.goatcounter.com) site code to collect them; until then they stay in the browser's localStorage (`disc.stats`).

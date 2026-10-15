@@ -14,6 +14,12 @@
     if (window.parent !== window) window.parent.postMessage({ disc: 'back' }, '*');
     else location.href = '../../index.html';
   }
+  // anonymous play stats: the disc's catalog records the event (nothing is sent when a game runs on its own)
+  const lastTrack = {};
+  function track(name) {
+    const now = Date.now(); if (now - (lastTrack[name] || 0) < 1500) return; lastTrack[name] = now;
+    if (window.parent !== window) window.parent.postMessage({ disc: 'track', name }, '*');
+  }
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a.back'); if (a) { e.preventDefault(); exit(); } });
 
   function createGame(opts) {
@@ -123,6 +129,7 @@
     },
     // named effects shared by every demo
     sfx(name) {
+      if (name === 'win' || name === 'fail') track(name);   // every game marks a won or lost level with these
       const T = (...a) => this.tone(...a), N = (...a) => this.noise(...a);
       switch (name) {
         case 'pin': T(300, .25, 'sawtooth', .08, 900); break;
@@ -171,5 +178,5 @@
   const back = x => { const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 
-  window.Engine = { createGame, exit, Audio, Draw, ease, back, clamp, DT };
+  window.Engine = { createGame, exit, track, Audio, Draw, ease, back, clamp, DT };
 })();

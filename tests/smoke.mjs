@@ -53,9 +53,15 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 480);
   await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.frames().find(f => f.url().includes('stickswarm')).evaluate(() => Engine.track('win'));
+  await page.waitForTimeout(200);
   await page.frameLocator('#play').locator('a.back').click();
   await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(!(await page.evaluate(() => window.__menu.game)) && page.url().endsWith('/index.html'), 'the game\'s back link returns to the catalog without reloading it');
+  const stats = await page.evaluate(() => window.__menu.stats());
+  check(['start', 'play/stickswarm', 'game/stickswarm/win', 'time/stickswarm/under-10s'].every(p => stats.includes(p)) && stats.some(p => /^ad\/stickswarm\//.test(p)),
+    `stats record the funnel: ${stats.join(', ')}`);
+  check(!(await page.evaluate(() => Stats.live)), 'stats stay local when run from a file (nothing is sent)');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
