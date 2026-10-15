@@ -51,8 +51,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(shots, 'menu.png') });
   await page.mouse.click(270, 480);
-  await page.waitForURL(/stickswarm/, { timeout: 4000 }).catch(() => {});
-  check(page.url().includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
+  check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.frameLocator('#play').locator('a.back').click();
+  await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
+  check(!(await page.evaluate(() => window.__menu.game)) && page.url().endsWith('/index.html'), 'the game\'s back link returns to the catalog without reloading it');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
@@ -65,7 +68,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForFunction(() => window.__menu && window.__menu.gagDone, null, { timeout: 8000 });
   await page.touchscreen.tap(195, 500);
   await page.waitForTimeout(1500);
-  check(page.url().endsWith('/index.html') && page.url().split('/').slice(-2)[0] !== 'only1', `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
+  check(page.url().endsWith('/index.html') && !(await page.evaluate(() => window.__menu.game)), `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
   await ctx.close();
 }
 

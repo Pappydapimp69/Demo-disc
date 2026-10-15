@@ -150,6 +150,64 @@ function comb(x, y, k) { cx.save(); cx.translate(x, y); cx.rotate(-.3 + Math.sin
     return out;
   }
 
+
+  // ---------- cozy sound: lo-fi loop, vinyl crackle, room tone, a soft clipper hum, crisp snips ----------
+  const Cozy = {
+    on: false, next: 0, beat: 0, hum: null, humGain: null, humFilt: null, snipAt: 0,
+    start() {
+      const c = Audio.ctx; if (this.on || !c || c.state !== 'running') return; this.on = true;
+      this.out = c.createGain(); this.out.gain.value = .9;
+      const warm = c.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 5200; this.out.connect(warm).connect(c.destination);
+      const noise = (sec, brown) => { const n = c.sampleRate * sec | 0, b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0); let last = 0; for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; if (brown) { last = (last + .02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w; } return b; };
+      this.white = noise(2, false);
+      // room tone + vinyl crackle, always there under everything
+      const room = c.createBufferSource(); room.buffer = noise(4, true); room.loop = true; const rg = c.createGain(); rg.gain.value = .05; room.connect(rg).connect(this.out); room.start();
+      const crk = c.createBuffer(1, c.sampleRate * 3, c.sampleRate), cd = crk.getChannelData(0); for (let i = 0; i < cd.length; i++) cd[i] = Math.random() < .0009 ? (Math.random() - .5) * .9 : 0;
+      const cs = c.createBufferSource(); cs.buffer = crk; cs.loop = true; const cf = c.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.value = 1200; const cg = c.createGain(); cg.gain.value = .35; cs.connect(cf).connect(cg).connect(this.out); cs.start();
+      // the clipper: a low hum plus a soft brushed buzz, faded in while you shave
+      this.hum = c.createOscillator(); this.hum.type = 'sawtooth'; this.hum.frequency.value = 100;
+      this.humFilt = c.createBiquadFilter(); this.humFilt.type = 'lowpass'; this.humFilt.frequency.value = 700; this.humFilt.Q.value = 2;
+      const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 6; lg.gain.value = 120; lfo.connect(lg).connect(this.humFilt.frequency); lfo.start();
+      const bz = c.createBufferSource(); bz.buffer = this.white; bz.loop = true; const bf = c.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = 2400; bf.Q.value = .8; const bg = c.createGain(); bg.gain.value = .25;
+      this.humGain = c.createGain(); this.humGain.gain.value = 0;
+      this.hum.connect(this.humFilt).connect(this.humGain); bz.connect(bf).connect(bg).connect(this.humGain); this.humGain.connect(this.out);
+      this.hum.start(); bz.start();
+      this.next = c.currentTime + .1;
+    },
+    // keep ~0.4 s of music scheduled ahead (lo-fi, 76 bpm, Fmaj7 Em7 Dm7 Cmaj7)
+    tick(shaving, level) {
+      const c = Audio.ctx; if (!this.on) return;
+      this.humGain.gain.setTargetAtTime(shaving ? .09 : 0, c.currentTime, .06);
+      this.hum.frequency.setTargetAtTime(104 - level * 9, c.currentTime, .2);
+      const b = 60 / 76, CH = [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]], MEL = [76, 79, 81, 84, 72, 74];
+      while (this.next < c.currentTime + .4) {
+        const t = this.next, k = this.beat, ch = CH[(k >> 3) % 4];
+        if (k % 8 === 0) { for (const m of ch) this.note(m, t, b * 8, 'triangle', .035, .5); this.note(ch[0] - 12, t, b * 8, 'sine', .08, .05); }
+        if (k % 4 === 0) this.kick(t);
+        if (k % 2 === 1) this.brush(t);
+        if ((k * 7 + (k >> 3)) % 5 === 0) this.note(MEL[(k * 3 + (k >> 2)) % MEL.length], t + (k % 2 ? b * .5 : 0), b * 1.6, 'sine', .045, .01);   // rhodes-ish dabs
+        this.next += b; this.beat++;
+      }
+    },
+    note(m, t, d, type, g, att) {
+      const c = Audio.ctx, o = c.createOscillator(), o2 = c.createOscillator(), gn = c.createGain(), f = 440 * 2 ** ((m - 69) / 12);
+      o.type = type; o.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 1.004;
+      gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(g, t + att + .01); gn.gain.exponentialRampToValueAtTime(.0001, t + d);
+      o.connect(gn); o2.connect(gn); gn.connect(this.out); o.start(t); o2.start(t); o.stop(t + d + .05); o2.stop(t + d + .05);
+    },
+    kick(t) { const c = Audio.ctx, o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + .15); g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.0001, t + .25); o.connect(g).connect(this.out); o.start(t); o.stop(t + .3); },
+    brush(t) { const c = Audio.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = this.white; f.type = 'highpass'; f.frequency.value = 6000; g.gain.setValueAtTime(.025, t); g.gain.exponentialRampToValueAtTime(.0001, t + .12); s.connect(f).connect(g).connect(this.out); s.start(t, Math.random()); s.stop(t + .15); },
+    // the satisfying part: little crisp crunches, more of them the more hair you take
+    snip(n) {
+      const c = Audio.ctx; if (!this.on || !n) return; const now = c.currentTime; if (now < this.snipAt) return; this.snipAt = now + .035;
+      const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      s.buffer = this.white; f.type = 'bandpass'; f.frequency.value = 3000 + Math.random() * 3000; f.Q.value = 1.5;
+      g.gain.setValueAtTime(Math.min(.16, .03 + n * .006), now); g.gain.exponentialRampToValueAtTime(.0001, now + .05);
+      s.connect(f).connect(g).connect(this.out); s.start(now, Math.random() * 1.5); s.stop(now + .06);
+    },
+    chime() { const c = Audio.ctx; if (!this.on) return; const t = c.currentTime; [84, 88, 91, 96].forEach((m, i) => this.note(m, t + i * .09, 1.6, 'sine', .07, .005)); },
+  };
+
   // ---------- state ----------
   const S = { li: 0, L: null, strands: [], left: 0, t: 0, lt: 0, state: 'play', done: false, doneT: 0, ptr: null, down: false, keys: {}, idle: 0, auto: 0, ufoT: 0, bubble: null };
   function load(i) {
@@ -161,20 +219,20 @@ function comb(x, y, k) { cx.save(); cx.translate(x, y); cx.rotate(-.3 + Math.sin
   function clip(x, y) {
     const r = S.L.r; let n = 0;
     for (const s of S.strands) if (s.cut < 0 && (s.x - x) ** 2 + (s.y - y) ** 2 < r * r) { s.cut = S.t; n++; }
-    S.left -= n;
+    S.left -= n; Cozy.snip(n);
     if (n && !S.done && S.left <= S.strands.length * .03) finish();
   }
   function finish() {
     for (const s of S.strands) if (s.cut < 0) s.cut = S.t;   // the last few wisps go with a flourish
     S.left = 0; S.done = true; S.doneT = 0;
-    Audio.sfx('win');
+    Cozy.on ? Cozy.chime() : Audio.sfx('win');
     if (S.L.after) S.bubble = { text: S.L.after, t: S.t };
   }
   function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'ufo'; S.ufoT = 0; } }
 
-  let buzzT = 0;
   function update(dt) {
     S.t += dt; S.lt += dt;
+    Cozy.start(); Cozy.tick(S.state === 'play' && !S.done && S.down, S.li);
     if (S.state === 'ufo') { S.ufoT += dt; if (S.ufoT > 6) S.state = 'done'; return; }
     if (S.state !== 'play') return;
     if (S.done) { S.doneT += dt; if (S.doneT > 2.4) next(); return; }
@@ -191,7 +249,7 @@ function comb(x, y, k) { cx.save(); cx.translate(x, y); cx.rotate(-.3 + Math.sin
       if (dx || dy) { S.ptr = { x: clamp(S.ptr.x + dx * 520 * dt, 0, W), y: clamp(S.ptr.y + dy * 520 * dt, 0, H) }; S.down = true; S.kb = true; }
       else if (S.kb) { S.down = false; S.kb = false; }
     }
-    if (S.down && S.ptr) { clip(S.ptr.x, S.ptr.y); S.idle = 0; buzzT -= dt; if (buzzT <= 0) { Audio.tone(110 - S.li * 10, .09, 'sawtooth', .025); buzzT = .08; } }
+    if (S.down && S.ptr) { clip(S.ptr.x, S.ptr.y); S.idle = 0; }
     else S.idle += dt;
   }
 
@@ -258,12 +316,12 @@ function comb(x, y, k) { cx.save(); cx.translate(x, y); cx.rotate(-.3 + Math.sin
 
   // ---------- input ----------
   function onPointer(type, x, y) {
-    if (S.state === 'done') { if (type === 'down') location.href = '../../index.html'; return; }
+    if (S.state === 'done') { if (type === 'down') Engine.exit(); return; }
     if (type === 'down') { Audio.unlock(); S.down = true; S.ptr = { x, y: y - 40 }; }
     else if (type === 'move' && S.down) S.ptr = { x, y: y - 40 };     // the head sits just above the finger so you can see what you're cutting
     else if (type === 'up' || type === 'cancel') S.down = false;
   }
-  function onKey(key, down) { S.keys[key] = down; if (down && S.state === 'done' && (key === 'Enter' || key === ' ')) location.href = '../../index.html'; }
+  function onKey(key, down) { S.keys[key] = down; if (down && S.state === 'done' && (key === 'Enter' || key === ' ')) Engine.exit(); }
 
   const API = { LEVELS, S, load, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
