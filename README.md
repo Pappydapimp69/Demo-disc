@@ -12,12 +12,13 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **STICK SWARM 3D** | Crowd runner: steer through math gates, dodge saws, out-number the giant. 3 levels. Winning has a price. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
 | **PLAY** | **BLOCKING** | Stage-blocking puzzle: drag the actors so every seat in the house sees every actor. Seats go red while a sightline is cut. A small nudge isn't a stagger. 4 scenes, the last on a thrust stage. |
-| **PLAY** | **HAIR SALON ASMR** | Drag the clippers. Each level's clippings become the next level's hair: customer, salon, dog, town, Earth. 5 levels. |
+| **PLAY** | **HAIR SALON ASMR** | Real haircuts. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter. 5 customers. |
 
 
 ## Controls
 - **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
+- **Hair Salon:** drag to shave. Tap a guard in the tray, or keys `0`–`8` / Tab. Enter or DONE finishes the cut.
 - **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
 - **Stick Swarm:** drag left/right, or ← → / A D, or the gamepad stick.
 - **Esc** in any game returns to the disc menu.
@@ -41,5 +42,6 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every menu entry resolves
 - every pin-puzzle level is won by its solution, lost by each trap, and solved by the knight's hint
 - every runner level is won by best-gate play and lost by worst-gate play
+- every salon customer is satisfied by cutting to their order, each guard leaves its own length, and going too short fails
 - every blocking scene refuses its opening layout and is won by its solution
 - nothing logs an error

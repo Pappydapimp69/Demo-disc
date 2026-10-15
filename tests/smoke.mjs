@@ -155,16 +155,22 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
 {
   const { page, errors } = await open('games/salon/index.html');
   const n = await page.evaluate(() => window.__game.LEVELS.length);
+  // each guard leaves a different length
+  const lens = await page.evaluate(() => { const g = window.__game; return g.GUARDS.map(q => { g.load(0); g.equip(q.k); g.cutAt(360, 400); return Math.max(...g.S.strands.filter(s => s.len < 30).map(s => s.len)); }); });
+  check(new Set(lens).size === lens.length && lens.every((l, i) => !i || l > lens[i - 1]), `salon: every guard cuts to its own length (${lens.join(', ')} mm)`);
   for (let i = 0; i < n; i++) {
-    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'rows'; }, i);
-    await runUntil(page, () => window.__game.S.done, 1500, 30);
+    // cutting to the order wins
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'style'; }, i);
+    await runUntil(page, () => window.__game.S.apDone, 3000, 30);
+    await page.evaluate(() => { window.__game.autopilot = null; window.__game.finish(); });
+    await runUntil(page, () => false, 90);
     await page.screenshot({ path: path.join(shots, `salon-L${i + 1}-done.png`) });
-    check(await page.evaluate(() => window.__game.S.done), `salon L${i + 1} can be shaved clean`);
+    const r = await page.evaluate(() => ({ s: window.__game.state, stars: window.__game.S.result.stars, all: window.__game.S.result.all }));
+    check(r.s === 'result' && r.stars >= 2, `salon L${i + 1} cut to the order earns ${r.stars} stars (${Math.round(r.all * 100)}% to style)`);
   }
-  await runUntil(page, () => window.__game.state === 'ufo', 400, 30);
-  await runUntil(page, () => false, 150, 30);
-  await page.screenshot({ path: path.join(shots, 'salon-ufo.png') });
-  check((await page.evaluate(() => window.__game.state)) === 'ufo', 'salon: shaving the Earth brings the alien');
+  // shaving everything with no guard is not what anyone asked for
+  const bad = await page.evaluate(() => { const g = window.__game; g.load(2); g.equip('0'); for (let x = 150; x < 580; x += 20) for (let y = 300; y < 680; y += 20) g.cutAt(x, y); g.finish(); return g.S.result; });
+  check(bad.stars === 0 && bad.short > 0, `salon: going too short fails (${Math.round(bad.all * 100)}%, ${bad.short} too short)`);
   check(errors.length === 0, `salon runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
