@@ -115,9 +115,9 @@ function hand(x, y, press) {
     { who: 'GRANDPA', name: 'SUNSET DROP', year: 2013, bpm: 120, chords: [53, 48, 50, 46], minor: [0, 0, 1, 0], drums: 'four', bass: 'offbeat', lead: 'square',
       mel: [77, 81, 84, 81, 79, 77, 76, 72, 74, 77, 81, 79, 77, 76, 74, 76] },
   ];
-  LEVELS.forEach((L, i) => { L.tiles = 30 + i * 2; L.need = Math.round(10 + i * 1.4); });
+  LEVELS.forEach((L, i) => { L.tiles = 30 + i * 2; L.need = Math.round(8 + i * 1.2); });
   const LANE_X = l => 20 + l * 50, HIT_Y = 322, TILE_H = 32, LANES_Y = 215, KEYS_Y = 386, GROOVE_AT = .27;
-  const ON = .12, LATE_MIN = .15, LATE_MAX = .43, DROP = .5;
+  const ON = .09, LATE_MIN = .09, LATE_MAX = .55, DROP = .6;   // forgiving: almost any tap that isn't dead on the beat grooves
 
   const S = {};
   function load(i) {
@@ -155,11 +155,10 @@ function hand(x, y, press) {
     // the last note
     if (S.last) {
       const d = S.t - S.last.t;
-      if (Math.abs(d) < .35 && S.last.lane === lane) {
-        if (Math.abs(d) < ON + .05) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; chordOf(0).concat(S.L.chords[0] - 12).forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
-        else { S.last.res = 'sour'; fail('THE CASKET HIT THE DOOR.'); }
-        return;
-      }
+      // the last note spans every lane: tap anywhere when it reaches the line
+      if (Math.abs(d) < .3) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; chordOf(0).concat(S.L.chords[0] - 12).forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
+      else if (d > -1.2) bump();
+      return;
     }
     // nearest unplayed tile in that lane
     let best = null;
@@ -167,6 +166,8 @@ function hand(x, y, press) {
     // not to the next one in the lane, which at fast tempos can be just as close)
     for (const x of S.tiles) if (x.res === null && x.lane === lane) { const d = S.t - x.t; if (d > -(ON + .05) && d < LATE_MAX) { best = x; break; } }
     if (!best) for (const x of S.tiles) if (x.res === null && x.lane === lane && Math.abs(S.t - x.t) < .5) { if (!best || Math.abs(S.t - x.t) < Math.abs(S.t - best.t)) best = x; }
+    // a near-miss on the lane next door still counts
+    if (!best) for (const l of [lane - 1, lane + 1]) for (const x of S.tiles) if (x.res === null && x.lane === l) { const d = S.t - x.t; if (d > -(ON + .05) && d < LATE_MAX) { best = x; break; } }
     if (!best) return sour('wrong');
     const d = S.t - best.t;
     best.at = S.t;
@@ -181,9 +182,11 @@ function hand(x, y, press) {
     } else { best.res = 'sour'; sour(); }
   }
   function sour() {
-    S.anger += 22; Audio.tone(277, .4, 'sawtooth', .06); Audio.tone(294, .4, 'sawtooth', .06); pop('SOUR', true);
+    S.anger += 12; Audio.tone(277, .3, 'sawtooth', .04); Audio.tone(294, .3, 'sawtooth', .04); pop('SOUR', true);
     if (S.anger >= 100) fail('GRANDMA THREW YOU OUT.');
   }
+  // the casket bumps the door; the last note comes round again
+  function bump() { S.last = { t: S.t + 2.0, lane: 1, res: null }; pop('BUMP! AGAIN...', true); Audio.tone(70, .3, 'sine', .2); }
   function spawnLast() {
     // the song stops; the doors are shut; one slow tile
     S.last = { t: S.t + 2.4, lane: 1, res: null };
@@ -200,8 +203,9 @@ function hand(x, y, press) {
     if (!S.last && bn !== S.beatN && bn >= -1 && bn < S.L.tiles) { S.beatN = bn; backing(bn + 1); }
     const auto = API.autopilot; if (auto) autopilot(auto);
     // dropped tiles are sour
-    for (const x of S.tiles) if (x.res === null && S.t - x.t > DROP) { x.res = 'miss'; sour(); if (S.state !== 'play') return; }
-    if (S.last && S.last.res === null && S.t - S.last.t > .4) { S.last.res = 'miss'; fail('THE CASKET HIT THE DOOR.'); return; }
+    for (const x of S.tiles) if (x.res === null && S.t - x.t > DROP) { x.res = 'miss'; S.anger += 6; if (S.anger >= 100) { fail('GRANDMA THREW YOU OUT.'); return; } }
+    S.anger = Math.max(0, S.anger - dt * 3);   // Grandma calms down if you let her
+    if (S.last && S.last.res === null && S.t - S.last.t > .35) bump();
     if (!S.last && S.tiles.every(x => x.res !== null)) fail('THE SONG ENDED. NOBODY MOVED.');
   }
   // test policies: 'groove' plays it late (on-beat when Grandma is cross), 'square' plays it perfectly, 'masher' mashes
@@ -263,11 +267,11 @@ function hand(x, y, press) {
       if (x.res && x.res !== 'miss' && t - x.at > .25) continue;
       rect(LANE_X(x.lane) + 3, Math.max(LANES_Y, yy), 44, Math.min(TILE_H, KEYS_Y - yy, yy + TILE_H - LANES_Y), x.res === 'late' ? .55 : x.res === 'on' ? .8 : x.res ? .3 : 1);
     }
-    if (S.last && S.last.res === null) { const y = HIT_Y - (S.last.t - t) * 60 - TILE_H; rect(20, HIT_Y - 1, 200, 3, 1); rect(LANE_X(1) + 3, y, 44, TILE_H, 1); rect(LANE_X(1) + 6, y + 3, 38, TILE_H - 6, 0); text('♪', LANE_X(1) + 25, y + 26, 18, 1); }
+    if (S.last && S.last.res === null) { const y = HIT_Y - (S.last.t - t) * 60 - TILE_H; rect(20, HIT_Y - 1, 200, 3, 1); const k = .5 + .5 * Math.sin(t * 10); rect(22, y, 196, TILE_H, 1); rect(25, y + 3, 190, TILE_H - 6, 0); text('LAST NOTE', 120, y + 20, 12, .7 + k * .3); }
     // the organ keys: each lane's keys light up as its tile reaches the GROOVE line, and flash when pressed
     const glow = [0, 0, 0, 0];
     for (const x of S.tiles) if (x.res === null) { const d = (x.t + GROOVE_AT) - t; if (d > -.15 && d < .6) glow[x.lane] = Math.max(glow[x.lane], 1 - Math.max(0, d) / .6); }
-    if (S.last && S.last.res === null) { const d = S.last.t - t; if (d < 1.2) glow[S.last.lane] = 1 - Math.max(0, d) / 1.2; }
+    if (S.last && S.last.res === null) { const d = S.last.t - t; if (d < 1.2) glow.fill(1 - Math.max(0, d) / 1.2); }
     for (let kk = 0; kk < 12; kk++) { const l = Math.min(3, Math.floor((kk * 17 + 8) / 50)); rect(20 + kk * 17, KEYS_Y + 2, 16, H - KEYS_Y - 2, .45 + glow[l] * .55); }
     for (const kk of [0, 1, 3, 4, 5, 7, 8, 10]) rect(32 + kk * 17, KEYS_Y + 2, 9, 22, 0);
     for (let l = 0; l < 4; l++) {
@@ -282,7 +286,7 @@ function hand(x, y, press) {
     rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text('GROOVE', 20, 36, 8, 1, 'left');
     rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text('GRANDMA', 124, 36, 8, 1, 'left');
     if (S.t < 4.8 && S.state === 'play' && S.groove === 0) { rect(8, 220, 224, 56, 0); text(`${S.L.who}'S LAST REQUEST:`, 120, 233, 9, .85); text(`${S.L.name} (${S.L.year})`, 120, 248, 11, 1); text('TAP AS TILES HIT GROOVE', 120, 266, 9, .85); }
-    if (S.last && S.last.res === null) text('LAST NOTE: ON THE BEAT LINE', 120, 228, 9, 1);
+    if (S.last && S.last.res === null) text('TAP ANYWHERE WHEN IT HITS THE LINE', 120, 228, 8, 1);
   }
   function overlay() {
     if (S.state === 'win') {
