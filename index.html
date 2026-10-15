@@ -75,7 +75,7 @@
   ];
 
   // ---------- audio blips (never block) ----------
-  let ac = null, sound = false;
+  let ac = null, sound = true; // sound is on unless the viewer turns it off
   function beep(f, d = .07, type = 'square', vol = .05) {
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
@@ -108,7 +108,7 @@
       if (!started) return;
       playing = i;
       v.muted = !sound;
-      v.play().catch(() => { v.muted = true; sound = false; paintSound(); v.play().catch(() => {}); });
+      v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); // browser blocked sound until a gesture: play silent for now, the next touch unmutes
     });
   }
   const io = new IntersectionObserver(es => {
@@ -156,7 +156,10 @@
   // the tap that ends the splash is the gesture that lets the ad play with sound; it must not fall through to a tile
   splash.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); endSplash(); });
   let seen = false; try { seen = sessionStorage.getItem('disc-splash') === '1'; } catch (_) {}
-  if (seen) { splashDone = true; splash.remove(); started = true; sound = false; paintSound(); }
+  if (seen) { splashDone = true; splash.remove(); started = true; paintSound(); }
+  // any first touch, click or key brings the sound in if the browser held it back
+  const wake = () => { if (sound && splashDone) { const v = vids[cur]; v.muted = false; v.play().catch(() => {}); } };
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, wake, { passive: true }));
 
   // ---------- keys + gamepad ----------
   window.addEventListener('keydown', e => {
