@@ -12,7 +12,7 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **STICK SWARM 3D** | The ad: twenty thousand stickmen run through math gates. The game: a 2D sort puzzle with a few stickmen lying in jars. One colour per jar. 3 levels. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
 | **PLAY** | **BLOCKING** | Stage-blocking puzzle: drag the actors so every seat in the house sees every actor. Seats go red while a sightline is cut. A small nudge isn't a stagger. 4 scenes, the last on a thrust stage. |
-| **PLAY** | **HAIR SALON ASMR** | Real haircuts. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter. 5 customers. |
+| **PLAY** | **HAIR SALON ASMR** | Real haircuts. Each customer brings a goal photo: a guard per zone (top, sides, low sides). Snap on a guard (0, 1, 2, 3, 4, 6, 8; each clicks on and cuts to its own length), shave, hit DONE. Hair only gets shorter, but a bad cut never blocks you: move on or try again. 5 customers. |
 | **PLAY** | **THE BOSS'S BAD DAY** | You are the dragon, and your daughter loves the knight. Let him win, but keep it dramatic: near-miss fire, roars, a lowered head. 3 levels. |
 
 
@@ -43,6 +43,6 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every menu entry resolves
 - every pin-puzzle level is won by its solution, lost by each trap, and solved by the knight's hint
 - every stick swarm level deals a solvable board and is sorted by the solver's moves
-- every salon customer is satisfied by cutting to their order, each guard leaves its own length, and going too short fails
+- every salon customer is satisfied by cutting to their order, each guard leaves its own length, and a too-short cut scores no stars but still moves on
 - every blocking scene refuses its opening layout and is won by its solution
 - nothing logs an error

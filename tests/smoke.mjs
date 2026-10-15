@@ -180,7 +180,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   }
   // shaving everything with no guard is not what anyone asked for
   const bad = await page.evaluate(() => { const g = window.__game; g.load(2); g.equip('0'); for (let x = 150; x < 580; x += 20) for (let y = 300; y < 680; y += 20) g.cutAt(x, y); g.finish(); return g.S.result; });
-  check(bad.stars === 0 && bad.short > 0, `salon: going too short fails (${Math.round(bad.all * 100)}%, ${bad.short} too short)`);
+  check(bad.stars === 0 && bad.short > 0, `salon: going too short scores no stars (${Math.round(bad.all * 100)}%, ${bad.short} too short)`);
+  await runUntil(page, () => false, 90);
+  await page.keyboard.press('Enter');
+  check(await page.evaluate(() => window.__game.S.li === 3 && window.__game.state === 'play'), 'salon: a bad cut still moves on to the next customer');
+  check(await page.evaluate(() => window.__game.S.guard === '0'), 'salon: the guard stays on between customers');
   check(errors.length === 0, `salon runs without errors ${errors.join(' | ')}`);
   await page.close();
 }

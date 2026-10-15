@@ -145,7 +145,8 @@
   // ---------- state ----------
   const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false };
   function load(i) {
-    Object.assign(S, { li: i, L: LEVELS[i], strands: deal(i), bits: [], guard: '8', equipT: 9, lt: 0, state: 'play', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false });
+    Object.assign(S, { li: i, L: LEVELS[i], strands: deal(i), bits: [], equipT: 9, lt: 0,   // the guard stays on between customers
+      state: 'play', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false });
     API.autopilot = null;
   }
   function equip(k) {
@@ -343,15 +344,19 @@
     for (let i = 0; i < 3; i++) { const kk = back(lin(S.resT, .2 + i * .15, .5 + i * .15)); if (kk > 0) { cx.save(); cx.translate(W / 2 + (i - 1) * 110, 860 - (i === 1 ? 20 : 0)); cx.scale(kk, kk); Draw.star(cx, 0, 0, 46, i < res.stars ? '#ffd23a' : '#4a3a4a'); cx.restore(); } }
     Draw.bigText(cx, `${Math.round(res.all * 100)}% TO STYLE`, W / 2, 960, 48, '#fff');
     if (res.short) Draw.bigText(cx, `${res.short} STRANDS TOO SHORT`, W / 2, 1012, 28, '#ff8a8a');
-    if (S.resT > 1) { cx.fillStyle = res.stars ? '#4ad05a' : '#ff9a3a'; rr(210, 1100, 300, 84, 42); cx.fill(); cx.strokeStyle = '#fff'; cx.lineWidth = 4; cx.stroke(); Draw.bigText(cx, res.stars ? 'NEXT CUSTOMER' : 'TRY AGAIN', W / 2, 1144, 32, '#fff'); }
+    if (S.resT > 1) {   // a bad cut never blocks you: move on, or redo this customer
+      const b = (r, col, label, size) => { cx.fillStyle = col; rr(r.x, r.y, r.w, r.h, r.h / 2); cx.fill(); cx.strokeStyle = '#fff'; cx.lineWidth = 4; cx.stroke(); Draw.bigText(cx, label, r.x + r.w / 2, r.y + r.h / 2 + 2, size, '#fff'); };
+      b(RES.next, '#4ad05a', S.li < LEVELS.length - 1 ? 'NEXT CUSTOMER' : 'FINISH', 30); b(RES.retry, '#ff9a3a', 'TRY AGAIN', 24);
+    }
   }
 
   // ---------- input: drag to shave; tap a guard to snap it on; 0-8 keys swap guards ----------
   const hit = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-  function proceed() { if (S.resT < 1) return; if (S.result.stars) next(); else load(S.li); }
+  const RES = { next: { x: 190, y: 1060, w: 340, h: 80 }, retry: { x: 250, y: 1160, w: 220, h: 64 } };
+  function proceed(retry) { if (S.resT < 1) return; if (retry) load(S.li); else next(); }
   function onPointer(type, x, y) {
     if (S.state === 'done') { if (type === 'down') Engine.exit(); return; }
-    if (S.state === 'result') { if (type === 'down') proceed(); return; }
+    if (S.state === 'result') { if (type === 'down') proceed(hit(RES.retry, x, y)); return; }
     if (type === 'down') {
       Audio.unlock();
       const gi = GUARDS.findIndex((g, i) => hit(barRect(i), x, y)); if (gi >= 0) { equip(GUARDS[gi].k); return; }
@@ -363,7 +368,7 @@
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
     if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
-    if (S.state === 'result' && (key === 'Enter' || key === ' ')) { proceed(); return; }
+    if (S.state === 'result') { if (key === 'Enter' || key === ' ') proceed(false); else if (key === 'r' || key === 'R') proceed(true); return; }
     if (G(key)) equip(key);
     else if (key === 'Tab') { const i = GUARDS.indexOf(G(S.guard)); equip(GUARDS[(i + 1) % GUARDS.length].k); }
     else if (key === 'Enter') finish();
