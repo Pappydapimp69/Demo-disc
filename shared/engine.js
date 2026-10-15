@@ -14,12 +14,24 @@
     if (window.parent !== window) window.parent.postMessage({ disc: 'back' }, '*');
     else location.href = '../../index.html';
   }
-  // anonymous play stats: the disc's catalog records the event (nothing is sent when a game runs on its own)
-  const lastTrack = {};
+  // anonymous play stats: inside the disc the catalog records the event; a game opened on its own (a direct link)
+  // loads the stats itself and counts the visit, its events and how long it was played
+  const lastTrack = {}, framed = window.parent !== window, gameSlug = (location.pathname.match(/games\/([\w-]+)\//) || [])[1];
   function track(name) {
     const now = Date.now(); if (now - (lastTrack[name] || 0) < 1500) return; lastTrack[name] = now;
-    if (window.parent !== window) window.parent.postMessage({ disc: 'track', name }, '*');
+    if (framed) window.parent.postMessage({ disc: 'track', name }, '*');
+    else if (window.Stats && gameSlug) Stats.event(`game/${gameSlug}/${name}`, `${gameSlug}: ${name}`);
   }
+  if (!framed && gameSlug) {
+    const t0 = performance.now(); let ended = false;
+    const end = () => { if (ended || !window.Stats) return; ended = true;
+      Stats.event(`time/${gameSlug}/${Stats.bucket((performance.now() - t0) / 1000, [[10, 'under-10s'], [60, '10-60s'], [300, '1-5min'], [Infinity, '5min+']])}`, `${gameSlug}: played (direct link)`); };
+    const s = document.createElement('script'); s.src = '../../shared/stats.js';
+    s.onload = () => Stats.event(`play/${gameSlug}/direct`, `${gameSlug}: opened by direct link`);
+    document.head.appendChild(s);
+    addEventListener('pagehide', end); document.addEventListener('visibilitychange', () => { if (document.hidden) end(); });
+  }
+  let wins = 0;   // how far players get: the 1st, 2nd, 3rd... win of a session
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a.back'); if (a) { e.preventDefault(); exit(); } });
 
   function createGame(opts) {
@@ -130,6 +142,7 @@
     // named effects shared by every demo
     sfx(name) {
       if (name === 'win' || name === 'fail') track(name);   // every game marks a won or lost level with these
+      if (name === 'win') track(`win-${Math.min(++wins, 20)}`);
       const T = (...a) => this.tone(...a), N = (...a) => this.noise(...a);
       switch (name) {
         case 'pin': T(300, .25, 'sawtooth', .08, 900); break;

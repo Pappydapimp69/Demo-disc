@@ -130,10 +130,10 @@
   const AD_CUTS = [[2, null], [5, '2-5s'], [15, '5-15s'], [Infinity, '15s+']];
   const GAME_CUTS = [[10, 'under-10s'], [60, '10-60s'], [300, '1-5min'], [Infinity, '5min+']];
   let adI = -1, adT0 = 0, adLooped = false, gameI = -1, gameT0 = 0;
-  function adEnd(played) {   // a swipe past in under 2 s isn't a view; a tap to play always is
+  function adEnd(played) {   // a swipe past in under 2 s is a skip; a tap to play always counts as a view
     if (adI < 0) return;
-    const s = (performance.now() - adT0) / 1000, b = adLooped ? 'full' : Stats.bucket(s, AD_CUTS) || (played ? '0-2s' : null);
-    if (b) Stats.event(`ad/${slug(adI)}/${b}`, `${games[adI].name} ad: ${b}`);
+    const s = (performance.now() - adT0) / 1000, b = adLooped ? 'full' : Stats.bucket(s, AD_CUTS) || (played ? '0-2s' : 'skipped');
+    Stats.event(`ad/${slug(adI)}/${b}`, `${games[adI].name} ad: ${b}`);
     adI = -1;
   }
   function adStart(i) { adEnd(); adI = i; adT0 = performance.now(); adLooped = false; }
@@ -146,8 +146,16 @@
     let last = 0;
     v.addEventListener('timeupdate', () => { if (i === adI && v.currentTime + .5 < last) adLooped = true; last = v.currentTime; });
   });
-  addEventListener('pagehide', () => { adEnd(); gameEnd(); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { adEnd(); gameEnd(); } else if (!inGame && started) adStart(cur); });
+  // the whole visit, once, when the page goes away (mobile browsers often only say "hidden")
+  const VISIT_CUTS = [[30, 'under-30s'], [120, '30s-2min'], [600, '2-10min'], [Infinity, '10min+']], playedSet = new Set();
+  let visitSent = false;
+  function visitEnd() {
+    if (visitSent || !started) return; visitSent = true;
+    Stats.event(`visit/${Stats.bucket(performance.now() / 1000, VISIT_CUTS)}`, 'visit length');
+    Stats.event(`visit/games-${playedSet.size >= 5 ? '5plus' : playedSet.size}`, 'games played in the visit');
+  }
+  addEventListener('pagehide', () => { adEnd(); gameEnd(); visitEnd(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { adEnd(); gameEnd(); visitEnd(); } else if (!inGame && started) adStart(cur); });
 
   // only the centred tile's ad plays; the rest pause and rewind
   function focusTile(i) {
@@ -174,7 +182,7 @@
   function launch(i) {
     if (!splashDone || performance.now() - splashEnd < 700) return;
     beep(990, .12); vids.forEach(v => v.pause());
-    adEnd(true); Stats.event(`play/${slug(i)}`, `${games[i].name}: tapped play`); gameI = i; gameT0 = performance.now();
+    adEnd(true); Stats.event(`play/${slug(i)}`, `${games[i].name}: tapped play`); playedSet.add(i); gameI = i; gameT0 = performance.now();
     inGame = true; frame.src = games[i].href; frame.classList.add('on'); setTimeout(() => frame.focus(), 50);
   }
   function closeGame() { if (!inGame) return; gameEnd(); inGame = false; frame.classList.remove('on'); frame.src = 'about:blank'; window.focus(); focusTile(cur); }
@@ -188,7 +196,7 @@
 
   const sndBtn = document.getElementById('snd');
   function paintSound() { sndBtn.textContent = sound ? '🔊 SOUND' : '🔇 SOUND'; }
-  sndBtn.onclick = () => { sound = !sound; paintSound(); vids[cur].muted = !sound; if (sound) vids[cur].play().catch(() => {}); };
+  sndBtn.onclick = () => { sound = !sound; paintSound(); Stats.event(`sound/${sound ? 'on' : 'off'}`, 'sound toggled'); vids[cur].muted = !sound; if (sound) vids[cur].play().catch(() => {}); };
 
   // ---------- splash: STUDIO, then a stray P lands and makes it STUPIDO ----------
   const splash = document.getElementById('splash'), word = document.getElementById('word');

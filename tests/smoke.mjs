@@ -53,7 +53,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 480);
   await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
-  await page.frames().find(f => f.url().includes('stickswarm')).evaluate(() => Engine.track('win'));
+  await page.frames().find(f => f.url().includes('stickswarm')).evaluate(() => Engine.Audio.sfx('win'));
   await page.waitForTimeout(200);
   await page.frameLocator('#play').locator('a.back').click();
   await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
@@ -62,6 +62,13 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(['start', 'play/stickswarm', 'game/stickswarm/win', 'time/stickswarm/under-10s'].every(p => stats.includes(p)) && stats.some(p => /^ad\/stickswarm\//.test(p)),
     `stats record the funnel: ${stats.join(', ')}`);
   check(!(await page.evaluate(() => Stats.live)), 'stats stay local when run from a file (nothing is sent)');
+  check(stats.includes('game/stickswarm/win-1'), 'stats count how far a player got (win-1)');
+  await page.evaluate(() => { window.__menu.go(2); }); await page.waitForTimeout(700); await page.evaluate(() => { window.__menu.go(3); }); await page.waitForTimeout(700);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+  const st2 = await page.evaluate(() => window.__menu.stats());
+  check(st2.some(p => /^ad\/[\w-]+\/skipped$/.test(p)) && st2.some(p => /^visit\/(under-30s|30s-2min|2-10min|10min\+)$/.test(p)) && st2.includes('visit/games-1'),
+    `stats count skipped ads and the visit (${st2.filter(p => /skipped|visit/.test(p)).join(', ')})`);
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
@@ -76,6 +83,16 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForTimeout(1500);
   check(page.url().endsWith('/index.html') && !(await page.evaluate(() => window.__menu.game)), `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
   await ctx.close();
+}
+
+// a game opened by a direct link counts itself
+{
+  const { page, errors } = await open('games/faro/index.html');
+  await page.waitForFunction(() => window.Stats && Stats.sent.length, null, { timeout: 4000 }).catch(() => {});
+  const st = await page.evaluate(() => window.Stats ? Stats.sent.map(e => e.path) : []);
+  check(st.includes('play/faro/direct'), `stats: a game opened by a direct link counts the visit (${st.join(', ')})`);
+  check(errors.length === 0, `direct-link stats run without errors ${errors.join(' | ')}`);
+  await page.close();
 }
 
 // ---------- ONLY 1% ----------
