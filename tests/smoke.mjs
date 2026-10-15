@@ -172,6 +172,20 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   await page.close();
 }
 
+// ---------- THE BOSS'S BAD DAY ----------
+{
+  const { page, errors } = await open('games/boss/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) for (const [pol, want] of [['good', 'win'], ['brute', 'fail'], [null, 'fail']]) {
+    await page.evaluate(([i, pol]) => { window.__game.load(i); window.__game.autopilot = pol; }, [i, pol]);
+    await runUntil(page, () => window.__game.state !== 'play', 3000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, r: window.__game.S.reason }));
+    check(st.s === want, `boss L${i + 1} ${pol || 'idle'} -> ${st.s} ${st.r}`);
+  }
+  check(errors.length === 0, `boss runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
