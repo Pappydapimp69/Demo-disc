@@ -258,6 +258,12 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     S.kx = 200; g.fireAt(200); g.step(40); out.oops = S.saidKind;
     g.load(0); g.autopilot = 'good'; let ouch = false; for (let k = 0; k < 120 && g.state === 'play'; k++) { g.step(30); if (S.saidKind === 'ouch' || S.saidKind === 'win') ouch = true; } out.cheer = ouch; out.final = S.saidKind; return out; });
   check(said.start === 'start' && said.oops === 'oops' && said.cheer && said.final === 'win', `boss: the daughter reacts (start ${said.start}, hit him ${said.oops}, cheers ${said.cheer}, at the end ${said.final})`);
+  // her kiss heals him: hit him once, a kiss flies, he's back to 3 hearts, and the fight's rolls are untouched
+  const kiss = await page.evaluate(() => { const g = window.__game, S = g.S; g.load(0); S.kx = 200; g.fireAt(200); g.step(40);
+    const hit = S.hearts, probe = S.rng; let n = 0; S.rng = () => { n++; return probe(); };
+    S.kflee = 99; S.kdazed = 0; let flew = false, said = ''; for (let k = 0; k < 20 && S.hearts < 3; k++) { g.step(10); if (S.kiss) { flew = true; said = S.saidKind; } }
+    S.rng = probe; return { hit, after: S.hearts, flew, said, rolls: n }; });
+  check(kiss.hit === 2 && kiss.flew && kiss.said === 'kiss' && kiss.after === 3 && kiss.rolls === 0, `boss: her kiss heals the knight without touching the fight's rolls (${JSON.stringify(kiss)})`);
   check(errors.length === 0, `boss runs without errors ${errors.join(' | ')}`);
   await page.close();
 }

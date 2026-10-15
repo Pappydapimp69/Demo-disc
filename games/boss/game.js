@@ -2,6 +2,7 @@
 // You are the dragon. Your daughter loves the knight, so you have to lose to him.
 // Let him hit you, but keep it convincing: near-miss fireballs and roars keep her DRAMA up.
 // Hit the knight and you've won (badly). Let the drama die and she's bored. Drag your own HP bar and she knows.
+// Hit him by accident and she blows him a kiss from her cage; when it lands he gets a heart back.
 (function () {
   'use strict';
   const { createGame, Audio, Draw } = Engine;
@@ -32,7 +33,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, rng: mkRng(L.seed), state: 'play', t: 0, hp: L.hp, hearts: 3, drama: 70, headDown: false, headK: 0, armed: false,
-      kx: 120, kmode: 'wander', ktarget: 180, kswing: 0, kswingT: 0, kflee: 0, kdazed: 0, fireballs: [], pops: [], agony: 0, roarCd: 0, roarT: 0, endT: 0, reason: '', cheatT: 0, hint: 0, lrng: mkRng(L.seed * 7 + 99), said: '', saidAt: -9, saidKind: '', lowT: 0, boredSaid: false });
+      kx: 120, kmode: 'wander', ktarget: 180, kswing: 0, kswingT: 0, kflee: 0, kdazed: 0, fireballs: [], pops: [], agony: 0, roarCd: 0, roarT: 0, endT: 0, reason: '', cheatT: 0, hint: 0, lrng: mkRng(L.seed * 7 + 99), said: '', saidAt: -9, saidKind: '', lowT: 0, boredSaid: false, kiss: null, kissDue: -1 });
     say('start');
     API.autopilot = null;
   }
@@ -51,9 +52,10 @@
     napping: ["Dad, you're lying down.", 'Is Daddy... napping?', 'That looks fake, Dad.'],
     cheat: ['DAD. I SAW THAT.', 'Did you just... move your own health?'],
     win: ['MY HERO!!', "We're getting MARRIED!", 'Daddy, you were SO scary.'],
+    kiss: ['*mwah!*', 'Kiss it better, Clanksy!', 'Get up, my knight!'],
   };
   // priority beats the cooldown: an accident or a cheat always gets a reaction
-  const URGENT = { oops: 1, cheat: 1, win: 1, start: 1 };
+  const URGENT = { oops: 1, cheat: 1, win: 1, start: 1, kiss: 1 };
   function say(kind) {
     if (!URGENT[kind] && S.t - S.saidAt < 1.8) return;
     const pool = LINES[kind]; let line = pool[Math.floor(S.lrng() * pool.length)];
@@ -84,11 +86,22 @@
     if (d < 45) {
       S.hearts--; S.kdazed = 1.2; S.kflee = 0; S.drama = Math.max(0, S.drama - 10);
       pop('OOPS', M(S.kx, 760).x, M(S.kx, 760).y, '#ff6a6a', 56);
-      say('oops'); if (S.hearts <= 0) fail('YOU WON. SHE WILL NEVER FORGIVE YOU.');
+      say('oops'); if (S.hearts <= 0) fail('YOU WON. SHE WILL NEVER FORGIVE YOU.'); else queueKiss();
     } else if (d < 140) {
       S.drama = Math.min(100, S.drama + 30); S.kflee = .7;
       pop('CLOSE CALL!', M(fb.x, 760).x, M(fb.x, 760).y, '#ffd23a', 48); say('close');
     } else { S.drama = Math.min(100, S.drama + 4); pop('miss...', M(fb.x, 800).x, M(fb.x, 800).y, '#c8b8ff', 34); }
+  }
+  // her kisses heal him: timed, never rolled, so the fight's seeded stream is untouched
+  const KISS_WAIT = 1.2, KISS_FLY = 1.0;
+  function queueKiss() { if (!S.kiss && S.kissDue < 0 && S.hearts < 3) S.kissDue = S.t + KISS_WAIT; }
+  function kissStep() {
+    if (S.kissDue >= 0 && S.t >= S.kissDue) { S.kissDue = -1; S.kiss = { t0: S.t }; say('kiss'); Audio.tone(900, .25, 'sine', .07, 1400); }
+    if (S.kiss && S.t - S.kiss.t0 >= KISS_FLY) {
+      S.kiss = null; S.hearts = Math.min(3, S.hearts + 1);
+      pop('+♥', M(S.kx, 740).x, M(S.kx, 740).y, '#ff5a8a', 52); Audio.tone(1200, .2, 'sine', .08, 1800);
+      queueKiss();
+    }
   }
   function headPos() { return { x: mix(HEAD_UP.x, HEAD_DOWN.x, ease(S.headK)), y: mix(HEAD_UP.y, HEAD_DOWN.y, ease(S.headK)) }; }
 
@@ -105,6 +118,7 @@
     if (S.drama <= 0) { S.drama = 0; fail('SHE GOT BORED.'); return; }
     if (S.drama < 25 && !S.boredSaid) { S.boredSaid = true; say('bored'); } else if (S.drama > 40) S.boredSaid = false;
     S.lowT = S.headK > .9 ? S.lowT + dt : 0; if (S.lowT > 3) { say('napping'); S.lowT = -4; }
+    kissStep();
     // fireballs
     for (const fb of S.fireballs) if (!fb.done && S.t - fb.t0 >= .5) { fb.done = true; explode(fb); }
     S.fireballs = S.fireballs.filter(fb => S.t - fb.t0 < 1.0);
@@ -225,6 +239,11 @@
     cx.restore();
     if (S.state === 'play' && !bored) for (let i = 0; i < 3; i++) { const p = ((S.t * .5 + i / 3) % 1); cx.globalAlpha = (1 - p) * S.drama / 100; cx.fillStyle = '#ff5a8a'; heart(x + 20 + Math.sin(p * 9 + i) * 10, y - 120 - p * 90, 9); cx.globalAlpha = 1; }
   }
+  function kiss() {
+    if (!S.kiss || S.state !== 'play') return;
+    const k = clamp((S.t - S.kiss.t0) / KISS_FLY), x = mix(115, S.kx, ease(k)), y = mix(FLOOR - 110, FLOOR - 150, k) - Math.sin(k * Math.PI) * 140;
+    cx.fillStyle = '#ff3a6a'; heart(x, y, 14 + Math.sin(S.t * 20) * 2);
+  }
   function cage() {
     cx.strokeStyle = '#4a4a5a'; cx.lineWidth = 6;
     cx.beginPath(); cx.moveTo(30, FLOOR); cx.lineTo(30, 800); cx.quadraticCurveTo(95, 740, 160, 800); cx.lineTo(160, FLOOR); cx.stroke();
@@ -291,6 +310,7 @@
     cx.save(); cx.translate(25, 0); cx.translate(360, FLOOR); cx.scale(SC, SC); cx.translate(-360, -FLOOR);
     cage(); princess(); dragon(); knight();
     for (const fb of S.fireballs) fireball(fb);
+    kiss();
     cx.restore();
     for (const p of S.pops) { const k = clamp((S.t - p.t) / 1.0); if (k < 1) { cx.globalAlpha = 1 - k; Draw.bigText(cx, p.text, p.x, p.y - k * 60, p.size, p.col); cx.globalAlpha = 1; } }
     speech();
