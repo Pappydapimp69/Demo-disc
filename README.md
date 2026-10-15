@@ -23,6 +23,8 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **EMBERS** | The ad: tap the fire, grow the fire, scare the wolves. The game: a night watch where the fire is the danger. Your eyes take minutes to adjust to the dark; a glance at the fire costs about 2 night-minutes of sight, a stare about 17. Warm your hands too little and you freeze, too long and you are blind when they come; hands take a moment to catch the heat, so a flick of a glance barely warms. A red torch shows only what is close and costs no sight. 5 nights. |
 | **PLAY** | **GOING UP** | The ad: stack the tallest tower. The game: run the lifts inside it. Tap a lift, tap a floor; doors open, people get on and off, their floors light up. Always going to the nearest request keeps the busy floors happy and strands the far floor until they take the stairs; a sweep bounds everyone's wait. AUTO switches run either rule (and cap you at two stars). 5 days. |
 | **PLAY** | **FARO** | The ad: find the ace, hit the jackpot. The game: a quiet puzzle of perfect shuffles. OUT keeps the top card on top, IN tucks it to second; send the ace to the gold slot (write the position in binary: 1 = IN, 0 = OUT), and put a 52-card deck back in order (eight OUT faros do it). 5 hands. |
+| **LAB** | **IQ TEST 2026** | The ad: only geniuses remember all 10, IQ 160 in ten minutes. The game: memory takes days. Learn the twelve symbols of a lost alphabet a few minutes a day on Leitner boxes (intervals 1, 2, 4, 8, 16 days, 6 reviews a day at most); on day 7, 14 and 28 a cold test before that day's reviews. A real experiment: each player is assigned for good to one rule for a miss (back to box 1, or down one box), at equal daily effort. |
+| **LAB** | **POP IT!** | The ad: a satisfying pop-it board. The game: tap rising bubbles for 30 seconds. A real experiment on game feel: each round draws the juice (hit-stop, shake, sparks, a pop that climbs with the combo, squash) on or off from a shuffled block, and the game underneath is identical. After each round: how did it feel (1-5), then again or done. |
 
 
 ## Controls
@@ -35,6 +37,8 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 - **Veer:** hold to walk, drag sideways to turn, tap WHISTLE. Keys: ↑/W walk, ← → turn, Space whistle. Headphones help.
 - **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
 - **Stick Swarm:** tap a jar, then tap where its top stickman goes. HINT shows a good next move (3 per level). Keys: ← → and Enter, `U` undo, `H` hint, `R` restart.
+- **IQ Test 2026:** tap the meaning, or keys `1`–`6`; Enter continues. Come back the next day.
+- **Pop It:** tap bubbles. Keys after a round: `1`–`5` rate, Enter/Y again, N done.
 - **Esc** in any game returns to the disc menu.
 
 ## Layout
@@ -48,6 +52,10 @@ games/veer/           foggy walk-and-whistle game
 games/embers/         night-watch survival with dark adaptation
 games/goingup/        elevator dispatch
 games/faro/           perfect-shuffle card puzzle
+games/iqtest/         spaced-repetition experiment (Leitner miss rule)
+games/popit/          game-feel experiment (juice on/off per round)
+shared/lab.js         lab kit: arm assignment, on-device event log, JSON export
+trailers/src/         canvas ad films and their renderer (node trailers/src/render.mjs <name>)
 trailers/             the spoof ads (mp4) + poster frames
 tests/smoke.mjs       boot + completability tests (Playwright)
 ```
@@ -66,4 +74,13 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every embers night is survived by medium looks at the fire, while only-glancing freezes and staring gets hurt
 - every veer level is found by an autopilot that only whistles, listens and walks (and the sound and drift models check out)
 - every blocking scene refuses its opening layout and is won by its solution
+- iq test: a miss resets or drops one box by arm, the daily review budget holds, the day-7 test comes before the reviews, and the arm survives a reload
+- pop it: the juice changes nothing a score depends on (same seed and taps, same result), both arms come up, and every round logs a result, a rating and a choice
 - nothing logs an error
+
+## Lab games
+IQ Test 2026 and Pop It are real experiments, built so Brain can learn from players instead of from autopilots
+(Brain's tension T9: a headless sim proves systems, not feel). `shared/lab.js` assigns the condition, keeps an
+event log on the player's device only, and the end screen's SEND MY DATA saves it as a JSON file (or copies it).
+Nothing is sent anywhere automatically. `?lab-miss=reset|drop` or `?lab-juice=on|off` pins a condition for testing.
+

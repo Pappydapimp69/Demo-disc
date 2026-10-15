@@ -360,6 +360,67 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- IQ TEST 2026 (the ad is a ten-minute IQ test; the game is a week of spaced review, and an experiment) ----------
+{
+  const { page, errors } = await open('games/iqtest/index.html');
+  const m = await page.evaluate(() => { const g = window.__game; return [g.miss(4, 'reset'), g.miss(4, 'drop'), g.miss(1, 'drop')]; });
+  check(m.join() === '1,3,1', `iqtest: a miss from box 4 goes to box 1 under reset, box 3 under drop (${m})`);
+  for (const rule of ['reset', 'drop']) {
+    await page.goto('file://' + path.join(root, 'games/iqtest/index.html') + '?lab-miss=' + rule); await page.waitForFunction(() => !!window.__game);
+    const r = await page.evaluate(() => { const g = window.__game, base = Date.UTC(2026, 9, 1, 12); let day = 0;
+      g.lab.clock = () => base + day * 864e5; g.lab.reset();
+      // a learner who misses every third card on its first two reviews, then knows it
+      const seen = {}; g.autopilot = c => { seen[c.id] = (seen[c.id] || 0) + 1; return !(c.id % 3 === 0 && seen[c.id] <= 3); };
+      const order = []; let dropOk = true;
+      for (day = 0; day < 15; day++) { g.open(); const st = g.lab.events.length;
+        for (let k = 0; k < 400 && g.state !== 'done'; k++) g.step(40);
+        const ev = g.lab.events.slice(st), kinds = ev.filter(e => e.type === 'answer').map(e => e.kind);
+        order.push({ day, reviews: kinds.filter(k => k === 'review').length, examFirst: !kinds.includes('exam') || kinds.indexOf('exam') < (kinds.indexOf('review') + 1 || 1e9) && kinds.lastIndexOf('exam') < (kinds.indexOf('review') < 0 ? 1e9 : kinds.indexOf('review')) });
+        for (const e of ev) if (e.type === 'answer' && e.kind === 'review' && !e.ok && e.to !== (g.S.rule === 'reset' ? 1 : Math.max(1, e.from - 1))) dropOk = false; }
+      return { rule: g.S.rule, maxReviews: Math.max(...order.map(o => o.reviews)), examFirst: order.every(o => o.examFirst), exams: g.lab.data.exams, dropOk,
+        misses: g.lab.events.filter(e => e.type === 'answer' && e.kind === 'review' && !e.ok).length, json: (() => { try { return JSON.parse(g.lab.export()).arms.miss; } catch (_) { return null; } })() }; });
+    check(r.rule === rule && r.json === rule, `iqtest ${rule}: the pinned arm is the one played and exported (${r.rule}, ${r.json})`);
+    check(r.dropOk && r.misses > 0, `iqtest ${rule}: every missed review moved by its rule (${r.misses} misses)`);
+    check(r.maxReviews <= 6, `iqtest ${rule}: never more than the daily budget of reviews (${r.maxReviews})`);
+    check(r.exams[7] && r.exams[14] && !r.exams[28] && r.examFirst, `iqtest ${rule}: day 7 and 14 tests ran before that day's reviews (${JSON.stringify(r.exams)})`);
+  }
+  await page.screenshot({ path: path.join(shots, 'iqtest-done.png') });
+  // the arm survives a reload; a fresh player can draw either
+  await page.goto('file://' + path.join(root, 'games/iqtest/index.html')); await page.waitForFunction(() => !!window.__game);
+  const arms = await page.evaluate(() => { const out = new Set(); for (let i = 0; i < 40; i++) { const l = Lab.create('iq-probe-' + i); out.add(l.arm('miss', ['reset', 'drop'])); l.reset(); } return [...out].sort().join(); });
+  const a1 = await page.evaluate(() => window.__game.S.rule); await page.reload(); await page.waitForFunction(() => !!window.__game);
+  const a2 = await page.evaluate(() => window.__game.S.rule);
+  check(arms === 'drop,reset' && a1 === a2, `iqtest: both arms get drawn across players (${arms}) and a player keeps theirs across visits (${a1} = ${a2})`);
+  await page.evaluate(() => localStorage.clear()); await page.reload(); await page.waitForFunction(() => !!window.__game);
+  await page.mouse.click(270, 830);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'iqtest: an accidental tap as the day opens is ignored');
+  check(errors.length === 0, `iqtest runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
+// ---------- POP IT (the ad is a fidget board; the game is a game-feel experiment) ----------
+{
+  const { page, errors } = await open('games/popit/index.html');
+  const r = await page.evaluate(() => { const g = window.__game, out = {};
+    for (const [k, j] of [['on', true], ['off', false]]) { g.autopilot = true; g.startRound(42, j); let n = 0; while (g.state === 'play' && n++ < 300) g.step(30); out[k] = g.S.result; }
+    g.autopilot = false; return out; });
+  check(r.on.score === r.off.score && r.on.pops === r.off.pops && r.on.escaped === r.off.escaped && r.on.stopTicks > 0 && r.off.stopTicks === 0,
+    `popit: juice changes nothing a score depends on (on ${r.on.score}/${r.on.pops} popped, off ${r.off.score}/${r.off.pops}; hit-stop ${r.on.stopTicks} vs ${r.off.stopTicks} ticks)`);
+  const spread = await page.evaluate(() => { const g = window.__game, out = []; for (const re of [.5, .9]) { g.reaction = re; g.autopilot = true; g.startRound(9, false); let n = 0; while (g.state === 'play' && n++ < 300) g.step(30); out.push(g.S.result.escaped); } g.autopilot = false; g.reaction = .45; return out; });
+  check(spread[1] > spread[0] && spread[1] > 5, `popit: a slower player lets more get away, so scores have room to differ (${spread[0]} vs ${spread[1]} escaped)`);
+  const flow = await page.evaluate(() => { const g = window.__game; g.lab.reset(); const seen = new Set();
+    g.startRound(); for (let i = 0; i < 4; i++) { seen.add(g.S.juice); g.autopilot = true; let n = 0; while (g.state === 'play' && n++ < 300) g.step(30); g.autopilot = false; g.step(60); g.rate(3); g.step(40); g.again(i < 3); g.step(40); }
+    const ev = g.lab.events; return { both: seen.size, results: ev.filter(e => e.type === 'result').length, choices: ev.filter(e => e.type === 'choice').length, rated: ev.filter(e => e.type === 'result').every(e => e.rating === 3 && typeof e.juice === 'boolean'), state: g.state,
+      on: ev.filter(e => e.type === 'round' && e.juice).length }; });
+  await page.screenshot({ path: path.join(shots, 'popit-end.png') });
+  check(flow.both === 2 && flow.on === 2 && flow.results === 4 && flow.choices === 4 && flow.rated && flow.state === 'end',
+    `popit: four rounds draw juice on twice and off twice, each logs a result, a rating and a choice, then stops (${JSON.stringify(flow)})`);
+  await page.goto('file://' + path.join(root, 'games/popit/index.html')); await page.waitForFunction(() => !!window.__game); await page.mouse.click(270, 800);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'popit: an accidental tap as the game opens is ignored');
+  check(errors.length === 0, `popit runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 // ---------- GOING UP (the ad is a tower stacker; the game runs the lifts) ----------
 {
   const { page, errors } = await open('games/goingup/index.html');
