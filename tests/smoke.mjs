@@ -389,6 +389,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     check(r.dropOk && r.misses > 0, `iqtest ${rule}: every missed review moved by its rule (${r.misses} misses)`);
     check(r.maxReviews <= 6, `iqtest ${rule}: never more than the daily budget of reviews (${r.maxReviews})`);
     check(r.exams[7] && r.exams[14] && !r.exams[28] && r.examFirst, `iqtest ${rule}: day 7 and 14 tests ran before that day's reviews (${JSON.stringify(r.exams)})`);
+    const rep = await page.evaluate(() => window.__game.lab.events.filter(e => e.type === 'report').map(e => e.name));
+    check(rep.includes(`lab-iq-${rule}-start`) && rep.some(n => n.startsWith(`lab-iq-${rule}-d7-`)) && rep.some(n => n.startsWith(`lab-iq-${rule}-day15-`)) && rep.every(n => /^[\w-]{1,40}$/.test(n)),
+      `iqtest ${rule}: the start, each day and each test report anonymous counts the stats accept (${rep.length}, e.g. ${rep.filter(n => n.includes('-d7-'))[0]})`);
   }
   await page.screenshot({ path: path.join(shots, 'iqtest-done.png') });
   // the arm survives a reload; a fresh player can draw either
@@ -419,6 +422,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const ev = g.lab.events; return { both: seen.size, results: ev.filter(e => e.type === 'result').length, choices: ev.filter(e => e.type === 'choice').length, rated: ev.filter(e => e.type === 'result').every(e => e.rating === 3 && typeof e.juice === 'boolean'), state: g.state,
       on: ev.filter(e => e.type === 'round' && e.juice).length }; });
   await page.screenshot({ path: path.join(shots, 'popit-end.png') });
+  const prep = await page.evaluate(() => window.__game.lab.events.filter(e => e.type === 'report').map(e => e.name));
+  check(prep.filter(n => /-rate3$/.test(n)).length === 4 && prep.filter(n => /-(again|stop)$/.test(n)).length === 4 && prep.some(n => n.startsWith('lab-pop-on-')) && prep.some(n => n.startsWith('lab-pop-off-')) && prep.every(n => /^[\w-]{1,40}$/.test(n)),
+    `popit: every round reports its rating, score band, escapes and choice as anonymous counts (${prep.length} reports)`);
   check(flow.both === 2 && flow.on === 2 && flow.results === 4 && flow.choices === 4 && flow.rated && flow.state === 'end',
     `popit: four rounds draw juice on twice and off twice, each logs a result, a rating and a choice, then stops (${JSON.stringify(flow)})`);
   await page.goto('file://' + path.join(root, 'games/popit/index.html')); await page.waitForFunction(() => !!window.__game); await page.mouse.click(270, 800);

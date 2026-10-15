@@ -11,11 +11,12 @@
   const { createGame, Audio, Draw, clamp } = Engine;
   const W = 540, H = 960, TOP = 150, ROUND = 30, SPAWN = .36, STOP_TICKS = 3;
   const COLS = ['#ff5a8a', '#ffa23a', '#ffe14a', '#5ad06a', '#4ab8ff', '#a77aff'];
+  const Stats0 = (x, cuts) => cuts.find(([lim]) => x < lim)[1];   // a value's band, for anonymous counts
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
   const lab = Lab.create('popit');
   const S = { state: 'intro', t: 0, lockUntil: 0, round: 0, juice: true, rt: 0, rng: null, fx: null, bubbles: [], parts: [], rings: [], texts: [],
-    nextSpawn: 0, score: 0, combo: 0, best: 0, pops: 0, taps: 0, whiffs: 0, escaped: 0, react: [], stop: 0, stopTotal: 0, shake: 0, punch: 0, rating: 0, sent: '', seed: 0, nid: 0 };
+    nextSpawn: 0, score: 0, combo: 0, best: 0, pops: 0, taps: 0, whiffs: 0, escaped: 0, react: [], stop: 0, stopTotal: 0, shake: 0, punch: 0, rating: 0, seed: 0, nid: 0 };
   function pause(s = .5) { S.lockUntil = S.t + s; }
   const paused = () => S.t < S.lockUntil;
 
@@ -76,11 +77,15 @@
   function rate(k) {
     if (S.state !== 'rate' || paused()) return;
     S.rating = k; lab.log('result', Object.assign({ rating: k }, S.result)); Audio.sfx('select');
+    const j = S.juice ? 'on' : 'off', r = S.result;
+    lab.report(`lab-pop-${j}-rate${k}`);
+    lab.report(`lab-pop-${j}-score-${Stats0(r.score, [[2000, 'under2k'], [3000, '2-3k'], [4000, '3-4k'], [1e9, '4k-plus']])}`);
+    lab.report(`lab-pop-${j}-escaped-${Stats0(r.escaped, [[1, '0'], [6, '1-5'], [16, '6-15'], [31, '16-30'], [1e9, '31-plus']])}`);
     S.state = 'again'; pause(.4);
   }
   function again(yes) {
     if (S.state !== 'again' || paused()) return;
-    lab.log('choice', { round: S.round, again: yes, juice: S.juice });
+    lab.log('choice', { round: S.round, again: yes, juice: S.juice }); lab.report(`lab-pop-${S.juice ? 'on' : 'off'}-${yes ? 'again' : 'stop'}`);
     if (yes) startRound(); else { S.state = 'end'; pause(.4); }
   }
   function tap(x, y) {
@@ -102,7 +107,7 @@
   // ---------- drawing ----------
   let ctx;
   const RATE = k => ({ x: 30 + k * 98, y: 520, w: 88, h: 88 });
-  const YES = { x: 60, y: 700, w: 200, h: 90 }, NO = { x: 280, y: 700, w: 200, h: 90 }, BIG = { x: 120, y: 760, w: 300, h: 90 }, SEND = { x: 120, y: 640, w: 300, h: 76 };
+  const YES = { x: 60, y: 700, w: 200, h: 90 }, NO = { x: 280, y: 700, w: 200, h: 90 }, BIG = { x: 120, y: 760, w: 300, h: 90 };
   function button(b, label, col, size = 28, on = true) {
     ctx.fillStyle = on ? col : '#fff'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 24); ctx.fill(); ctx.strokeStyle = '#2a1a4a'; ctx.lineWidth = 4; ctx.stroke();
     ctx.font = `900 ${size}px system-ui`; ctx.fillStyle = on ? '#fff' : '#2a1a4a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2 + 1); ctx.textBaseline = 'alphabetic';
@@ -137,7 +142,7 @@
       text('TAP THE BUBBLES BEFORE THEY FLOAT AWAY. ROUNDS ARE 30 SECONDS.', W / 2, 270, 22, '#2a1a4a');
       text('SOME ROUNDS FEEL DIFFERENT FROM OTHERS. AFTER EACH ONE, SAY HOW IT FELT.', W / 2, 360, 20, '#6a5a8a', 700);
       for (let i = 0; i < 6; i++) { ctx.fillStyle = COLS[i]; Draw.circ(ctx, 95 + i * 70, 480, 26); }
-      text('THIS GAME IS ALSO A REAL EXPERIMENT ON GAME FEEL. YOUR RESULTS STAY ON THIS DEVICE UNLESS YOU CHOOSE TO SEND THEM.', W / 2, 580, 16, '#6a5a8a', 600, 440);
+      text('THIS GAME IS ALSO A REAL EXPERIMENT ON GAME FEEL. RATINGS AND SCORES ARE SHARED ANONYMOUSLY TO HELP ANSWER IT.', W / 2, 580, 16, '#6a5a8a', 600, 440);
       if (!paused()) button(BIG, 'PLAY', '#e0306a', 34);
       return;
     }
@@ -169,8 +174,7 @@
       const res = lab.events.filter(e => e.type === 'result');
       text(`${res.length} ROUND${res.length === 1 ? '' : 'S'} PLAYED. THANKS.`, W / 2, 230, 28, '#2a1a4a', 900);
       text('HALF THE ROUNDS HAD THE JUICE (SHAKE, SPARKS, A POP THAT CLIMBS WITH YOUR COMBO) AND HALF DID NOT. THE GAME UNDERNEATH WAS THE SAME.', W / 2, 300, 19, '#6a5a8a', 700);
-      text('SEND YOUR FILE AND IT HELPS ANSWER WHETHER GAME FEEL CHANGES HOW YOU PLAY, OR ONLY HOW IT FEELS.', W / 2, 470, 17, '#6a5a8a', 600);
-      button(SEND, S.sent || 'SEND MY DATA', '#6a5a8a', 22, !S.sent);
+      text('YOUR RATINGS (SHARED ANONYMOUSLY) HELP ANSWER WHETHER GAME FEEL CHANGES HOW YOU PLAY, OR ONLY HOW IT FEELS.', W / 2, 470, 17, '#6a5a8a', 600);
       if (!paused()) button(BIG, 'PLAY MORE', '#e0306a', 30);
     }
   }
@@ -184,9 +188,8 @@
     if (S.state === 'intro' && hit(BIG, x, y)) startRound();
     else if (S.state === 'rate') { for (let k = 0; k < 5; k++) if (hit(RATE(k), x, y)) rate(k + 1); }
     else if (S.state === 'again') { if (hit(YES, x, y)) again(true); else if (hit(NO, x, y)) again(false); }
-    else if (S.state === 'end') { if (hit(SEND, x, y)) send(); else if (hit(BIG, x, y)) startRound(); }
+    else if (S.state === 'end' && hit(BIG, x, y)) startRound();
   }
-  function send() { const how = lab.download(); S.sent = how === 'clipboard' ? 'COPIED: PASTE IT TO US' : how === 'download' ? 'SAVED: SEND THE FILE' : 'COULD NOT SAVE'; lab.log('export', { how }); }
   function onKey(key, down) {
     if (!down || paused()) return;
     if (S.state === 'intro' && (key === 'Enter' || key === ' ')) startRound();
