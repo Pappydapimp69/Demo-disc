@@ -13,6 +13,7 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
 | **PLAY** | **HAIR SALON ASMR** | Drag the clippers. Each level's clippings become the next level's hair: customer, salon, dog, town, Earth. 5 levels. |
 | **PLAY** | **THE BOSS'S BAD DAY** | You are the dragon, and your daughter loves the knight. Let him win, but keep it dramatic: near-miss fire, roars, a lowered head. 3 levels. |
+| **PLAY** | **THE LAST NOTE** | 1-bit rhythm tiles at a funeral. On the beat is solemn; a little late is GROOVE and rolls the casket to the door. Land the last note on the beat. 3 levels. |
 
 
 ## Controls

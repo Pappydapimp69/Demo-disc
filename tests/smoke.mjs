@@ -186,6 +186,20 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   await page.close();
 }
 
+// ---------- THE LAST NOTE ----------
+{
+  const { page, errors } = await open('games/lastnote/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) for (const [pol, want] of [['groove', 'win'], ['square', 'fail'], ['masher', 'fail']]) {
+    await page.evaluate(([i, pol]) => { window.__game.load(i); window.__game.autopilot = pol; }, [i, pol]);
+    await runUntil(page, () => window.__game.state !== 'play', 4000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, r: window.__game.S.reason }));
+    check(st.s === want, `lastnote L${i + 1} ${pol} -> ${st.s} ${st.r}`);
+  }
+  check(errors.length === 0, `lastnote runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
