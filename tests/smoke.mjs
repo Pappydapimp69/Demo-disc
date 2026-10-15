@@ -151,6 +151,24 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   await page.close();
 }
 
+// ---------- HAIR SALON ASMR ----------
+{
+  const { page, errors } = await open('games/salon/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'rows'; }, i);
+    await runUntil(page, () => window.__game.S.done, 1500, 30);
+    await page.screenshot({ path: path.join(shots, `salon-L${i + 1}-done.png`) });
+    check(await page.evaluate(() => window.__game.S.done), `salon L${i + 1} can be shaved clean`);
+  }
+  await runUntil(page, () => window.__game.state === 'ufo', 400, 30);
+  await runUntil(page, () => false, 150, 30);
+  await page.screenshot({ path: path.join(shots, 'salon-ufo.png') });
+  check((await page.evaluate(() => window.__game.state)) === 'ufo', 'salon: shaving the Earth brings the alien');
+  check(errors.length === 0, `salon runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);

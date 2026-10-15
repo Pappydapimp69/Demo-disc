@@ -11,6 +11,7 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **ONLY 1% CAN SAVE HIM** | Pin puzzle with real liquid physics: lava + water = stone, lava melts gold, lava on the knight = FAIL. 3 levels. Fail a level 3 times and the knight gives up on you and solves it himself. |
 | **PLAY** | **STICK SWARM 3D** | Crowd runner: steer through math gates, dodge saws, out-number the giant. 3 levels. Winning has a price. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
+| **PLAY** | **HAIR SALON ASMR** | Drag the clippers. Each level's clippings become the next level's hair: customer, salon, dog, town, Earth. 5 levels. |
 
 
 ## Controls
