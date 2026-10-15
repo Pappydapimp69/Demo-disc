@@ -74,8 +74,8 @@ function hand(x, y, press) {
     { name: 'THE LONG GOODBYE', bpm: 92, tiles: 40, need: 16, seed: 9 },
     { name: 'REQUIEM (UPTEMPO)', bpm: 108, tiles: 48, need: 20, seed: 14 },
   ];
-  const LANE_X = l => 20 + l * 50, HIT_Y = 392, TILE_H = 38;
-  const ON = .1, LATE_MIN = .14, LATE_MAX = .36, DROP = .42;
+  const LANE_X = l => 20 + l * 50, HIT_Y = 322, TILE_H = 32, LANES_Y = 215, KEYS_Y = 386, GROOVE_AT = .27;
+  const ON = .12, LATE_MIN = .15, LATE_MAX = .43, DROP = .5;
   const HYMN = [60, 64, 62, 60, 65, 64, 62, 60, 67, 65, 64, 62, 60, 64, 67, 69];
 
   const S = {};
@@ -97,7 +97,7 @@ function hand(x, y, press) {
     if (S.last) {
       const d = S.t - S.last.t;
       if (Math.abs(d) < .35 && S.last.lane === lane) {
-        if (Math.abs(d) < ON + .04) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; [60, 64, 67, 72, 48].forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
+        if (Math.abs(d) < ON + .05) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; [60, 64, 67, 72, 48].forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
         else { S.last.res = 'sour'; fail('THE CASKET HIT THE DOOR.'); }
         return;
       }
@@ -187,24 +187,31 @@ function hand(x, y, press) {
 
   function lanes() {
     const t = S.t;
-    rect(0, 250, W, H - 250, 0);
-    for (let l = 0; l <= 4; l++) rect(LANE_X(l) - 1, 250, 1, H - 250, .3);
-    rect(20, HIT_Y, 200, 1, .8);
-    // the late window: a faint band just under the hit line (the groove zone)
-    rect(20, HIT_Y + LATE_MIN * fallSpeed(), 200, (LATE_MAX - LATE_MIN) * fallSpeed() * .35, .25);
-    for (let l = 0; l < 4; l++) if (t - S.press[l] < .12) rect(LANE_X(l) + 2, HIT_Y - 4, 46, 8, .7);
-    const fs = fallSpeed();
+    const fs = fallSpeed(), GY = HIT_Y + GROOVE_AT * fs;
+    rect(0, LANES_Y, W, H - LANES_Y, 0);
+    for (let l = 0; l <= 4; l++) rect(LANE_X(l) - 1, LANES_Y, 1, H - LANES_Y, .3);
+    // two targets: the thin BEAT line (solemn) and, just below it, the bold GROOVE line (late = groove)
+    rect(20, HIT_Y, 200, 1, .55); text('beat', 228, HIT_Y + 3, 7, .55, 'left');
+    rect(20, GY - 1, 200, 3, 1); text('GROOVE', 3, GY + 3, 7, 1, 'left');
+    for (let l = 0; l < 4; l++) if (t - S.press[l] < .12) rect(LANE_X(l) + 2, GY - 5, 46, 10, .7);
     for (const x of S.tiles) {
       if (x.res === 'skip') continue;
-      const y = HIT_Y - (x.t - (x.res && x.res !== 'miss' ? x.at - (x.at - x.t) : t)) * fs - TILE_H;
       const yy = x.res && x.res !== 'miss' ? HIT_Y - TILE_H + (t - x.at) * 400 : HIT_Y - (x.t - t) * fs - TILE_H;
-      if (yy > H || yy + TILE_H < 250) continue;
+      if (yy > KEYS_Y || yy + TILE_H < LANES_Y) continue;
       if (x.res && x.res !== 'miss' && t - x.at > .25) continue;
-      rect(LANE_X(x.lane) + 3, yy, 44, TILE_H, x.res === 'late' ? .55 : x.res === 'on' ? .8 : x.res ? .3 : 1);
+      rect(LANE_X(x.lane) + 3, Math.max(LANES_Y, yy), 44, Math.min(TILE_H, KEYS_Y - yy, yy + TILE_H - LANES_Y), x.res === 'late' ? .55 : x.res === 'on' ? .8 : x.res ? .3 : 1);
     }
-    if (S.last && S.last.res === null) { const y = HIT_Y - (S.last.t - t) * 60 - TILE_H; rect(LANE_X(1) + 3, y, 44, TILE_H, 1); rect(LANE_X(1) + 6, y + 3, 38, TILE_H - 6, 0); text('♪', LANE_X(1) + 25, y + 26, 18, 1); }
-    for (let kk = 0; kk < 12; kk++) rect(20 + kk * 17, 404, 16, 23, .95);
-    for (const kk of [0, 1, 3, 4, 5, 7, 8, 10]) rect(32 + kk * 17, 404, 9, 13, 0);
+    if (S.last && S.last.res === null) { const y = HIT_Y - (S.last.t - t) * 60 - TILE_H; rect(20, HIT_Y - 1, 200, 3, 1); rect(LANE_X(1) + 3, y, 44, TILE_H, 1); rect(LANE_X(1) + 6, y + 3, 38, TILE_H - 6, 0); text('♪', LANE_X(1) + 25, y + 26, 18, 1); }
+    // the organ keys: each lane's keys light up as its tile reaches the GROOVE line, and flash when pressed
+    const glow = [0, 0, 0, 0];
+    for (const x of S.tiles) if (x.res === null) { const d = (x.t + GROOVE_AT) - t; if (d > -.15 && d < .6) glow[x.lane] = Math.max(glow[x.lane], 1 - Math.max(0, d) / .6); }
+    if (S.last && S.last.res === null) { const d = S.last.t - t; if (d < 1.2) glow[S.last.lane] = 1 - Math.max(0, d) / 1.2; }
+    for (let kk = 0; kk < 12; kk++) { const l = Math.min(3, Math.floor((kk * 17 + 8) / 50)); rect(20 + kk * 17, KEYS_Y + 2, 16, H - KEYS_Y - 2, .45 + glow[l] * .55); }
+    for (const kk of [0, 1, 3, 4, 5, 7, 8, 10]) rect(32 + kk * 17, KEYS_Y + 2, 9, 22, 0);
+    for (let l = 0; l < 4; l++) {
+      if (glow[l] > .85) { rect(LANE_X(l) + 1, KEYS_Y - 3, 48, 3, 1); }
+      if (t - S.press[l] < .15) { rect(LANE_X(l) + 1, KEYS_Y + 2, 48, H - KEYS_Y - 2, 0); rect(LANE_X(l) + 4, KEYS_Y + 6, 42, H - KEYS_Y - 10, 1); }
+    }
   }
   function hud() {
     rect(0, 0, W, 40, 0);
@@ -212,8 +219,8 @@ function hand(x, y, press) {
     // groove bar (casket to the door) and Grandma's patience
     rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text('GROOVE', 20, 36, 8, 1, 'left');
     rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text('GRANDMA', 124, 36, 8, 1, 'left');
-    if (S.t < 4.5 && S.state === 'play' && S.groove === 0) { rect(10, 262, 220, 50, 0); text('ON THE BEAT = SOLEMN', 120, 278, 10, 1); text('A BIT LATE = GROOVE', 120, 293, 10, 1); text('LANES: D F J K / TAP', 120, 307, 8, .8); }
-    if (S.last && S.last.res === null) text('THE LAST NOTE. ON THE BEAT.', 120, 262, 9, 1);
+    if (S.t < 4.5 && S.state === 'play' && S.groove === 0) { rect(10, 222, 220, 50, 0); text('TAP AS TILES HIT GROOVE', 120, 238, 10, 1); text('(ON THE BEAT IS SOLEMN)', 120, 252, 9, .85); text('LANES: D F J K / TAP', 120, 266, 8, .8); }
+    if (S.last && S.last.res === null) text('LAST NOTE: ON THE BEAT LINE', 120, 228, 9, 1);
   }
   function overlay() {
     if (S.state === 'win') {
@@ -241,7 +248,7 @@ function hand(x, y, press) {
     cx.setTransform(1, 0, 0, 1, 0, 0); rect(0, 0, W, H, 0);
     if (S.state !== 'done') {
       const sh = S.groove > 4 && S.state === 'play' && !S.last ? Math.round(Math.sin(S.t * 40)) : 0;
-      cx.save(); cx.beginPath(); cx.rect(0, 40, W, 210); cx.clip(); cx.translate(120, 238 + sh); cx.scale(1.7, 1.7); cx.translate(-camX(), -214); chapel(); cx.restore();
+      cx.save(); cx.beginPath(); cx.rect(0, 40, W, LANES_Y - 40); cx.clip(); cx.translate(120, 206 + sh); cx.scale(1.7, 1.7); cx.translate(-camX(), -214); chapel(); cx.restore();
       lanes(); hud();
     }
     overlay();
@@ -258,7 +265,7 @@ function hand(x, y, press) {
     if (S.state === 'done') { Engine.exit(); return; }
     if (S.state === 'fail' && S.endT > .6) { load(S.li); return; }
     if (S.state === 'win' && S.endT > 2.6) { next(); return; }
-    if (ly > 250) { const lane = Math.floor((lx - 20) / 50); if (lane >= 0 && lane < 4) tap(lane); }
+    if (ly > LANES_Y) { const lane = Math.floor((lx - 20) / 50); if (lane >= 0 && lane < 4) tap(lane); }
   }
   const KEYS = { d: 0, D: 0, f: 1, F: 1, j: 2, J: 2, k: 3, K: 3, ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 };
   function onKey(key, down) {
