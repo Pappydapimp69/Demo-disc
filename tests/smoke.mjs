@@ -108,6 +108,36 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   await page.close();
 }
 
+// ---------- PARKING JAM (the ad is a car puzzle; the game is a match-3) ----------
+{
+  const { page, errors } = await open('games/parkingjam/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    await page.evaluate(i => window.__game.load(i), i);
+    check(await page.evaluate(() => window.__game.validMoves().length > 0), `parkingjam L${i + 1} deals a board with a move on it`);
+    await page.screenshot({ path: path.join(shots, `parkingjam-L${i + 1}-start.png`) });
+    await page.evaluate(() => { window.__game.autopilot = 'best'; });
+    await runUntil(page, () => window.__game.state !== 'play', 6000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, sc: window.__game.S.score, t: window.__game.S.L.target, m: window.__game.S.moves }));
+    check(st.s === 'win', `parkingjam L${i + 1} good play wins (${st.s}, ${st.sc}/${st.t}, ${st.m} moves left)`);
+  }
+  // an invalid swap snaps back and costs nothing
+  await page.evaluate(() => window.__game.load(0));
+  const bad = await page.evaluate(() => { const g = window.__game, ok = new Set(g.validMoves().map(m => m.a + ',' + m.b)); for (let a = 0; a < 55; a++) if (!ok.has(a + ',' + (a + 1)) && (a % 7) < 6) return [a, a + 1]; });
+  const before = await page.evaluate(() => ({ g: window.__game.S.grid.join(), m: window.__game.S.moves }));
+  await page.evaluate(([a, b]) => window.__game.trySwap(a, b), bad);
+  await runUntil(page, () => window.__game.S.phase === 'idle', 120, 10);
+  const after = await page.evaluate(() => ({ g: window.__game.S.grid.join(), m: window.__game.S.moves }));
+  check(before.g === after.g && before.m === after.m, 'parkingjam invalid swap snaps back and costs no move');
+  // the last move short of the target loses
+  await page.evaluate(() => { window.__game.load(0); window.__game.S.moves = 1; const m = window.__game.validMoves()[0]; window.__game.trySwap(m.a, m.b); });
+  await runUntil(page, () => window.__game.state !== 'play', 600, 20);
+  check((await page.evaluate(() => window.__game.state)) === 'fail', 'parkingjam out of moves short of the target loses');
+  await page.screenshot({ path: path.join(shots, 'parkingjam-fail.png') });
+  check(errors.length === 0, `parkingjam runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
