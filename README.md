@@ -17,12 +17,14 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **THE LAST NOTE** | 1-bit rhythm tiles at a funeral. On the beat is solemn; a little late is GROOVE and rolls the casket to the door. Land the last note on the beat. 10 funerals, each with the late guest's request: ten original songs in 1980-2020 styles. |
 | **PLAY** | **THIRSTY** | Sketchbook draw-physics: draw lines to steer the water into the glass, then close the tap. Leave it running and he grabs your pencil and drinks until he pops. Stars for less ink. 4 levels. |
 | **PLAY** | **VEER** | The ad: a bright draw-the-path puzzle. The game: you and a friend are separated in fog, and you find them by ear. Whistle, listen for the answer (panned, fainter with distance, duller through trees), walk. With no sun you drift in circles without feeling it; a whistle carries 1.3 km in the open but ~150 m in deep woods. 7 levels. |
+| **PLAY** | **EMBERS** | The ad: tap the fire, grow the fire, scare the wolves. The game: a night watch where the fire is the danger. Your eyes take minutes to adjust to the dark; a glance at the fire costs about 2 night-minutes of sight, a stare about 17. Warm your hands too little and you freeze, too long and you are blind when they come. A red torch shows only what is close and costs no sight. 5 nights. |
 
 
 ## Controls
 - **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
 - **Hair Salon:** tap through each ritual step (chair: tap to pump, hold RELEASE or ↓ to lower), then drag to shave. Tap a guard in the tray, or keys `0`–`8` / Tab. Enter or DONE finishes the cut.
+- **Embers:** drag to look around, tap what you see, hold WARM HANDS to look at the fire, RED TORCH toggles. Keys: ← → look, ↓ warm, Space shoo, T torch.
 - **Veer:** hold to walk, drag sideways to turn, tap WHISTLE. Keys: ↑/W walk, ← → turn, Space whistle. Headphones help.
 - **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
 - **Stick Swarm:** tap a jar, then tap where its top stickman goes. Keys: ← → and Enter, `U` undo, `R` restart.
@@ -36,6 +38,7 @@ games/only1/          pin puzzle (particle liquids)
 games/stickswarm/     stickman sort puzzle
 games/blocking/       stage-blocking sightline puzzle
 games/veer/           foggy walk-and-whistle game
+games/embers/         night-watch survival with dark adaptation
 trailers/             the spoof ads (mp4) + poster frames
 tests/smoke.mjs       boot + completability tests (Playwright)
 ```
@@ -49,6 +52,7 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every pin-puzzle level is won by its solution, lost by each trap, and solved by the knight's hint
 - every stick swarm level deals a solvable board and is sorted by the solver's moves
 - every salon customer is satisfied by cutting to their order, each guard leaves its own length, and a too-short cut scores no stars but still moves on
+- every embers night is survived by medium looks at the fire, while only-glancing freezes and staring gets hurt
 - every veer level is found by an autopilot that only whistles, listens and walks (and the sound and drift models check out)
 - every blocking scene refuses its opening layout and is won by its solution
 - nothing logs an error

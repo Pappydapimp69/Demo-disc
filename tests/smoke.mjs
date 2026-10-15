@@ -315,6 +315,35 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- EMBERS (the ad is an idle fire tapper; the game is a night watch where the fire costs your eyes) ----------
+{
+  const { page, errors } = await open('games/embers/index.html');
+  const m = await page.evaluate(() => { const g = window.__game; return { glance: g.lookCost(.3), stare: g.lookCost(40), dark: g.sight(0), blind: g.sight(17) }; });
+  check(Math.abs(m.glance - 2) < .01 && Math.abs(m.stare - 17) < .05 && m.dark === 1 && m.blind === 0, `embers: a glance costs ${m.glance.toFixed(1)} night-minutes, a stare ${m.stare.toFixed(1)}`);
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'medium'; }, i);
+    await runUntil(page, () => ['dawn', 'lost'].includes(window.__game.state), 8000, 300);
+    const st = await page.evaluate(() => ({ s: window.__game.state, lives: window.__game.S.lives, why: window.__game.S.why }));
+    await page.screenshot({ path: path.join(shots, `embers-L${i + 1}-end.png`) });
+    check(st.s === 'dawn', `embers L${i + 1} survived to dawn with medium looks at the fire (${st.s}, ${st.lives} lives)`);
+  }
+  // the trade-off: only glancing leaves you cold; staring leaves you blind while things come
+  const tr = await page.evaluate(async () => { const g = window.__game, out = {};
+    for (const pol of ['glance', 'stare']) { g.load(4); g.autopilot = pol; for (let k = 0; k < 80 && !['dawn', 'lost'].includes(g.state); k++) g.step(120); out[pol] = { s: g.state, why: g.S.why, lives: g.S.lives }; }
+    return out; });
+  check(tr.glance.why === 'THE COLD GOT YOU' && tr.stare.lives < 3, `embers: glancing froze (${tr.glance.why}), staring got hurt (${tr.stare.lives} lives left)`);
+  // you can only drive off what you can see
+  const sh = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.S.debt = 17; g.S.beasts = [{ a: g.S.look, d: .2, v: 0, flee: 0, snapT: 9, id: 1 }]; g.step(1); return g.S.beasts[0]; });
+  await page.mouse.click(270, 440);
+  const after = await page.evaluate(() => window.__game.S.beasts[0].flee);
+  check(!after, 'embers: right after staring at the fire you cannot see (or shoo) what is at the treeline');
+  await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'embers: an accidental tap as the night opens is ignored');
+  check(errors.length === 0, `embers runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
