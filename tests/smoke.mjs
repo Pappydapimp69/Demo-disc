@@ -344,6 +344,30 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- GOING UP (the ad is a tower stacker; the game runs the lifts) ----------
+{
+  const { page, errors } = await open('games/goingup/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  const runDay = async (i, pol) => { await page.evaluate(([i, pol]) => { window.__game.load(i); window.__game.autopilot = pol; }, [i, pol]);
+    await runUntil(page, () => ['win', 'lost'].includes(window.__game.state), 12000, 300);
+    return page.evaluate(() => ({ s: window.__game.state, hearts: window.__game.S.hearts, max: Math.round(window.__game.S.maxWait), del: window.__game.S.delivered })); };
+  for (let i = 0; i < n; i++) {
+    const st = await runDay(i, 'sweep');
+    await page.screenshot({ path: path.join(shots, `goingup-L${i + 1}-end.png`) });
+    check(st.s === 'win', `goingup L${i + 1} the sweep rule finishes the day (${st.s}, ${st.del} delivered, longest wait ${st.max} s, ${st.hearts} hearts)`);
+  }
+  // the lesson: nearest-first strands the top floor until someone takes the stairs; the sweep bounds the wait
+  const near = await runDay(2, 'nearest'), sw = await runDay(2, 'sweep');
+  check(near.max >= 40 && near.hearts < 3 && sw.max < 20 && sw.hearts === 3, `goingup: on THE TOP FLOOR nearest-first left someone ${near.max} s (took the stairs), the sweep's longest wait was ${sw.max} s`);
+  // manual: tapping a floor sends the lift there
+  const man = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.send(g.S.cars[0], 3); g.step(150); return Math.round(g.S.cars[0].y); });
+  check(man === 3, 'goingup: a tapped floor gets the lift');
+  await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'goingup: an accidental tap as the day opens is ignored');
+  check(errors.length === 0, `goingup runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
