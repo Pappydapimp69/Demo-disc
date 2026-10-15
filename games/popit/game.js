@@ -89,10 +89,11 @@
     if (yes) startRound(); else { S.state = 'end'; pause(.4); }
   }
   function tap(x, y) {
-    if (S.state !== 'play' || S.stop > 0) return;
+    // every finger counts, hit-stop included (bubbles are frozen in place then), so several fingers at once all land
+    if (S.state !== 'play') return;
     S.taps++;
     let best = null, bd = 1e9;
-    for (const b of S.bubbles) { const d = Math.hypot(b.x - x, b.y - y); if (d < b.r + 12 && d < bd) { bd = d; best = b; } }
+    for (const b of S.bubbles) { if (b.gone) continue; const d = Math.hypot(b.x - x, b.y - y); if (d < b.r + 12 && d < bd) { bd = d; best = b; } }
     if (best) pop(best); else { S.whiffs++; S.combo = 0; }
   }
 
@@ -150,7 +151,7 @@
       ctx.save();
       if (S.shake > 0) ctx.translate((S.fx() - .5) * S.shake, (S.fx() - .5) * S.shake);
       ctx.fillStyle = '#ffe8f4'; ctx.fillRect(-20, TOP - 20, W + 40, 4);
-      for (const b of S.bubbles) bubble(b);
+      for (const b of S.bubbles) if (!b.gone) bubble(b);
       for (const r of S.rings) { ctx.globalAlpha = r.life / .3; ctx.strokeStyle = r.col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.stroke(); }
       ctx.globalAlpha = 1;
       for (const p of S.parts) { ctx.globalAlpha = clamp(p.life * 2); ctx.fillStyle = p.col; Draw.circ(ctx, p.x, p.y, p.s); }

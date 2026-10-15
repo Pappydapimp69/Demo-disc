@@ -448,6 +448,21 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     `popit: every round reports its rating, score band, escapes and choice as anonymous counts (${prep.length} reports)`);
   check(flow.both === 2 && flow.on === 2 && flow.results === 4 && flow.choices === 4 && flow.rated && flow.state === 'end',
     `popit: four rounds draw juice on twice and off twice, each logs a result, a rating and a choice, then stops (${JSON.stringify(flow)})`);
+  // multi-touch: three fingers landing at once on three bubbles pop all three, juice on (hit-stop after the first) or off
+  const cdp = await page.context().newCDPSession(page);
+  for (const juice of [true, false]) {
+    const pts = await page.evaluate(j => { const g = window.__game; g.autopilot = false; g.startRound(5, j); g.step(20);
+      g.S.bubbles = [[120, 500], [270, 600], [420, 700]].map(([x, y], i) => ({ id: 900 + i, x, y, r: 40, v: 0, col: '#f00', wob: 0, born: 0, seen: 0, age: 0 }));
+      g.S.nextSpawn = 99; return g.S.bubbles.map(b => ({ x: b.x, y: b.y })); }, juice);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i + 1 })) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const mt = await page.evaluate(() => { const g = window.__game; return { pops: g.S.pops, taps: g.S.taps, left: g.S.bubbles.filter(b => !b.gone).length }; });
+    check(mt.pops === 3 && mt.taps === 3 && mt.left === 0, `popit: three fingers at once pop three bubbles with juice ${juice ? 'on' : 'off'} (${JSON.stringify(mt)})`);
+  }
+  // two fingers on the same bubble during hit-stop pop it once, not twice
+  const dbl = await page.evaluate(() => { const g = window.__game; g.startRound(6, true); g.step(20); g.S.bubbles = [{ id: 1, x: 270, y: 500, r: 40, v: 0, col: '#f00', wob: 0, born: 0, seen: 0, age: 0 }]; g.S.nextSpawn = 99;
+    g.tap(270, 500); g.tap(272, 502); return { pops: g.S.pops, whiffs: g.S.whiffs }; });
+  check(dbl.pops === 1 && dbl.whiffs === 1, `popit: a second finger on a bubble already popped doesn't pop it again (${JSON.stringify(dbl)})`);
   await page.goto('file://' + path.join(root, 'games/popit/index.html')); await page.waitForFunction(() => !!window.__game); await page.mouse.click(270, 800);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'popit: an accidental tap as the game opens is ignored');
   check(errors.length === 0, `popit runs without errors ${errors.join(' | ')}`);
