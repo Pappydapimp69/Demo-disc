@@ -69,20 +69,62 @@ function hand(x, y, press) {
 
 
   // ---------- levels ----------
+  // ten funerals, ten requests. Every song is ORIGINAL: it borrows only an era's tempo, drum pattern,
+  // bass style and a common chord progression, never a real melody, bassline, lyric or title.
+  const DR = {   // drum patterns over one 4-beat bar: kick, snare, hat offsets in beats
+    ballad: { k: [0, 2.5], s: [1, 3], h: [0, 1, 2, 3] },
+    synthpop: { k: [0, 2], s: [1, 3], h: [0, .5, 1, 1.5, 2, 2.5, 3, 3.5] },
+    dance: { k: [0, 1, 2, 3], s: [1, 3], h: [.5, 1.5, 2.5, 3.5] },
+    swing: { k: [0, 1.67, 2.5], s: [1, 3], h: [0, .67, 1, 1.67, 2, 2.67, 3, 3.67] },
+    rnb: { k: [0, 1.5, 2.25], s: [1, 3], h: [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75] },
+    dembow: { k: [0, 1, 2, 3], s: [.75, 1.5, 2.75, 3.5], h: [0, .5, 1, 1.5, 2, 2.5, 3, 3.5] },
+    four: { k: [0, 1, 2, 3], s: [1, 3], h: [.5, 1.5, 2.5, 3.5] },
+    punk: { k: [0, .5, 2, 2.5], s: [1, 3], h: [0, .5, 1, 1.5, 2, 2.5, 3, 3.5] },
+    funk: { k: [0, 1.5, 2.5], s: [1, 3], h: [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75] },
+  };
+  const BASS = {   // [beat in bar, semitones above the chord root]
+    ballad: [[0, 0], [2, 7]],
+    octaves: [[0, 0], [.5, 12], [1, 0], [1.5, 12], [2, 0], [2.5, 12], [3, 0], [3.5, 12]],
+    synco: [[0, 0], [.75, 0], [1.5, 7], [2, 0], [2.75, 0], [3.5, 10]],
+    swing: [[0, 0], [.67, 12], [1.67, 10], [2, 0], [2.67, 7], [3.67, 5]],
+    rnb: [[0, 0], [1.5, 7], [2.25, 10], [3, 12]],
+    dembow: [[0, 0], [.75, 0], [2, 0], [2.75, 0]],
+    offbeat: [[.5, 0], [1.5, 0], [2.5, 0], [3.5, 0]],
+    eighths: [[0, 0], [.5, 0], [1, 0], [1.5, 0], [2, 0], [2.5, 0], [3, 0], [3.5, 0]],
+    funk: [[0, 0], [.5, 12], [.75, 0], [1.5, 10], [2, 0], [2.5, 12], [3.25, 7], [3.5, 10]],
+  };
   const LEVELS = [
-    { name: "GRANDPA'S HYMN", bpm: 76, tiles: 34, need: 12, seed: 5 },
-    { name: 'THE LONG GOODBYE', bpm: 92, tiles: 40, need: 16, seed: 9 },
-    { name: 'REQUIEM (UPTEMPO)', bpm: 108, tiles: 48, need: 20, seed: 14 },
+    { who: 'AUNT DEB', name: 'LIGHTERS UP', year: 1987, bpm: 72, chords: [50, 45, 47, 43], minor: [0, 0, 1, 0], drums: 'ballad', bass: 'ballad', lead: 'triangle', pad: true,
+      mel: [66, 69, 71, 69, 66, 64, 62, 64, 66, 69, 74, 73, 71, 69, 71, 69] },
+    { who: 'UNCLE RAY', name: 'NEON GOODBYE', year: 1984, bpm: 80, chords: [57, 53, 48, 55], minor: [1, 0, 0, 0], drums: 'synthpop', bass: 'octaves', lead: 'square',
+      mel: [76, 72, 74, 76, 79, 76, 74, 72, 69, 72, 74, 72, 71, 67, 71, 74] },
+    { who: 'COUSIN VINNIE', name: 'STREETLIGHT STRUT', year: 1983, bpm: 84, chords: [52, 50, 48, 50], minor: [1, 0, 0, 0], drums: 'dance', bass: 'synco', lead: 'square',
+      mel: [71, 71, 74, 76, 74, 71, 69, 67, 71, 74, 76, 79, 76, 74, 71, 74] },
+    { who: 'BIG MIKE', name: 'BOOM BOX BOOGIE', year: 1991, bpm: 88, chords: [43, 48, 43, 48], minor: [1, 0, 1, 0], drums: 'swing', bass: 'swing', lead: 'sawtooth',
+      mel: [67, 70, 72, 70, 74, 72, 70, 67, 65, 67, 70, 72, 70, 67, 65, 67] },
+    { who: 'MISS PEARL', name: 'VELVET FLIP PHONE', year: 2004, bpm: 92, chords: [53, 46, 51, 44], minor: [1, 1, 0, 0], drums: 'rnb', bass: 'rnb', lead: 'triangle', pad: true,
+      mel: [72, 75, 77, 75, 72, 70, 68, 70, 72, 77, 80, 77, 75, 72, 70, 72] },
+    { who: 'ABUELA ROSA', name: 'TROPICAL WAKE', year: 2017, bpm: 96, chords: [47, 43, 50, 45], minor: [1, 0, 0, 0], drums: 'dembow', bass: 'dembow', lead: 'square',
+      mel: [71, 74, 76, 74, 71, 69, 66, 69, 71, 74, 78, 76, 74, 73, 71, 73] },
+    { who: 'AUNTIE GLO', name: 'RAVE RECEPTION', year: 1995, bpm: 100, chords: [48, 44, 51, 46], minor: [1, 0, 0, 0], drums: 'four', bass: 'offbeat', lead: 'square',
+      mel: [72, 75, 79, 77, 75, 72, 70, 72, 75, 77, 79, 82, 80, 79, 75, 77] },
+    { who: 'LIL TONY', name: 'SKATE PARK SKYLINE', year: 2003, bpm: 104, chords: [52, 47, 49, 45], minor: [0, 0, 1, 0], drums: 'punk', bass: 'eighths', lead: 'sawtooth',
+      mel: [76, 76, 78, 80, 80, 78, 76, 73, 71, 73, 76, 78, 76, 73, 71, 73] },
+    { who: 'DR. LOU', name: 'BRASS SUIT SWAGGER', year: 2014, bpm: 112, chords: [50, 55, 50, 55], minor: [1, 0, 1, 0], drums: 'funk', bass: 'funk', lead: 'sawtooth',
+      mel: [74, 77, 74, 72, 69, 72, 74, 77, 79, 77, 74, 72, 74, 72, 69, 72] },
+    { who: 'GRANDPA', name: 'SUNSET DROP', year: 2013, bpm: 120, chords: [53, 48, 50, 46], minor: [0, 0, 1, 0], drums: 'four', bass: 'offbeat', lead: 'square',
+      mel: [77, 81, 84, 81, 79, 77, 76, 72, 74, 77, 81, 79, 77, 76, 74, 76] },
   ];
+  LEVELS.forEach((L, i) => { L.tiles = 30 + i * 2; L.need = Math.round(10 + i * 1.4); });
   const LANE_X = l => 20 + l * 50, HIT_Y = 322, TILE_H = 32, LANES_Y = 215, KEYS_Y = 386, GROOVE_AT = .27;
   const ON = .12, LATE_MIN = .15, LATE_MAX = .43, DROP = .5;
-  const HYMN = [60, 64, 62, 60, 65, 64, 62, 60, 67, 65, 64, 62, 60, 64, 67, 69];
 
   const S = {};
   function load(i) {
-    const L = LEVELS[i], r = mkRng(L.seed), tiles = []; B = 60 / L.bpm;
-    let lane = 1;
-    for (let k = 0; k < L.tiles; k++) { lane = (lane + 1 + Math.floor(r() * 3)) % 4; tiles.push({ t: 2.0 + k * B, lane, res: null, at: 0, n: k }); }
+    const L = LEVELS[i], tiles = []; B = 60 / L.bpm;
+    // the melody picks the lane: low notes left, high notes right, like a keyboard
+    const lo = Math.min(...L.mel), hi = Math.max(...L.mel);
+    for (let k = 0; k < L.tiles; k++) { const m = L.mel[k % L.mel.length]; tiles.push({ t: 2.4 + k * B, lane: Math.min(3, Math.floor((m - lo) / (hi - lo + 1) * 4)), m, res: null, at: 0, n: k }); }
     Object.assign(S, { li: i, L, B, tiles, t: 0, state: 'play', groove: 0, anger: 0, last: null, roll: 0, pops: [], endT: 0, reason: '', press: [-1, -1, -1, -1], beatN: -1 });
     API.autopilot = null;
   }
@@ -90,6 +132,23 @@ function hand(x, y, press) {
   function pop(text, big) { S.pops.push({ text, t: S.t, big }); }
   function organ(m, d, g = .05) { const f = 440 * 2 ** ((m - 69) / 12); Audio.tone(f, d, 'sine', g); Audio.tone(f * 2, d, 'sine', g * .45); Audio.tone(f * 3, d * .8, 'sine', g * .25); Audio.tone(f / 2, d, 'triangle', g * .5); }
 
+  const hz = m => 440 * 2 ** ((m - 69) / 12);
+  function lead(m, d) { const t = S.L.lead; Audio.tone(hz(m), d, t, t === 'triangle' ? .09 : .045); Audio.tone(hz(m) * 1.005, d, t, t === 'triangle' ? .03 : .02); }
+  function chordOf(bar) { const r = S.L.chords[bar % 4] + 12, mi = S.L.minor[bar % 4]; return [r, r + (mi ? 3 : 4), r + 7]; }
+  // one beat of the band, scheduled ahead with the audio clock's own delay; it fades in as the chapel grooves
+  function backing(bn) {
+    const L = S.L, bar = Math.floor(bn / 4), bib = ((bn % 4) + 4) % 4, root = L.chords[((bar % 4) + 4) % 4], B = S.B;
+    const band = clamp(S.groove / Math.max(1, L.need * .6)) * .9;
+    Audio.tone(hz(root - 12), B * .6, 'sine', .05);                                   // the organ pedal: always there, so there is a beat
+    if (band <= 0) return;
+    const at = (list, fn) => { for (const o of list) if (o >= bib && o < bib + 1) fn((o - bib) * B); };
+    const D = DR[L.drums];
+    at(D.k, d => Audio.tone(110, .18, 'sine', .22 * band, 45, d));
+    at(D.s, d => { Audio.noise(.12, .14 * band, d); Audio.tone(190, .08, 'triangle', .05 * band, null, d); });
+    at(D.h, d => Audio.noise(.025, .045 * band, d));
+    at(BASS[L.bass].map(x => x[0]), d => { const iv = BASS[L.bass].find(x => Math.abs(x[0] - (bib + d / B)) < 1e-6)[1]; Audio.tone(hz(root + iv), B * .4, 'triangle', .12 * band, null, d); });
+    if (L.pad && bib === 0) for (const m of chordOf(bar)) Audio.tone(hz(m), B * 3.6, 'triangle', .025 * band);
+  }
   function tap(lane) {
     if (S.state !== 'play') return;
     Audio.unlock(); S.press[lane] = S.t;
@@ -97,23 +156,26 @@ function hand(x, y, press) {
     if (S.last) {
       const d = S.t - S.last.t;
       if (Math.abs(d) < .35 && S.last.lane === lane) {
-        if (Math.abs(d) < ON + .05) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; [60, 64, 67, 72, 48].forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
+        if (Math.abs(d) < ON + .05) { S.last.res = 'on'; S.state = 'win'; S.endT = 0; chordOf(0).concat(S.L.chords[0] - 12).forEach(m => organ(m, 2.2, .045)); Audio.sfx('win'); }
         else { S.last.res = 'sour'; fail('THE CASKET HIT THE DOOR.'); }
         return;
       }
     }
     // nearest unplayed tile in that lane
     let best = null;
-    for (const x of S.tiles) if (x.res === null && x.lane === lane && Math.abs(S.t - x.t) < .5) { if (!best || Math.abs(S.t - x.t) < Math.abs(S.t - best.t)) best = x; }
+    // the earliest tile in that lane whose window this tap is inside (a late tap belongs to the tile it is late FOR,
+    // not to the next one in the lane, which at fast tempos can be just as close)
+    for (const x of S.tiles) if (x.res === null && x.lane === lane) { const d = S.t - x.t; if (d > -(ON + .05) && d < LATE_MAX) { best = x; break; } }
+    if (!best) for (const x of S.tiles) if (x.res === null && x.lane === lane && Math.abs(S.t - x.t) < .5) { if (!best || Math.abs(S.t - x.t) < Math.abs(S.t - best.t)) best = x; }
     if (!best) return sour('wrong');
     const d = S.t - best.t;
     best.at = S.t;
     if (Math.abs(d) < ON) {
       best.res = 'on'; S.anger = Math.max(0, S.anger - 6);
-      organ(HYMN[best.n % 16], S.B * .9);
+      organ(best.m, S.B * .9);
     } else if (d > LATE_MIN && d < LATE_MAX) {
       best.res = 'late'; S.groove++;
-      organ(HYMN[best.n % 16] + 12, S.B * .45); Audio.noise(.03, .08);
+      lead(best.m, S.B * .5);
       pop(S.groove < 2 ? 'groove?' : S.groove < 5 ? 'GROOVE!' : `GROOVE x${S.groove}`);
       if (S.groove >= S.L.need && !S.last) spawnLast();
     } else { best.res = 'sour'; sour(); }
@@ -135,12 +197,12 @@ function hand(x, y, press) {
     S.roll = Math.min(S.roll + dt * .8, S.groove / S.L.need);
     // a soft pedal note on every beat so there is a beat to be late against
     const bn = Math.floor((S.t - 2.0) / S.B);
-    if (!S.last && bn !== S.beatN && bn >= 0 && bn < S.L.tiles) { S.beatN = bn; Audio.tone(65.4 * (bn % 4 === 0 ? 1 : 1.5), S.B * .5, 'sine', .05); }
+    if (!S.last && bn !== S.beatN && bn >= -1 && bn < S.L.tiles) { S.beatN = bn; backing(bn + 1); }
     const auto = API.autopilot; if (auto) autopilot(auto);
     // dropped tiles are sour
     for (const x of S.tiles) if (x.res === null && S.t - x.t > DROP) { x.res = 'miss'; sour(); if (S.state !== 'play') return; }
     if (S.last && S.last.res === null && S.t - S.last.t > .4) { S.last.res = 'miss'; fail('THE CASKET HIT THE DOOR.'); return; }
-    if (!S.last && S.tiles.every(x => x.res !== null)) fail('THE HYMN ENDED. NOBODY MOVED.');
+    if (!S.last && S.tiles.every(x => x.res !== null)) fail('THE SONG ENDED. NOBODY MOVED.');
   }
   // test policies: 'groove' plays it late (on-beat when Grandma is cross), 'square' plays it perfectly, 'masher' mashes
   function autopilot(kind) {
@@ -215,11 +277,11 @@ function hand(x, y, press) {
   }
   function hud() {
     rect(0, 0, W, 40, 0);
-    text(`${S.li + 1}/${LEVELS.length} ${S.L.name}`, 234, 13, 9, 1, 'right');
+    text(`${S.li + 1}/${LEVELS.length} ${S.L.name} '${String(S.L.year).slice(2)}`, 234, 13, 9, 1, 'right');
     // groove bar (casket to the door) and Grandma's patience
     rect(20, 19, 96, 7, .3); rect(20, 19, 96 * clamp(S.groove / S.L.need), 7, 1); text('GROOVE', 20, 36, 8, 1, 'left');
     rect(124, 19, 96, 7, .3); rect(124, 19, 96 * clamp(1 - S.anger / 100), 7, 1); text('GRANDMA', 124, 36, 8, 1, 'left');
-    if (S.t < 4.5 && S.state === 'play' && S.groove === 0) { rect(10, 222, 220, 50, 0); text('TAP AS TILES HIT GROOVE', 120, 238, 10, 1); text('(ON THE BEAT IS SOLEMN)', 120, 252, 9, .85); text('LANES: D F J K / TAP', 120, 266, 8, .8); }
+    if (S.t < 4.8 && S.state === 'play' && S.groove === 0) { rect(8, 220, 224, 56, 0); text(`${S.L.who}'S LAST REQUEST:`, 120, 233, 9, .85); text(`${S.L.name} (${S.L.year})`, 120, 248, 11, 1); text('TAP AS TILES HIT GROOVE', 120, 266, 9, .85); }
     if (S.last && S.last.res === null) text('LAST NOTE: ON THE BEAT LINE', 120, 228, 9, 1);
   }
   function overlay() {
@@ -235,7 +297,7 @@ function hand(x, y, press) {
     }
     if (S.state === 'done') {
       rect(0, 0, W, H, 0);
-      text('DEMO COMPLETE', 120, 150, 18, 1); text('THREE FUNERALS.', 120, 190, 12, 1); text('NOBODY CRIED.', 120, 208, 12, 1); text('GRANDPA WOULD BE PROUD.', 120, 236, 10, .85);
+      text('DEMO COMPLETE', 120, 150, 18, 1); text('TEN FUNERALS.', 120, 190, 12, 1); text('NOBODY CRIED.', 120, 208, 12, 1); text('GRANDPA WOULD BE PROUD.', 120, 236, 10, .85);
       text('TAP OR ESC: DISC MENU', 120, 320, 9, .8);
     }
   }
