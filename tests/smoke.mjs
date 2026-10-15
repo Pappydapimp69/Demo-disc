@@ -253,6 +253,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const st = await page.evaluate(() => ({ s: window.__game.state, r: window.__game.S.reason }));
     check(st.s === want, `boss L${i + 1} ${pol || 'idle'} -> ${st.s} ${st.r}`);
   }
+  // she reacts: a line when you start, a cheer when he lands one, and an outraged one if you hit him
+  const said = await page.evaluate(() => { const g = window.__game, S = g.S, out = {}; g.load(0); out.start = S.saidKind;
+    S.kx = 200; g.fireAt(200); g.step(40); out.oops = S.saidKind;
+    g.load(0); g.autopilot = 'good'; let ouch = false; for (let k = 0; k < 120 && g.state === 'play'; k++) { g.step(30); if (S.saidKind === 'ouch' || S.saidKind === 'win') ouch = true; } out.cheer = ouch; out.final = S.saidKind; return out; });
+  check(said.start === 'start' && said.oops === 'oops' && said.cheer && said.final === 'win', `boss: the daughter reacts (start ${said.start}, hit him ${said.oops}, cheers ${said.cheer}, at the end ${said.final})`);
   check(errors.length === 0, `boss runs without errors ${errors.join(' | ')}`);
   await page.close();
 }

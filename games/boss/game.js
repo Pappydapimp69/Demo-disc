@@ -32,11 +32,34 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, rng: mkRng(L.seed), state: 'play', t: 0, hp: L.hp, hearts: 3, drama: 70, headDown: false, headK: 0, armed: false,
-      kx: 120, kmode: 'wander', ktarget: 180, kswing: 0, kswingT: 0, kflee: 0, kdazed: 0, fireballs: [], pops: [], agony: 0, roarCd: 0, roarT: 0, endT: 0, reason: '', cheatT: 0, hint: 0 });
+      kx: 120, kmode: 'wander', ktarget: 180, kswing: 0, kswingT: 0, kflee: 0, kdazed: 0, fireballs: [], pops: [], agony: 0, roarCd: 0, roarT: 0, endT: 0, reason: '', cheatT: 0, hint: 0, lrng: mkRng(L.seed * 7 + 99), said: '', saidAt: -9, saidKind: '', lowT: 0, boredSaid: false });
+    say('start');
     API.autopilot = null;
   }
   function pop(text, x, y, col = '#fff', size = 46) { S.pops.push({ text, x, y, col, size, t: S.t }); }
   function fail(reason) { if (S.state !== 'play') return; S.state = 'fail'; S.reason = reason; S.endT = 0; Audio.sfx('fail'); }
+
+  // ---------- what she says (her own seeded stream, so the fight's rolls don't change) ----------
+  const LINES = {
+    start: ['Daddy, you PROMISED.', 'Be nice to him, Dad.', "He's so brave. Don't you dare."],
+    close: ['EEEK! So close!', 'My hero dodged it!', 'Dad, that almost looked real!', "He's so nimble!"],
+    ouch: ['YES! Get him, Clanksy!', 'MY KNIGHT!!', 'He hit a DRAGON!', '*swoon*'],
+    roar: ['Ooh, scary Daddy!', "He's not even scared!", 'Roar back, Clanksy!'],
+    miss: ['Almost, sweetie!', 'Aim for the big head!', "He'll get it next time."],
+    oops: ['DAD!!!', 'You hit him?! On PURPOSE?!', "I'm telling Mom."],
+    bored: ['...is it over yet?', 'Dad, this is boring.', 'Can he just win already?'],
+    napping: ["Dad, you're lying down.", 'Is Daddy... napping?', 'That looks fake, Dad.'],
+    cheat: ['DAD. I SAW THAT.', 'Did you just... move your own health?'],
+    win: ['MY HERO!!', "We're getting MARRIED!", 'Daddy, you were SO scary.'],
+  };
+  // priority beats the cooldown: an accident or a cheat always gets a reaction
+  const URGENT = { oops: 1, cheat: 1, win: 1, start: 1 };
+  function say(kind) {
+    if (!URGENT[kind] && S.t - S.saidAt < 1.8) return;
+    const pool = LINES[kind]; let line = pool[Math.floor(S.lrng() * pool.length)];
+    if (line === S.said && pool.length > 1) line = pool[(pool.indexOf(line) + 1) % pool.length];
+    S.said = line; S.saidAt = S.t; S.saidKind = kind;
+  }
 
   // ---------- actions ----------
   function press(id) {
@@ -44,7 +67,7 @@
     if (id === 'fire') { S.armed = !S.armed; Audio.sfx('select'); }
     else if (id === 'lower') { S.headDown = !S.headDown; S.armed = false; Audio.tone(S.headDown ? 500 : 300, .25, 'sine', .08, S.headDown ? 200 : 700); }
     else if (id === 'roar' && S.roarCd <= 0) {
-      S.roarCd = 2.5; S.roarT = 1; S.drama = Math.min(100, S.drama + 14); S.kflee = 1.0;
+      S.roarCd = 2.5; S.roarT = 1; S.drama = Math.min(100, S.drama + 14); S.kflee = 1.0; say('roar');
       Audio.noise(.6, .2); Audio.tone(90, .6, 'sawtooth', .12, 60); pop('ROAR!', M(HEAD_UP.x, 380).x, 330, '#ffd23a', 56);
     }
   }
@@ -61,10 +84,10 @@
     if (d < 45) {
       S.hearts--; S.kdazed = 1.2; S.kflee = 0; S.drama = Math.max(0, S.drama - 10);
       pop('OOPS', M(S.kx, 760).x, M(S.kx, 760).y, '#ff6a6a', 56);
-      if (S.hearts <= 0) fail('YOU WON. SHE WILL NEVER FORGIVE YOU.');
+      say('oops'); if (S.hearts <= 0) fail('YOU WON. SHE WILL NEVER FORGIVE YOU.');
     } else if (d < 140) {
       S.drama = Math.min(100, S.drama + 30); S.kflee = .7;
-      pop('CLOSE CALL!', M(fb.x, 760).x, M(fb.x, 760).y, '#ffd23a', 48);
+      pop('CLOSE CALL!', M(fb.x, 760).x, M(fb.x, 760).y, '#ffd23a', 48); say('close');
     } else { S.drama = Math.min(100, S.drama + 4); pop('miss...', M(fb.x, 800).x, M(fb.x, 800).y, '#c8b8ff', 34); }
   }
   function headPos() { return { x: mix(HEAD_UP.x, HEAD_DOWN.x, ease(S.headK)), y: mix(HEAD_UP.y, HEAD_DOWN.y, ease(S.headK)) }; }
@@ -80,6 +103,8 @@
     // drama fades, faster when the fight looks too easy (head down on the floor)
     S.drama -= dt * (L.decay + (S.headK > .9 ? 2.5 : 0));
     if (S.drama <= 0) { S.drama = 0; fail('SHE GOT BORED.'); return; }
+    if (S.drama < 25 && !S.boredSaid) { S.boredSaid = true; say('bored'); } else if (S.drama > 40) S.boredSaid = false;
+    S.lowT = S.headK > .9 ? S.lowT + dt : 0; if (S.lowT > 3) { say('napping'); S.lowT = -4; }
     // fireballs
     for (const fb of S.fireballs) if (!fb.done && S.t - fb.t0 >= .5) { fb.done = true; explode(fb); }
     S.fireballs = S.fireballs.filter(fb => S.t - fb.t0 < 1.0);
@@ -104,8 +129,8 @@
             S.hp--; S.agony = 1.1; S.drama = Math.min(100, S.drama + 22);
             Audio.tone(3200, .08, 'sine', .15); Audio.tone(110, .7, 'sawtooth', .12, 60);
             pop('OUCH!!', M(HEAD_DOWN.x, 760).x, M(HEAD_DOWN.x, 760).y, '#fff', 60);
-            if (S.hp <= 0) { S.state = 'win'; S.endT = 0; S.headDown = true; Audio.sfx('win'); }
-          } else { Audio.tone(1500, .05, 'square', .05); pop(reach ? 'MISSED' : 'swish', M(S.kx + 60, 820).x, M(S.kx + 60, 820).y, '#c8c8d8', 30); }
+            if (S.hp <= 0) { S.state = 'win'; S.endT = 0; S.headDown = true; Audio.sfx('win'); say('win'); } else say('ouch');
+          } else { Audio.tone(1500, .05, 'square', .05); pop(reach ? 'MISSED' : 'swish', M(S.kx + 60, 820).x, M(S.kx + 60, 820).y, '#c8c8d8', 30); if (reach) say('miss'); }
         }
       }
     }
@@ -238,6 +263,20 @@
     if (S.t < 4 && S.state === 'play') { cx.globalAlpha = 1 - lin(S.t, 3.2, 4); Draw.bigText(cx, 'LET HIM WIN. MAKE IT LOOK REAL.', W / 2, 370, 28, '#fff'); cx.globalAlpha = 1; }
   }
 
+  function speech() {
+    const age = S.t - S.saidAt; if (!S.said || age > 2.6 || S.state === 'fail') return;
+    const k = Math.min(1, age / .15), fade = 1 - clamp((age - 2.2) / .4);
+    cx.save(); cx.globalAlpha = fade; cx.font = "800 26px system-ui";
+    const w = Math.min(470, cx.measureText(S.said).width + 40), x = 24, y = 600, h = 62, tip = M(95, 880);
+    cx.translate(x + 40, y + h); cx.scale(back(k), back(k)); cx.translate(-x - 40, -y - h);
+    const hot = S.saidKind === 'oops' || S.saidKind === 'cheat';
+    cx.fillStyle = hot ? '#ffe0e8' : '#fff'; cx.strokeStyle = hot ? '#c0203a' : '#111'; cx.lineWidth = 4;
+    rr(x, y, w, h, 24); cx.fill(); cx.stroke();
+    cx.beginPath(); cx.moveTo(x + 30, y + h - 2); cx.lineTo(tip.x, y + h + 40); cx.lineTo(x + 62, y + h - 2); cx.fill(); cx.stroke();
+    cx.fillRect(x + 32, y + h - 6, 28, 6);
+    cx.fillStyle = hot ? '#c0203a' : '#111'; cx.textAlign = 'left'; cx.textBaseline = 'middle'; cx.fillText(S.said, x + 20, y + h / 2 + 1);
+    cx.restore();
+  }
   function render(ctx) {
     cx = ctx;
     if (S.state === 'done') {
@@ -254,6 +293,7 @@
     for (const fb of S.fireballs) fireball(fb);
     cx.restore();
     for (const p of S.pops) { const k = clamp((S.t - p.t) / 1.0); if (k < 1) { cx.globalAlpha = 1 - k; Draw.bigText(cx, p.text, p.x, p.y - k * 60, p.size, p.col); cx.globalAlpha = 1; } }
+    speech();
     hud();
     if (S.state === 'win') {
       const e = S.endT;
@@ -289,7 +329,7 @@
       if (S.armed && y > 600 && y < 1090) { fireAt(Mi(x, y).x); return; }
     } else if (type === 'move' && barDrag !== null && Math.abs(x - barDrag) > 30 && S.state === 'play') {
       barDrag = null; S.cheatT = 2; S.drama = Math.max(0, S.drama - 40);
-      pop('SHE SAW THAT.', W / 2, 360, '#ff9aff', 44); Audio.sfx('bad');
+      pop('SHE SAW THAT.', W / 2, 360, '#ff9aff', 44); Audio.sfx('bad'); say('cheat');
     } else if (type === 'up' || type === 'cancel') barDrag = null;
   }
   function onKey(key, down) {
@@ -302,7 +342,7 @@
     if (key === 'ArrowUp' || key === 'r' || key === 'R' || key === 'Enter') press('roar');
   }
 
-  const API = { LEVELS, S, load, press, fireAt, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, LINES, S, load, press, fireAt, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   window.__game = API;
