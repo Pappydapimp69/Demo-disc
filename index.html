@@ -37,6 +37,8 @@
   @media (hover: none) { .arrow { display: none; } }
 
   /* ---------- splash: ZANEPAUL STUDIO ... STUPIDO ---------- */
+  #play { position: fixed; inset: 0; z-index: 30; width: 100%; height: 100%; border: 0; background: #000; display: none; }
+  #play.on { display: block; }
   #splash { position: fixed; inset: 0; z-index: 40; background: #000; display: grid; place-items: center; cursor: pointer; transition: opacity .5s; }
   #splash.gone { opacity: 0; }
   .logo { text-align: center; }
@@ -55,6 +57,7 @@
 </style></head>
 <body>
 <div id="rail"></div>
+<iframe id="play" title="Game"></iframe>
 <div class="top"><span class="title">DEMO DISC VOL.1</span><button id="snd" aria-label="Toggle sound">🔇 SOUND</button></div>
 <button class="arrow l" id="prev" aria-label="Previous game">◀</button>
 <button class="arrow r" id="next" aria-label="Next game">▶</button>
@@ -76,8 +79,9 @@
     { name: 'ONLY 1% CAN SAVE HIM', desc: 'Pull the pins. Save the knight.<br>Lose the gold. 3 levels.', href: 'games/only1/index.html', trailer: 'trailers/only1.mp4' },
     { name: 'STICK SWARM 3D', desc: 'Pick the gates. Grow the swarm.<br>Beat the giant. 3 levels.', href: 'games/stickswarm/index.html', trailer: 'trailers/stickswarm.mp4' },
     { name: 'PARKING JAM', desc: 'Get Gary out.<br>3 levels.', href: 'games/parkingjam/index.html', trailer: 'trailers/parkingjam.mp4' },
-    { name: 'HAIR SALON ASMR', desc: 'Pick the guard. Match the photo.<br>5 customers.', href: 'games/salon/index.html', trailer: 'trailers/salon.mp4' },
+    { name: 'HAIR SALON ASMR', desc: 'Just a trim.<br>5 levels.', href: 'games/salon/index.html', trailer: 'trailers/salon.mp4' },
     { name: 'BLOCKING', desc: 'Every seat sees every actor.<br>4 scenes.', href: 'games/blocking/index.html', trailer: 'trailers/blocking.mp4' },
+    { name: "THE BOSS'S BAD DAY", desc: 'Can you beat him?<br>3 levels.', href: 'games/boss/index.html', trailer: 'trailers/boss.mp4' },
   ];
 
   // ---------- audio blips (never block) ----------
@@ -124,7 +128,16 @@
   tiles.forEach(t => io.observe(t));
   function go(i) { i = Math.max(0, Math.min(tiles.length - 1, i)); rail.scrollTo({ left: i * rail.clientWidth, behavior: 'smooth' }); }
   let splashEnd = -1e9;
-  function launch(i) { if (!splashDone || performance.now() - splashEnd < 700) return; beep(990, .12); vids.forEach(v => v.pause()); setTimeout(() => { location.href = games[i].href; }, 120); }
+  // games open in a frame over the catalog: the page never reloads, so the tap that turned the sound on still counts when you come back
+  const frame = document.getElementById('play');
+  let inGame = false;
+  function launch(i) {
+    if (!splashDone || performance.now() - splashEnd < 700) return;
+    beep(990, .12); vids.forEach(v => v.pause());
+    inGame = true; frame.src = games[i].href; frame.classList.add('on'); setTimeout(() => frame.focus(), 50);
+  }
+  function closeGame() { if (!inGame) return; inGame = false; frame.classList.remove('on'); frame.src = 'about:blank'; window.focus(); focusTile(cur); }
+  window.addEventListener('message', e => { if (e.data && e.data.disc === 'back') closeGame(); });
   document.getElementById('prev').onclick = () => go(cur - 1);
   document.getElementById('next').onclick = () => go(cur + 1);
 
@@ -157,19 +170,17 @@
   function endSplash() {
     if (splashDone) return; splashDone = true; splashEnd = performance.now(); timers.forEach(clearTimeout);
     splash.classList.add('gone'); started = true; sound = true; paintSound(); beep(990, .1);
-    try { sessionStorage.setItem('disc-splash', '1'); } catch (_) {}
     focusTile(cur); setTimeout(() => splash.remove(), 600);
   }
   // the tap that ends the splash is the gesture that lets the ad play with sound; it must not fall through to a tile
   splash.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); endSplash(); });
-  let seen = false; try { seen = sessionStorage.getItem('disc-splash') === '1'; } catch (_) {}
-  if (seen) { splashDone = true; splash.remove(); started = true; paintSound(); }
   // any first touch, click or key brings the sound in if the browser held it back
   const wake = () => { if (sound && splashDone) { const v = vids[cur]; v.muted = false; v.play().catch(() => {}); } };
   ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, wake, { passive: true }));
 
   // ---------- keys + gamepad ----------
   window.addEventListener('keydown', e => {
+    if (inGame) return;
     if (!splashDone) { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') endSplash(); return; }
     if (e.key === 'ArrowRight') { go(cur + 1); e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { go(cur - 1); e.preventDefault(); }
@@ -178,7 +189,7 @@
   let prev = {}, stickT = 0;
   (function poll(t) {
     for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) {
-      if (!p) continue;
+      if (!p || inGame) continue;
       const press = (i, fn) => { const d = !!(p.buttons[i] && p.buttons[i].pressed); if (d && !prev[i]) fn(); prev[i] = d; };
       if (!splashDone) { press(0, endSplash); press(9, endSplash); continue; }
       press(14, () => go(cur - 1)); press(15, () => go(cur + 1)); press(0, () => launch(cur)); press(9, () => launch(cur));
@@ -190,7 +201,7 @@
   focusTile(0);
   window.__menu = {
     entries: games.flatMap(g => [{ href: g.href }, { href: g.trailer }]),
-    go, get cur() { return cur; }, get playing() { return playing; }, endSplash, get gagDone() { return gagDone; },
+    go, get cur() { return cur; }, get game() { return inGame ? frame.getAttribute('src') : null; }, closeGame, get playing() { return playing; }, endSplash, get gagDone() { return gagDone; },
     word: () => [...word.children].sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left)).map(s => s.textContent).join(''),
   };
 })();

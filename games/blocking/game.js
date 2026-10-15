@@ -197,7 +197,7 @@
   }
   function onPointer(type, x, y) {
     if (type === 'down') {
-      if (S.state === 'done') { location.href = '../../index.html'; return; }
+      if (S.state === 'done') { Engine.exit(); return; }
       if (S.state === 'win') { if (S.winT > 1.2) next(); return; }
       if (inBtn(x, y)) { curtain(); return; }
       const i = actorAt(x, y); if (i >= 0) { S.sel = i; S.drag = { i }; Audio.sfx('select'); }
@@ -207,7 +207,7 @@
   function cycle() { const n = S.L.actors.length; for (let k = 1; k <= n; k++) { const j = (S.sel + k) % n; if (!S.L.actors[j].fixed) { S.sel = j; break; } } Audio.sfx('select'); }
   function onKey(key, down) {
     if (!down) return;
-    if (S.state === 'done' && (key === 'Enter' || key === ' ')) { location.href = '../../index.html'; return; }
+    if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     if (S.state === 'win') { if (S.winT > 1.2 && (key === 'Enter' || key === ' ')) next(); return; }
     if (/^[1-9]$/.test(key)) { const j = +key - 1; if (S.L.actors[j] && !S.L.actors[j].fixed) S.sel = j; return; }
     if (key === 'Tab' || key === 'Enter') { cycle(); return; }

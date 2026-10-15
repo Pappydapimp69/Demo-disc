@@ -8,6 +8,14 @@
   const TICK_US = 16667; // 60 Hz
   const DT = TICK_US / 1e6;
 
+  // back to the disc: games run inside the catalog's frame, so ask it to close us (it keeps its sound on);
+  // opened on their own, they just navigate back
+  function exit() {
+    if (window.parent !== window) window.parent.postMessage({ disc: 'back' }, '*');
+    else location.href = '../../index.html';
+  }
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a.back'); if (a) { e.preventDefault(); exit(); } });
+
   function createGame(opts) {
     const { canvas, width, height, update, render, onPointer, onKey } = opts;
     const ctx = canvas.getContext('2d');
@@ -38,7 +46,7 @@
     }
     window.addEventListener('keydown', e => {
       Audio.unlock();
-      if (e.key === 'Escape') { location.href = '../../index.html'; return; }
+      if (e.key === 'Escape') { exit(); return; }
       onKey && onKey(e.key, true);
     });
     window.addEventListener('keyup', e => onKey && onKey(e.key, false));
@@ -59,13 +67,13 @@
     // ---- gamepad: poll every frame (browsers hide pads until a button press) ----
     const padPrev = {};
     function pollPad() {
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pads = []; try { pads = navigator.getGamepads ? navigator.getGamepads() : []; } catch (_) {} // a frame can be denied gamepad access
       for (const pad of pads) {
         if (!pad) continue;
         const map = { 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight', 0: 'Enter', 1: 'Escape', 9: 'Enter' };
         for (const [i, key] of Object.entries(map)) {
           const down = !!(pad.buttons[i] && pad.buttons[i].pressed), id = pad.index + ':' + i;
-          if (down !== !!padPrev[id]) { padPrev[id] = down; if (key === 'Escape' && down) location.href = '../../index.html'; else onKey && onKey(key, down); }
+          if (down !== !!padPrev[id]) { padPrev[id] = down; if (key === 'Escape' && down) exit(); else onKey && onKey(key, down); }
         }
         const ax = pad.axes[0] || 0, id = pad.index + ':ax';
         const dir = ax < -.5 ? 'ArrowLeft' : ax > .5 ? 'ArrowRight' : null;
@@ -163,5 +171,5 @@
   const back = x => { const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
   const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 
-  window.Engine = { createGame, Audio, Draw, ease, back, clamp, DT };
+  window.Engine = { createGame, exit, Audio, Draw, ease, back, clamp, DT };
 })();

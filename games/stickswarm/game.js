@@ -182,7 +182,7 @@
     if (type === 'down') {
       if (S.state === 'fail' && S.t - S.t0 > .5) { load(S.li); Audio.sfx('select'); return; }
       if (S.state === 'win' && S.winT > 4.6) { next(); return; }
-      if (S.state === 'done') { location.href = '../../index.html'; return; }
+      if (S.state === 'done') { Engine.exit(); return; }
       S.drag = { x0: x, X0: S.X };
     } else if (type === 'move' && S.drag) S.X = clamp(S.drag.X0 + (x - S.drag.x0) * 1.4, -ROAD + 30, ROAD - 30);
     else if (type === 'up' || type === 'cancel') S.drag = null;
@@ -190,7 +190,7 @@
   function next() { Audio.sfx('select'); if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; Audio.sfx('start'); } }
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
-    if (key === 'Enter' || key === ' ') { if (S.state === 'fail') load(S.li); else if (S.state === 'win' && S.winT > 4.6) next(); else if (S.state === 'done') location.href = '../../index.html'; }
+    if (key === 'Enter' || key === ' ') { if (S.state === 'fail') load(S.li); else if (S.state === 'win' && S.winT > 4.6) next(); else if (S.state === 'done') Engine.exit(); }
   }
 
   const API = { LEVELS, S, load, autopilot: null, step: n => game.step(n), get state() { return S.state; } };

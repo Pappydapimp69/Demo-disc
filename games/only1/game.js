@@ -246,7 +246,7 @@
   function next() { Audio.sfx('select'); if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; S.t0 = S.t; Audio.sfx('start'); } }
   function onKey(key, down) {
     if (!down) return;
-    if (key === 'Enter' || key === ' ') { if (S.state === 'fail') load(S.li); else if (S.state === 'win') next(); else if (S.state === 'done') location.href = '../../index.html'; }
+    if (key === 'Enter' || key === ' ') { if (S.state === 'fail') load(S.li); else if (S.state === 'win') next(); else if (S.state === 'done') Engine.exit(); }
     if ((key === 'h' || key === 'H') && S.state === 'fail' && S.fails[S.li] >= 3) startHint();
     const n = parseInt(key, 10); if (S.state === 'play' && n >= 1 && n <= S.pins.length + (S.lever ? 1 : 0)) act(n <= S.pins.length ? S.pins[n - 1].id : S.lever.id);
   }

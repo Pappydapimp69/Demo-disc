@@ -51,8 +51,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(shots, 'menu.png') });
   await page.mouse.click(270, 480);
-  await page.waitForURL(/stickswarm/, { timeout: 4000 }).catch(() => {});
-  check(page.url().includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
+  check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.frameLocator('#play').locator('a.back').click();
+  await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
+  check(!(await page.evaluate(() => window.__menu.game)) && page.url().endsWith('/index.html'), 'the game\'s back link returns to the catalog without reloading it');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
@@ -65,7 +68,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.waitForFunction(() => window.__menu && window.__menu.gagDone, null, { timeout: 8000 });
   await page.touchscreen.tap(195, 500);
   await page.waitForTimeout(1500);
-  check(page.url().endsWith('/index.html') && page.url().split('/').slice(-2)[0] !== 'only1', `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
+  check(page.url().endsWith('/index.html') && !(await page.evaluate(() => window.__menu.game)), `touch tap on splash stays on the catalog (${page.url().split('/').slice(-2).join('/')})`);
   await ctx.close();
 }
 
@@ -199,6 +202,20 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   const o = await page.evaluate(() => { const g = window.__game; g.load(1); const k = { ...g.S.pos[0] }; const moved = g.place(0, -3, 1); const q = g.S.pos[1]; const overlap = g.place(2, q.x, q.y); return { moved, overlap, k: g.S.pos[0].x === k.x && g.S.pos[0].y === k.y }; });
   check(!o.moved && o.k && !o.overlap, 'blocking: the king stays on his throne and actors cannot stand inside each other');
   check(errors.length === 0, `blocking runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
+// ---------- THE BOSS'S BAD DAY ----------
+{
+  const { page, errors } = await open('games/boss/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) for (const [pol, want] of [['good', 'win'], ['brute', 'fail'], [null, 'fail']]) {
+    await page.evaluate(([i, pol]) => { window.__game.load(i); window.__game.autopilot = pol; }, [i, pol]);
+    await runUntil(page, () => window.__game.state !== 'play', 3000, 60);
+    const st = await page.evaluate(() => ({ s: window.__game.state, r: window.__game.S.reason }));
+    check(st.s === want, `boss L${i + 1} ${pol || 'idle'} -> ${st.s} ${st.r}`);
+  }
+  check(errors.length === 0, `boss runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
 

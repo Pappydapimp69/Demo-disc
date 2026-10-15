@@ -213,7 +213,7 @@
       Audio.unlock();
       if (S.state === 'fail' && S.t - S.t0 > .5) { load(S.li); return; }
       if (S.state === 'win' && S.winT > 1.2) { next(); return; }
-      if (S.state === 'done') { location.href = '../../index.html'; return; }
+      if (S.state === 'done') { Engine.exit(); return; }
       const i = cellAt(x, y); if (i < 0) return;
       S.cursor = i;
       if (S.sel >= 0 && S.sel !== i) { const a = S.sel; S.sel = -1; trySwap(a, i); if (S.phase === 'idle') S.sel = i; return; }
@@ -231,7 +231,7 @@
     if (!down) return;
     if (S.state === 'fail' && (key === 'Enter' || key === ' ')) { load(S.li); return; }
     if (S.state === 'win' && S.winT > 1.2 && (key === 'Enter' || key === ' ')) { next(); return; }
-    if (S.state === 'done' && (key === 'Enter' || key === ' ')) { location.href = '../../index.html'; return; }
+    if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     const c = S.cursor % COLS, r = (S.cursor / COLS) | 0;
     const mv = { ArrowLeft: c > 0 ? -1 : 0, ArrowRight: c < COLS - 1 ? 1 : 0, ArrowUp: r > 0 ? -COLS : 0, ArrowDown: r < ROWS - 1 ? COLS : 0 }[key];
     if (mv !== undefined) { if (S.sel >= 0) { trySwap(S.sel, S.sel + mv); S.sel = -1; } S.cursor += mv; return; }
