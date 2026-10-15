@@ -169,6 +169,33 @@ if (fs.existsSync(path.join(root, 'games/stickswarm/game.js'))) {
   await page.close();
 }
 
+// ---------- BLOCKING ----------
+{
+  const { page, errors } = await open('games/blocking/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    // the opening layout (everyone in a line) is blocked, so CURTAIN UP refuses it
+    await page.evaluate(i => { window.__game.load(i); window.__game.curtain(); }, i);
+    const st0 = await page.evaluate(() => ({ s: window.__game.state, p: window.__game.S.ev.pairs }));
+    check(st0.s === 'play' && st0.p > 0, `blocking L${i + 1} opening layout is blocked (${st0.p} sightlines) and the curtain refuses it`);
+    await page.screenshot({ path: path.join(shots, `blocking-L${i + 1}-start.png`) });
+    // the stated solution clears every seat and every rule
+    await page.evaluate(i => { const g = window.__game; g.load(i); g.arrange(g.LEVELS[i].solution); g.curtain(); }, i);
+    await runUntil(page, () => false, 90);
+    const st = await page.evaluate(() => ({ s: window.__game.state, p: window.__game.S.ev.pairs, r: window.__game.S.ev.rules.map(r => r.ok) }));
+    await page.screenshot({ path: path.join(shots, `blocking-L${i + 1}-solved.png`) });
+    check(st.s === 'win', `blocking L${i + 1} solution wins (${st.s}, ${st.p} blocked, rules ${st.r})`);
+  }
+  // the lesson: a tight stagger blocks nearly as much as the straight line
+  const t = await page.evaluate(() => { const g = window.__game; g.load(2); const line = g.S.ev.pairs; g.arrange(g.LEVELS[2].tight); return { line, tight: g.S.ev.pairs }; });
+  check(t.tight > 0 && t.tight >= t.line * .8, `blocking: a 0.25 m nudge still blocks ${t.tight} of the line's ${t.line} sightlines`);
+  // bodies can't overlap and fixed actors don't move
+  const o = await page.evaluate(() => { const g = window.__game; g.load(1); const k = { ...g.S.pos[0] }; const moved = g.place(0, -3, 1); const q = g.S.pos[1]; const overlap = g.place(2, q.x, q.y); return { moved, overlap, k: g.S.pos[0].x === k.x && g.S.pos[0].y === k.y }; });
+  check(!o.moved && o.k && !o.overlap, 'blocking: the king stays on his throne and actors cannot stand inside each other');
+  check(errors.length === 0, `blocking runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);

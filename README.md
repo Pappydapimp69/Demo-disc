@@ -11,12 +11,14 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **ONLY 1% CAN SAVE HIM** | Pin puzzle with real liquid physics: lava + water = stone, lava melts gold, lava on the knight = FAIL. 3 levels. Fail a level 3 times and the knight gives up on you and solves it himself. |
 | **PLAY** | **STICK SWARM 3D** | Crowd runner: steer through math gates, dodge saws, out-number the giant. 3 levels. Winning has a price. |
 | **PLAY** | **PARKING JAM** | The ad: Gary unjams a parking lot, then the planet. The game: a gem match-3 with no cars in it. 3 levels. |
+| **PLAY** | **BLOCKING** | Stage-blocking puzzle: drag the actors so every seat in the house sees every actor. Seats go red while a sightline is cut. A small nudge isn't a stagger. 4 scenes, the last on a thrust stage. |
 | **PLAY** | **HAIR SALON ASMR** | Drag the clippers. Each level's clippings become the next level's hair: customer, salon, dog, town, Earth. 5 levels. |
 
 
 ## Controls
 - **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
+- **Blocking:** drag an actor, or `1`–`4` / Enter to pick one and arrows to walk them. Space or the button raises the curtain.
 - **Stick Swarm:** drag left/right, or ← → / A D, or the gamepad stick.
 - **Esc** in any game returns to the disc menu.
 
@@ -26,6 +28,7 @@ index.html            splash + swipeable game tiles (touch, keyboard, gamepad)
 shared/engine.js      fixed-timestep loop, unified input, Web Audio synth, test hook
 games/only1/          pin puzzle (particle liquids)
 games/stickswarm/     crowd runner (pseudo-3D)
+games/blocking/       stage-blocking sightline puzzle
 trailers/             the spoof ads (mp4) + poster frames
 tests/smoke.mjs       boot + completability tests (Playwright)
 ```
@@ -38,4 +41,5 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every menu entry resolves
 - every pin-puzzle level is won by its solution, lost by each trap, and solved by the knight's hint
 - every runner level is won by best-gate play and lost by worst-gate play
+- every blocking scene refuses its opening layout and is won by its solution
 - nothing logs an error
