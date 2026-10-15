@@ -466,6 +466,31 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- LOBBY (the ad is a ten-million-player battle royale; the game is the matchmaking terminal) ----------
+{
+  const { page, errors } = await open('games/lobby/index.html');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    const r = await page.evaluate(i => { const g = window.__game; const out = {};
+      for (const pol of ['smart', 'fifo']) { g.load(i); g.autopilot = pol; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10); out[pol] = g.result(); }
+      g.load(i); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10); return out; }, i);
+    await page.screenshot({ path: path.join(shots, `lobby-S${i + 1}-report.png`) });
+    check(r.smart.pass && r.smart.happy > r.fifo.happy, `lobby shift ${i + 1}: waiting for fair lobbies passes (${r.smart.happy} happy, ${r.smart.quits} quits); first-come matching doesn't beat it (${r.fifo.happy} happy)`);
+  }
+  const law = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[4]; g.load(4); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
+    return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(4).length }; });
+  check(law.served <= law.cap && law.arrived > law.cap, `lobby launch day: three servers cap the shift at ${law.cap} players however you play (served ${law.served} of ${law.arrived})`);
+  const v = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[2], p = (skill, reg, at) => ({ skill, reg, at });
+    return [g.tol(0), g.tol(16), g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 0, L).happy, g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 16, L).happy, g.verdict([p(4, 'EU', 0), p(4, 'NA', 0), p(4, 'EU', 0), p(4, 'EU', 0)], 30, L).happy]; });
+  check(v.join() === '1,3,0,4,0', `lobby rules: the window widens with waiting and mixed regions please nobody (${v.join()})`);
+  const party = await page.evaluate(() => { const g = window.__game; g.load(3); g.start(); g.step(60); g.step(1500); const p = g.S.queue.find(q => q.party); if (!p) return 'none'; g.toggle(p); return g.S.sel.size; });
+  check(party === 2, `lobby: tapping one party member selects the whole party (${party})`);
+  await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'lobby: an accidental tap as the shift opens is ignored');
+  check(errors.length === 0, `lobby runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 // ---------- FARO (the ad is a casino; the game is a perfect-shuffle puzzle) ----------
 {
   const { page, errors } = await open('games/faro/index.html');
