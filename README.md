@@ -84,3 +84,7 @@ IQ Test 2026 and Pop It are real experiments, built so Brain can learn from play
 event log on the player's device only, and the end screen's SEND MY DATA saves it as a JSON file (or copies it).
 Nothing is sent anywhere automatically. `?lab-miss=reset|drop` or `?lab-juice=on|off` pins a condition for testing.
 
+
+## Play stats
+
+The disc counts anonymously, with no cookies and no ids: which ads get watched and for how long (`ad/<game>/2-5s|5-15s|15s+|full`), which get played (`play/<game>`), wins and losses inside a game (`game/<game>/win|fail`), and time played (`time/<game>/under-10s|10-60s|1-5min|5min+`), plus `start` when someone opens the disc. Set `GC_CODE` in `shared/stats.js` to a free [GoatCounter](https://www.goatcounter.com) site code to collect them; until then they stay in the browser's localStorage (`disc.stats`).

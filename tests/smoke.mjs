@@ -53,9 +53,15 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 480);
   await page.waitForFunction(() => window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(((await page.evaluate(() => window.__menu.game)) || '').includes('games/stickswarm/'), 'tapping a tile opens its game');
+  await page.frames().find(f => f.url().includes('stickswarm')).evaluate(() => Engine.track('win'));
+  await page.waitForTimeout(200);
   await page.frameLocator('#play').locator('a.back').click();
   await page.waitForFunction(() => !window.__menu.game, null, { timeout: 4000 }).catch(() => {});
   check(!(await page.evaluate(() => window.__menu.game)) && page.url().endsWith('/index.html'), 'the game\'s back link returns to the catalog without reloading it');
+  const stats = await page.evaluate(() => window.__menu.stats());
+  check(['start', 'play/stickswarm', 'game/stickswarm/win', 'time/stickswarm/under-10s'].every(p => stats.includes(p)) && stats.some(p => /^ad\/stickswarm\//.test(p)),
+    `stats record the funnel: ${stats.join(', ')}`);
+  check(!(await page.evaluate(() => Stats.live)), 'stats stay local when run from a file (nothing is sent)');
   check(errors.length === 0, `menu boots without errors ${errors.join(' | ')}`);
   await page.close();
 }
@@ -501,9 +507,21 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
 {
   const { page, errors } = await open('games/stonewake/index.html');
   for (const [r, boss, allies, lv] of [['forest', 'gforest', [], 1], ['cave', 'gcave', ['knight'], 3], ['desert', 'gdesert', ['knight', 'mage'], 5]]) {
-    const res = await page.evaluate(([r, boss, allies, lv]) => { const g = window.__game; g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.setLevel(lv); g.autopilot = 'perfect'; g.startBattle([boss], 'boss'); for (let k = 0; k < 6000 && g.S.mode === 'battle'; k++) g.step(10); return { mode: g.state, shards: g.G.shards, n: g.G.party.length }; }, [r, boss, allies, lv]);
-    check(res.mode === 'map' && res.shards === 1 && res.n === allies.length + 2, `stonewake ${r}: the golem falls to timed hits, shard + companion (${JSON.stringify(res)})`);
+    const res = await page.evaluate(([r, boss, allies, lv]) => { const g = window.__game; g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.G.shards = allies.length; g.setLevel(lv); g.autopilot = 'perfect'; g.startBattle([boss], 'boss'); for (let k = 0; k < 6000 && g.S.mode === 'battle'; k++) g.step(10); return { mode: g.state, shards: g.G.shards, n: g.G.party.length }; }, [r, boss, allies, lv]);
+    check(res.mode === 'map' && res.shards === allies.length + 1 && res.n === allies.length + 2, `stonewake ${r}: the golem falls to timed hits, shard + companion (${JSON.stringify(res)})`);
   }
+  // tactics matter: tapping FIGHT with perfect timing cannot break the crystal golem's shell; the counter (SHARD STRIKE) can
+  const shellTest = await page.evaluate(() => { const g = window.__game, out = {}; for (const auto of ['fightonly', 'perfect']) { g.newGame(); g.finish(); g.enterRegion('cave'); g.finish(); g.recruit('knight'); g.G.shards = 1; g.setLevel(3); g.autopilot = auto; g.startBattle(['gcave'], 'boss'); for (let k = 0; k < 9000 && g.S.mode === 'battle' && !['win', 'lose'].includes(g.S.battle.phase); k++) g.step(10); out[auto] = g.S.battle ? g.S.battle.phase : g.S.mode; } return out; });
+  check(shellTest.fightonly === 'lose' && shellTest.perfect === 'win', `stonewake: the crystal golem needs its counter (${JSON.stringify(shellTest)})`);
+  // things to find: a chest, a secret, the one-night campfire
+  const finds = await page.evaluate(() => { const g = window.__game; g.newGame(); g.finish(); g.autopilot = null; g.enterRegion('forest'); g.finish(); const p0 = g.G.items.POTION;
+    const walk = (x, y) => { g.S.hero.x = x; g.S.hero.y = y; g.S.hero.px = x; g.S.hero.py = y; g.S.hero.k = 1; };
+    walk(2, 8); g.S.keys.ArrowLeft = true; g.step(20); g.S.keys.ArrowLeft = false; g.finish(); const chest = g.G.items.POTION - p0;
+    walk(6, 15); g.S.keys.ArrowRight = true; g.step(20); g.S.keys.ArrowRight = false; g.finish(); const charm = !!g.G.gear.iron;
+    for (const m of g.G.party) m.hp = 1; walk(7, 10); g.S.keys.ArrowUp = true; g.step(20); g.S.keys.ArrowUp = false; g.finish(); const healed = g.G.party[0].hp;
+    for (const m of g.G.party) m.hp = 1; walk(7, 10); g.S.keys.ArrowUp = true; g.step(20); g.S.keys.ArrowUp = false; g.finish(); const second = g.G.party[0].hp;
+    return { chest, charm, healed, second }; });
+  check(finds.chest === 2 && finds.charm && finds.healed > 1 && finds.second === 1, `stonewake: chest, secret and a one-night campfire (${JSON.stringify(finds)})`);
   for (const [choice, want] of [[0, 'fell'], [1, 'sleeps']]) {
     const res = await page.evaluate(choice => { const g = window.__game; g.newGame(); g.finish(); ['knight', 'mage', 'archer'].forEach(a => g.recruit(a)); g.G.shards = 3; g.setLevel(7); g.enterRegion('titan'); g.finish(); g.autopilot = 'perfect'; g.pickChoice(choice); for (let k = 0; k < 8000 && g.S.mode !== 'ending' && g.S.mode !== 'over'; k++) g.step(10); return g.S.ending && g.S.ending.which; }, choice);
     check(res === want, `stonewake finale ${choice ? 'CALM' : 'FIGHT'} -> ending "${res}"`);

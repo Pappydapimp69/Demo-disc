@@ -75,6 +75,7 @@
   </div>
 </div>
 
+<script src="shared/stats.js"></script>
 <script>
 (function () {
   'use strict';
@@ -124,6 +125,30 @@
   const vids = tiles.map(t => t.querySelector('video'));
   let cur = 0, started = false, playing = -1;
 
+  // ---------- stats: which ads get watched, which get played, and for how long ----------
+  const slug = i => games[i].href.split('/')[1];
+  const AD_CUTS = [[2, null], [5, '2-5s'], [15, '5-15s'], [Infinity, '15s+']];
+  const GAME_CUTS = [[10, 'under-10s'], [60, '10-60s'], [300, '1-5min'], [Infinity, '5min+']];
+  let adI = -1, adT0 = 0, adLooped = false, gameI = -1, gameT0 = 0;
+  function adEnd(played) {   // a swipe past in under 2 s isn't a view; a tap to play always is
+    if (adI < 0) return;
+    const s = (performance.now() - adT0) / 1000, b = adLooped ? 'full' : Stats.bucket(s, AD_CUTS) || (played ? '0-2s' : null);
+    if (b) Stats.event(`ad/${slug(adI)}/${b}`, `${games[adI].name} ad: ${b}`);
+    adI = -1;
+  }
+  function adStart(i) { adEnd(); adI = i; adT0 = performance.now(); adLooped = false; }
+  function gameEnd() {
+    if (gameI < 0) return;
+    const b = Stats.bucket((performance.now() - gameT0) / 1000, GAME_CUTS);
+    Stats.event(`time/${slug(gameI)}/${b}`, `${games[gameI].name}: played ${b}`); gameI = -1;
+  }
+  vids.forEach((v, i) => {
+    let last = 0;
+    v.addEventListener('timeupdate', () => { if (i === adI && v.currentTime + .5 < last) adLooped = true; last = v.currentTime; });
+  });
+  addEventListener('pagehide', () => { adEnd(); gameEnd(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { adEnd(); gameEnd(); } else if (!inGame && started) adStart(cur); });
+
   // only the centred tile's ad plays; the rest pause and rewind
   function focusTile(i) {
     cur = i;
@@ -131,6 +156,7 @@
     vids.forEach((v, j) => {
       if (j !== i) { v.pause(); v.currentTime = 0; return; }
       if (!started) return;
+      if (adI !== i) adStart(i);
       playing = i;
       v.muted = !sound;
       v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); // browser blocked sound until a gesture: play silent for now, the next touch unmutes
@@ -148,10 +174,15 @@
   function launch(i) {
     if (!splashDone || performance.now() - splashEnd < 700) return;
     beep(990, .12); vids.forEach(v => v.pause());
+    adEnd(true); Stats.event(`play/${slug(i)}`, `${games[i].name}: tapped play`); gameI = i; gameT0 = performance.now();
     inGame = true; frame.src = games[i].href; frame.classList.add('on'); setTimeout(() => frame.focus(), 50);
   }
-  function closeGame() { if (!inGame) return; inGame = false; frame.classList.remove('on'); frame.src = 'about:blank'; window.focus(); focusTile(cur); }
-  window.addEventListener('message', e => { if (e.data && e.data.disc === 'back') closeGame(); });
+  function closeGame() { if (!inGame) return; gameEnd(); inGame = false; frame.classList.remove('on'); frame.src = 'about:blank'; window.focus(); focusTile(cur); }
+  window.addEventListener('message', e => {
+    if (!e.data) return;
+    if (e.data.disc === 'back') closeGame();
+    else if (e.data.disc === 'track' && gameI >= 0 && /^[\w-]{1,40}$/.test(e.data.name)) Stats.event(`game/${slug(gameI)}/${e.data.name}`, `${games[gameI].name}: ${e.data.name}`);
+  });
   document.getElementById('prev').onclick = () => go(cur - 1);
   document.getElementById('next').onclick = () => go(cur + 1);
 
@@ -183,7 +214,7 @@
   at(3800, () => document.getElementById('tap').classList.add('on'));
   function endSplash() {
     if (splashDone) return; splashDone = true; splashEnd = performance.now(); timers.forEach(clearTimeout);
-    splash.classList.add('gone'); started = true; sound = true; paintSound(); beep(990, .1);
+    splash.classList.add('gone'); started = true; Stats.event('start', 'opened the disc'); sound = true; paintSound(); beep(990, .1);
     focusTile(cur); setTimeout(() => splash.remove(), 600);
   }
   // the tap that ends the splash is the gesture that lets the ad play with sound; it must not fall through to a tile
@@ -215,6 +246,7 @@
   focusTile(0);
   window.__menu = {
     entries: games.flatMap(g => [{ href: g.href }, { href: g.trailer }]),
+    stats: () => Stats.sent.map(e => e.path),
     go, get cur() { return cur; }, get game() { return inGame ? frame.getAttribute('src') : null; }, closeGame, get playing() { return playing; }, endSplash, get gagDone() { return gagDone; },
     word: () => [...word.children].sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left)).map(s => s.textContent).join(''),
   };
