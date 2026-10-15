@@ -425,6 +425,28 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- STONEWAKE ----------
+{
+  const { page, errors } = await open('games/stonewake/index.html');
+  for (const [r, boss, allies, lv] of [['forest', 'gforest', [], 1], ['cave', 'gcave', ['knight'], 3], ['desert', 'gdesert', ['knight', 'mage'], 5]]) {
+    const res = await page.evaluate(([r, boss, allies, lv]) => { const g = window.__game; g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.setLevel(lv); g.autopilot = 'perfect'; g.startBattle([boss], 'boss'); for (let k = 0; k < 6000 && g.S.mode === 'battle'; k++) g.step(10); return { mode: g.state, shards: g.G.shards, n: g.G.party.length }; }, [r, boss, allies, lv]);
+    check(res.mode === 'map' && res.shards === 1 && res.n === allies.length + 2, `stonewake ${r}: the golem falls to timed hits, shard + companion (${JSON.stringify(res)})`);
+  }
+  for (const [choice, want] of [[0, 'fell'], [1, 'sleeps']]) {
+    const res = await page.evaluate(choice => { const g = window.__game; g.newGame(); g.finish(); ['knight', 'mage', 'archer'].forEach(a => g.recruit(a)); g.G.shards = 3; g.setLevel(7); g.enterRegion('titan'); g.finish(); g.autopilot = 'perfect'; g.pickChoice(choice); for (let k = 0; k < 8000 && g.S.mode !== 'ending' && g.S.mode !== 'over'; k++) g.step(10); return g.S.ending && g.S.ending.which; }, choice);
+    check(res === want, `stonewake finale ${choice ? 'CALM' : 'FIGHT'} -> ending "${res}"`);
+  }
+  // tap-to-walk: tapping a tile walks the hero there
+  const walked = await page.evaluate(() => { const g = window.__game; g.newGame(); g.finish(); g.S.cut && (g.S.cut.t = 6.6); g.step(2); g.finish(); return true; });
+  const box = await page.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  await page.mouse.click(box.x + (3 * 12 + 6) / 180 * box.w, box.y + (36 + 18 * 12 + 6) / 320 * box.h);
+  await runUntil(page, () => false, 120, 30);
+  const hero = await page.evaluate(() => [window.__game.S.hero.x, window.__game.S.hero.y]);
+  check(walked && hero[0] === 3 && hero[1] === 18, `stonewake: tapping a tile walks there (${hero})`);
+  check(errors.length === 0, `stonewake runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
