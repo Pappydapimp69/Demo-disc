@@ -179,6 +179,15 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const r = await page.evaluate(() => ({ s: window.__game.state, stars: window.__game.S.result.stars, all: window.__game.S.result.all }));
     check(r.s === 'result' && r.stars >= 2, `salon L${i + 1} cut to the order earns ${r.stars} stars (${Math.round(r.all * 100)}% to style)`);
   }
+  // a tap right after a stage change is ignored; once the pause is over it counts
+  await page.evaluate(() => window.__game.load(0));
+  await page.mouse.click(180, 300);
+  const early = await page.evaluate(() => window.__game.S.rit.n);
+  await runUntil(page, () => false, 45);
+  await page.mouse.click(180, 300);
+  const later = await page.evaluate(() => window.__game.S.rit.n);
+  check(early === 0 && later === 1, `salon: an accidental tap during a stage change doesn't count (${early} then ${later})`);
+
   // the chair: stamping the pedal sputters, timed strokes lift, overshooting has to be bled off, and it locks only in the green
   const ch = await page.evaluate(() => { const g = window.__game; g.load(0); g.S.rit.i = 1; g.S.capeTo = 1;
     for (let k = 0; k < 5; k++) g.tap(); const stamped = g.S.h;

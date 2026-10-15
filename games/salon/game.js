@@ -168,7 +168,11 @@
     prep: [{ id: 'cape', taps: 1, text: 'TAP TO PUT ON THE CAPE' }, { id: 'pump', taps: 1, text: 'PUMP TO THE GREEN · HOLD IT' }, { id: 'spray', taps: 3, text: 'TAP TO SPRAY THE HAIR' }],
     finish: [{ id: 'brush', taps: 3, text: 'TAP TO BRUSH OFF THE NECK' }, { id: 'capeoff', taps: 1, text: 'TAP TO TAKE OFF THE CAPE' }, { id: 'clean', taps: 4, text: 'TAP TO CLEAN THE CLIPPERS' }],
   };
-  function startRitual(kind) { S.rit = { kind, i: 0, n: 0, t: 9 }; }
+  // every stage change ignores input for a beat, so a tap meant for the last step can't land on the next one
+  const PAUSE = .6;
+  function pause() { S.lockUntil = S.t + PAUSE; S.down = false; S.releasing = false; motor(false); }
+  const paused = () => S.t < S.lockUntil;
+  function startRitual(kind) { S.rit = { kind, i: 0, n: 0, t: 9 }; pause(); }
   function ritTap() {
     const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st || R.n >= st.taps) return;
     if (st.id === 'pump') { pumpTap(); return; }
@@ -213,7 +217,7 @@
     else if (API.autopilot && R.t > .25) ritTap();
     if (R.n >= st.taps && R.t > .5) {
       if (st.id === 'pump') S.settle = true;   // from here on the chair sits at working height
-      R.i++; R.n = 0; R.t = 9;
+      R.i++; R.n = 0; R.t = 9; pause();
       if (R.i >= list.length) {
         if (R.kind === 'prep') { S.state = 'play'; S.lt = 0; }
         else { S.state = 'result'; S.resT = 0; if (S.result.stars && Cozy.on) Cozy.chime(); else Audio.sfx(S.result.stars ? 'win' : 'fail'); }
@@ -222,7 +226,7 @@
   }
 
   // ---------- state ----------
-  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false, rit: null, cape: 0, capeTo: 0, h: 0, hv: 0, settle: false, releasing: false, pump: null, mist: [], brushT: 9 };
+  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false, rit: null, lockUntil: 0, cape: 0, capeTo: 0, h: 0, hv: 0, settle: false, releasing: false, pump: null, mist: [], brushT: 9 };
   function load(i) {
     Object.assign(S, { li: i, L: LEVELS[i], strands: deal(i), bits: [], equipT: 9, lt: 0,   // the guard stays on between customers
       state: 'prep', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false, cape: 0, capeTo: 0, h: 0, hv: 0, settle: false, releasing: false, pump: { pedalT: 9, lockT: 0, locked: false, n: 0, hissT: 0 }, mist: [], brushT: 9 });
@@ -258,7 +262,7 @@
     S.result = score(); S.state = 'finish'; S.down = false; motor(false);   // score the cut, then tidy up before the verdict
     startRitual('finish');
   }
-  function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else S.state = 'done'; }
+  function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; pause(); } }
 
   // test autopilot: longest guard first, never letting the head touch a zone that wants longer hair
   function autopilot() {
@@ -367,11 +371,13 @@
     }
     // the prompt
     const steps = RITUALS[R.kind];
+    cx.globalAlpha = paused() ? .25 + .75 * (1 - (S.lockUntil - S.t) / PAUSE) : 1;
     cx.fillStyle = '#000c'; rr(50, 1080, 620, 160, 26); cx.fill();
     cx.font = '800 22px system-ui'; cx.textAlign = 'center'; cx.fillStyle = '#ffe14a';
     cx.fillText(`${R.kind === 'prep' ? 'GETTING READY' : 'FINISHING UP'} · ${R.i + 1}/${steps.length}`, W / 2, 1118);
     Draw.bigText(cx, st.text, W / 2, 1160, 32, '#fff');
     for (let i = 0; i < st.taps; i++) { cx.fillStyle = i < R.n ? '#4ad05a' : '#ffffff44'; circ(W / 2 + (i - (st.taps - 1) / 2) * 34, 1210, 10); }
+    cx.globalAlpha = 1;
   }
   const hairCol = s => `hsl(${20 + S.L.hair}, 50%, ${14 + s.c * 22}%)`;
   function hairDraw() {
@@ -497,6 +503,7 @@
   const RES = { next: { x: 190, y: 1060, w: 340, h: 80 }, retry: { x: 250, y: 1160, w: 220, h: 64 } };
   function proceed(retry) { if (S.resT < 1) return; if (retry) load(S.li); else next(); }
   function onPointer(type, x, y) {
+    if (type === 'down' && paused()) return;
     if (S.state === 'done') { if (type === 'down') Engine.exit(); return; }
     if (S.state === 'result') { if (type === 'down') proceed(hit(RES.retry, x, y)); return; }
     if (S.state === 'prep' || S.state === 'finish') {
@@ -516,7 +523,7 @@
   function onKey(key, down) {
     S.keys[key] = down;
     if (key === 'ArrowDown' || key === 'Shift') S.releasing = down && S.state === 'prep';   // hold to bleed the chair down
-    if (!down) return;
+    if (!down || paused()) return;
     if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     if (S.state === 'result') { if (key === 'Enter' || key === ' ') proceed(false); else if (key === 'r' || key === 'R') proceed(true); return; }
     if (S.state === 'prep' || S.state === 'finish') { if (key === 'Enter' || key === ' ') ritTap(); return; }
