@@ -383,6 +383,30 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- FARO (the ad is a casino; the game is a perfect-shuffle puzzle) ----------
+{
+  const { page, errors } = await open('games/faro/index.html');
+  const m = await page.evaluate(() => { const g = window.__game, id = d => d.every((c, i) => c === i);
+    let d = g.newDeck(52), outs = 0; do { d = g.outFaro(d); outs++; } while (!id(d));
+    d = g.newDeck(52); let ins = 0; do { d = g.inFaro(d); ins++; } while (!id(d));
+    let wrong = 0, notShortest = 0; for (let p = 1; p < 52; p++) { let e = g.newDeck(52); for (const s of g.binary(p)) e = s === 'in' ? g.inFaro(e) : g.outFaro(e); if (e[p] !== 0) wrong++; if (g.plan(0, p, 52).length < g.binary(p).length) notShortest++; }
+    return { outs, ins, wrong, notShortest }; });
+  check(m.outs === 8 && m.ins === 52, `faro: 8 out faros restore 52 cards, in faros need ${m.ins}`);
+  check(m.wrong === 0 && m.notShortest === 0, 'faro: writing the position in binary (1 = in, 0 = out) puts the top card there, in the fewest shuffles, for every position');
+  const n = await page.evaluate(() => window.__game.LEVELS.length);
+  for (let i = 0; i < n; i++) {
+    await page.evaluate(i => { window.__game.load(i); window.__game.autopilot = 'solve'; }, i);
+    await runUntil(page, () => window.__game.state === 'win', 1200, 30);
+    const st = await page.evaluate(() => ({ s: window.__game.state, m: window.__game.S.moves, par: window.__game.S.par }));
+    await page.screenshot({ path: path.join(shots, `faro-L${i + 1}-win.png`) });
+    check(st.s === 'win' && st.m === st.par, `faro hand ${i + 1} solved at par (${st.m}/${st.par})`);
+  }
+  await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
+  check(await page.evaluate(() => window.__game.state === 'intro'), 'faro: an accidental tap as the hand opens is ignored');
+  check(errors.length === 0, `faro runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);

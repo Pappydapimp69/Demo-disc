@@ -20,12 +20,14 @@ Open `index.html` in a browser (no build step, no dependencies), or serve the fo
 | **PLAY** | **VEER** | The ad: a bright draw-the-path puzzle. The game: you and a friend are separated in fog, and you find them by ear. Whistle, listen for the answer (panned, fainter with distance, duller through trees), walk. With no sun you drift in circles without feeling it; a whistle carries 1.3 km in the open but ~150 m in deep woods. 7 levels. |
 | **PLAY** | **EMBERS** | The ad: tap the fire, grow the fire, scare the wolves. The game: a night watch where the fire is the danger. Your eyes take minutes to adjust to the dark; a glance at the fire costs about 2 night-minutes of sight, a stare about 17. Warm your hands too little and you freeze, too long and you are blind when they come. A red torch shows only what is close and costs no sight. 5 nights. |
 | **PLAY** | **GOING UP** | The ad: stack the tallest tower. The game: run the lifts inside it. Tap a lift, tap a floor; doors open, people get on and off, their floors light up. Always going to the nearest request keeps the busy floors happy and strands the far floor until they take the stairs; a sweep bounds everyone's wait. AUTO switches run either rule (and cap you at two stars). 5 days. |
+| **PLAY** | **FARO** | The ad: find the ace, hit the jackpot. The game: a quiet puzzle of perfect shuffles. OUT keeps the top card on top, IN tucks it to second; send the ace to the gold slot (write the position in binary: 1 = IN, 0 = OUT), and put a 52-card deck back in order (eight OUT faros do it). 5 hands. |
 
 
 ## Controls
 - **Menu:** swipe or ← → to change game, tap / Enter / A to play.
 - **Only 1%:** tap a pin or the lever. Keys `1`–`3` pull pins in order. Enter retries, `H` asks the knight for help after 3 fails.
 - **Hair Salon:** tap through each ritual step (chair: tap to pump, hold RELEASE or ↓ to lower), then drag to shave. Tap a guard in the tray, or keys `0`–`8` / Tab. Enter or DONE finishes the cut.
+- **Faro:** tap OUT or IN. Keys: O/← out, I/→ in, U undo, R reset.
 - **Going Up:** tap a lift to pick it, tap a floor to send it; AUTO buttons run a rule. Keys: ↑ ↓ send, Tab switch lift, N/S/M rules.
 - **Embers:** drag to look around, tap what you see, hold WARM HANDS to look at the fire, RED TORCH toggles. Keys: ← → look, ↓ warm, Space shoo, T torch.
 - **Veer:** hold to walk, drag sideways to turn, tap WHISTLE. Keys: ↑/W walk, ← → turn, Space whistle. Headphones help.
@@ -43,6 +45,7 @@ games/blocking/       stage-blocking sightline puzzle
 games/veer/           foggy walk-and-whistle game
 games/embers/         night-watch survival with dark adaptation
 games/goingup/        elevator dispatch
+games/faro/           perfect-shuffle card puzzle
 trailers/             the spoof ads (mp4) + poster frames
 tests/smoke.mjs       boot + completability tests (Playwright)
 ```
@@ -56,6 +59,7 @@ Steps each game's simulation directly through `window.__game` (no real-time wait
 - every pin-puzzle level is won by its solution, lost by each trap, and solved by the knight's hint
 - every stick swarm level deals a solvable board and is sorted by the solver's moves
 - every salon customer is satisfied by cutting to their order, each guard leaves its own length, and a too-short cut scores no stars but still moves on
+- every faro hand is solved at par, and the binary rule and restore counts check out
 - every going-up day is finished by the sweep rule, and nearest-first strands the top floor
 - every embers night is survived by medium looks at the fire, while only-glancing freezes and staring gets hurt
 - every veer level is found by an autopilot that only whistles, listens and walks (and the sound and drift models check out)
