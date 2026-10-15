@@ -34,11 +34,11 @@
 
   // each level names the guard per zone; zones not split share one key
   const LEVELS = [
-    { name: 'BUZZ CUT', who: 'DEV', skin: '#f2c79a', hair: 28, style: { top: '3', mid: '3', low: '3' }, labels: { top: 'ALL OVER' }, ask: 'Number three all over.' },
-    { name: 'THE TRIM', who: 'ROSA', skin: '#c88a5a', hair: 10, style: { top: '8', mid: '8', low: '8' }, labels: { top: 'ALL OVER' }, ask: 'Just a little off. Eight all over.' },
-    { name: 'SHORT BACK & SIDES', who: 'TOM', skin: '#f8d8b8', hair: 35, style: { top: '6', mid: '2', low: '2' }, labels: { top: 'TOP', mid: 'SIDES' }, ask: 'Six on top, two on the sides.' },
-    { name: 'THE FADE', who: 'JAY', skin: '#8a5a3a', hair: 5, style: { top: '4', mid: '2', low: '1' }, labels: { top: 'TOP', mid: 'UPPER SIDES', low: 'LOW SIDES' }, ask: 'Four on top, fade it two to one.' },
-    { name: 'HIGH & TIGHT', who: 'SAM', skin: '#e8b88a', hair: 20, style: { top: '3', mid: '0', low: '0' }, labels: { top: 'TOP', mid: 'SIDES' }, ask: 'Three on top. Sides down to the skin.' },
+    { name: 'BUZZ CUT', band: [.55, .67], who: 'DEV', skin: '#f2c79a', hair: 28, style: { top: '3', mid: '3', low: '3' }, labels: { top: 'ALL OVER' }, ask: 'Number three all over.' },
+    { name: 'THE TRIM', band: [.42, .54], who: 'ROSA', skin: '#c88a5a', hair: 10, style: { top: '8', mid: '8', low: '8' }, labels: { top: 'ALL OVER' }, ask: 'Just a little off. Eight all over.' },
+    { name: 'SHORT BACK & SIDES', band: [.66, .78], who: 'TOM', skin: '#f8d8b8', hair: 35, style: { top: '6', mid: '2', low: '2' }, labels: { top: 'TOP', mid: 'SIDES' }, ask: 'Six on top, two on the sides.' },
+    { name: 'THE FADE', band: [.5, .62], who: 'JAY', skin: '#8a5a3a', hair: 5, style: { top: '4', mid: '2', low: '1' }, labels: { top: 'TOP', mid: 'UPPER SIDES', low: 'LOW SIDES' }, ask: 'Four on top, fade it two to one.' },
+    { name: 'HIGH & TIGHT', band: [.74, .86], who: 'SAM', skin: '#e8b88a', hair: 20, style: { top: '3', mid: '0', low: '0' }, labels: { top: 'TOP', mid: 'SIDES' }, ask: 'Three on top. Sides down to the skin.' },
   ];
   // zones that share a guard share a label: group keys by guard
   function zones(L) {
@@ -165,28 +165,54 @@
     knock() { Audio.tone(220, .06, 'triangle', .22, 140); Audio.tone(200, .06, 'triangle', .2, 130, .14); },
   };
   const RITUALS = {
-    prep: [{ id: 'cape', taps: 1, text: 'TAP TO PUT ON THE CAPE' }, { id: 'pump', taps: 4, text: 'TAP TO PUMP UP THE CHAIR' }, { id: 'spray', taps: 3, text: 'TAP TO SPRAY THE HAIR' }],
+    prep: [{ id: 'cape', taps: 1, text: 'TAP TO PUT ON THE CAPE' }, { id: 'pump', taps: 1, text: 'PUMP TO THE GREEN · HOLD IT' }, { id: 'spray', taps: 3, text: 'TAP TO SPRAY THE HAIR' }],
     finish: [{ id: 'brush', taps: 3, text: 'TAP TO BRUSH OFF THE NECK' }, { id: 'capeoff', taps: 1, text: 'TAP TO TAKE OFF THE CAPE' }, { id: 'clean', taps: 4, text: 'TAP TO CLEAN THE CLIPPERS' }],
   };
   function startRitual(kind) { S.rit = { kind, i: 0, n: 0, t: 9 }; }
   function ritTap() {
-    const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st || R.n >= st.taps || R.t < .2) return;
+    const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st || R.n >= st.taps) return;
+    if (st.id === 'pump') { pumpTap(); return; }
+    if (R.t < .2) return;
     R.n++; R.t = 0;
     const neck = () => { for (let k = 0; k < 14; k++) S.bits.push({ x: 290 + Math.random() * 140, y: 790, a: Math.random() * 6, l: 6 + Math.random() * 10, t: S.t, c: Math.random(), vx: (Math.random() - .5) * 160 }); };
     switch (st.id) {
       case 'cape': S.capeTo = 1; FX.whoosh(); FX.velcro(.3); FX.snap(.62); break;
-      case 'pump': S.liftTo = R.n / st.taps; FX.pump(R.n); break;
       case 'spray': FX.spray(); for (let k = 0; k < 26; k++) S.mist.push({ x: 600, y: 400, vx: -260 - Math.random() * 260, vy: (Math.random() - .5) * 220, t: S.t }); break;
       case 'brush': FX.brush(); S.brushT = 0; neck(); break;
       case 'capeoff': S.capeTo = 0; FX.snap(); FX.velcro(.05); FX.whoosh(.32); for (let k = 0; k < 4; k++) neck(); break;
       case 'clean': if (R.n === st.taps) FX.knock(); else if (R.n % 2) FX.spray(); else FX.brush(); S.brushT = 0; break;
     }
   }
+  // ---------- the chair pump minigame ----------
+  // Pump the pedal to raise the chair into the customer's green band, then hold it there for a second.
+  // A full stroke waits for the pedal to come back up; stamping too fast only sputters. The seal leaks a
+  // little, so it creeps down; overshoot and you hold RELEASE to bleed it off.
+  const PEDAL = .38, FULL = .13, WEAK = .03, LEAK = .025, BLEED = .3, HOLD = 1;
+  const band = () => S.L.band, mid = () => (S.L.band[0] + S.L.band[1]) / 2;
+  function pumpTap() {
+    if (S.pump.locked) return;
+    const full = S.pump.pedalT >= PEDAL;
+    S.h = Math.min(1, S.h + (full ? FULL : WEAK)); S.pump.pedalT = 0; S.pump.n++;
+    if (full) FX.pump(Math.min(6, S.pump.n)); else FX.src(3800, 1800, .7, .12, .1, 'highpass');
+  }
+  function pumpUpdate(dt, R, st) {
+    const P = S.pump; P.pedalT += dt;
+    if (P.locked) return;
+    const [lo, hi] = band();
+    if (API.autopilot) { S.releasing = S.h > hi; if (S.h < lo + .03 && P.pedalT >= PEDAL) pumpTap(); }
+    S.h = Math.max(0, S.h - LEAK * dt);
+    if (S.releasing) { S.h = Math.max(0, S.h - BLEED * dt); P.hissT -= dt; if (P.hissT <= 0) { FX.src(6200, 5200, .5, .12, .12, 'highpass'); P.hissT = .09; } }
+    P.lockT = S.h >= lo && S.h <= hi && !S.releasing ? P.lockT + dt : 0;
+    if (P.lockT >= HOLD) { P.locked = true; R.n = st.taps; R.t = 0; S.releasing = false; FX.snap(); FX.knock(); }
+  }
+
   function ritUpdate(dt) {
     const R = S.rit, list = RITUALS[R.kind], st = list[R.i];
     R.t += dt;
-    if (API.autopilot && R.t > .25) ritTap();
+    if (st.id === 'pump') pumpUpdate(dt, R, st);
+    else if (API.autopilot && R.t > .25) ritTap();
     if (R.n >= st.taps && R.t > .5) {
+      if (st.id === 'pump') S.settle = true;   // from here on the chair sits at working height
       R.i++; R.n = 0; R.t = 9;
       if (R.i >= list.length) {
         if (R.kind === 'prep') { S.state = 'play'; S.lt = 0; }
@@ -196,10 +222,10 @@
   }
 
   // ---------- state ----------
-  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false, rit: null, cape: 0, capeTo: 0, lift: 0, liftTo: 0, mist: [], brushT: 9 };
+  const S = { li: 0, L: null, strands: [], bits: [], guard: '8', equipT: 9, t: 0, lt: 0, state: 'play', result: null, resT: 0, ptr: null, down: false, keys: {}, snipT: 0, cutting: 0, ap: null, apDone: false, rit: null, cape: 0, capeTo: 0, h: 0, hv: 0, settle: false, releasing: false, pump: null, mist: [], brushT: 9 };
   function load(i) {
     Object.assign(S, { li: i, L: LEVELS[i], strands: deal(i), bits: [], equipT: 9, lt: 0,   // the guard stays on between customers
-      state: 'prep', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false, cape: 0, capeTo: 0, lift: 0, liftTo: 0, mist: [], brushT: 9 });
+      state: 'prep', result: null, resT: 0, ptr: { x: 600, y: 900 }, down: false, ap: null, apDone: false, cape: 0, capeTo: 0, h: 0, hv: 0, settle: false, releasing: false, pump: { pedalT: 9, lockT: 0, locked: false, n: 0, hissT: 0 }, mist: [], brushT: 9 });
     startRitual('prep');
     API.autopilot = null;
   }
@@ -257,7 +283,7 @@
     S.t += dt; S.lt += dt; S.equipT += dt;
     Cozy.start(); Cozy.tick();
     S.bits = S.bits.filter(b => S.t - b.t < 1.2); S.mist = S.mist.filter(m => S.t - m.t < .7); S.brushT += dt;
-    S.cape += (S.capeTo - S.cape) * Math.min(1, dt * 7); S.lift += (S.liftTo - S.lift) * Math.min(1, dt * 9);
+    S.cape += (S.capeTo - S.cape) * Math.min(1, dt * 7); if (S.settle) S.h += (mid() - S.h) * Math.min(1, dt * 5); S.hv += (S.h - S.hv) * Math.min(1, dt * 12);
     if (S.state === 'result') { S.resT += dt; return; }
     if (S.state === 'prep' || S.state === 'finish') { ritUpdate(dt); return; }
     if (S.state !== 'play') return;
@@ -297,11 +323,33 @@
     if (mood > 0) cx.arc(0, 60, 36, .3, Math.PI - .3); else if (mood < 0) cx.arc(0, 112, 36, Math.PI + .4, -.4); else { cx.moveTo(-30, 80); cx.lineTo(30, 80); }
     cx.stroke(); cx.restore();
   }
+  const REL = { x: 520, y: 960, w: 150, h: 76 };
   function props() {
     const R = S.rit, st = R && RITUALS[R.kind][R.i]; if (!st) return;
     const k = clamp(R.t / .35), pump = st.id === 'pump';
     // the chair pedal, bottom left: it dips on every pump
-    if (S.state === 'prep') { cx.fillStyle = '#555'; rr(20, 1030, 130, 26, 8); cx.fill(); cx.fillStyle = pump ? '#ffd23a' : '#888'; cx.save(); cx.translate(40, 1030); cx.rotate(pump && k < 1 ? Math.sin(k * Math.PI) * .25 : 0); rr(-10, -70, 110, 22, 8); cx.fill(); cx.restore(); }
+    if (S.state === 'prep') {
+      const P = S.pump, ready = P.pedalT >= PEDAL, dip = pump && P.pedalT < PEDAL ? Math.sin(clamp(P.pedalT / PEDAL) * Math.PI) * .28 : 0;
+      // the foot pedal: a chrome base and a lever that dips on each stroke and glows green when it's back up
+      cx.fillStyle = '#6a6a78'; rr(20, 1040, 190, 30, 10); cx.fill(); cx.fillStyle = '#9a9aa8'; circ(50, 1040, 20);
+      cx.save(); cx.translate(50, 1040); cx.rotate(-.35 + dip);
+      if (pump && ready) { cx.fillStyle = '#4ad05a55'; rr(-16, -26, 196, 52, 22); cx.fill(); }
+      cx.fillStyle = !pump ? '#888' : ready ? '#4ad05a' : '#ffd23a'; rr(0, -16, 170, 32, 12); cx.fill(); cx.strokeStyle = '#0006'; cx.lineWidth = 3; cx.stroke();
+      cx.fillStyle = '#000a'; cx.font = '900 18px system-ui'; cx.textAlign = 'center'; cx.fillText('PUMP', 90, 7); cx.restore();
+    }
+    if (pump) {
+      const [lo, hi] = band(), G = { x: 640, y: 380, w: 44, h: 560 }, yAt = v => G.y + G.h * (1 - v);
+      cx.fillStyle = '#000a'; rr(G.x - 6, G.y - 6, G.w + 12, G.h + 12, 16); cx.fill();
+      cx.fillStyle = '#3a3a4a'; rr(G.x, G.y, G.w, G.h, 10); cx.fill();
+      cx.fillStyle = S.pump.lockT > 0 ? '#7af08a' : '#4ad05a'; cx.fillRect(G.x, yAt(hi), G.w, yAt(lo) - yAt(hi));
+      cx.fillStyle = '#ffffff22'; cx.fillRect(G.x, yAt(S.h), G.w, G.y + G.h - yAt(S.h));
+      const my = yAt(S.hv); cx.fillStyle = '#fff'; cx.beginPath(); cx.moveTo(G.x - 22, my - 12); cx.lineTo(G.x - 4, my); cx.lineTo(G.x - 22, my + 12); cx.fill();
+      if (S.pump.lockT > 0) { cx.strokeStyle = '#fff'; cx.lineWidth = 6; cx.beginPath(); cx.arc(G.x + G.w / 2, G.y - 40, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(S.pump.lockT / HOLD)); cx.stroke(); }
+      const B = REL; cx.fillStyle = S.releasing ? '#ff6a6a' : '#5a3a3a'; rr(B.x, B.y, B.w, B.h, 20); cx.fill(); cx.strokeStyle = '#fff'; cx.lineWidth = 3; cx.stroke();
+      cx.fillStyle = '#fff'; cx.font = '800 18px system-ui'; cx.textAlign = 'center'; cx.fillText('HOLD TO', B.x + B.w / 2, B.y + 30); cx.fillText('RELEASE', B.x + B.w / 2, B.y + 54);
+      if (S.h > hi) Draw.bigText(cx, 'TOO HIGH!', 360, 300, 36, '#ff6a6a');
+      else if (!S.pump.n) Draw.bigText(cx, 'TAP WHEN THE PEDAL IS GREEN', 360, 300, 26, '#fff');
+    }
     if (st.id === 'spray' || (st.id === 'clean' && R.n % 2 === 1)) {   // spray bottle
       const x = st.id === 'spray' ? 640 : 520, y = st.id === 'spray' ? 400 : 860, sq = k < 1 ? Math.sin(k * Math.PI) * 6 : 0;
       cx.fillStyle = '#5ab8ff'; rr(x - 10, y + 10, 52, 90, 14); cx.fill(); cx.fillStyle = '#fff'; rr(x - 26, y - 14, 50, 26, 6); cx.fill(); cx.fillStyle = '#ff5ab0'; rr(x - 4 - sq, y - 4, 16, 34, 6); cx.fill();
@@ -419,7 +467,7 @@
     }
     const res = S.state === 'result' ? S.result : null;
     salonBack();
-    cx.save(); cx.translate(0, (1 - S.lift) * 150);   // the chair pumps them up to working height
+    cx.save(); cx.translate(0, clamp((mid() - S.hv) * 420, -90, 300));   // the chair carries them; working height puts the head where the cut happens
     customer(S.L.skin, res ? (res.stars >= 2 ? 1 : res.stars ? 0 : -1) : 0);
     hairDraw(); cx.restore();
     if (S.state === 'play') guideLines();
@@ -451,7 +499,12 @@
   function onPointer(type, x, y) {
     if (S.state === 'done') { if (type === 'down') Engine.exit(); return; }
     if (S.state === 'result') { if (type === 'down') proceed(hit(RES.retry, x, y)); return; }
-    if (S.state === 'prep' || S.state === 'finish') { if (type === 'down') { Audio.unlock(); ritTap(); } return; }
+    if (S.state === 'prep' || S.state === 'finish') {
+      const onPump = S.state === 'prep' && RITUALS.prep[S.rit.i].id === 'pump';
+      if (type === 'down') { Audio.unlock(); if (onPump && hit(REL, x, y)) S.releasing = true; else ritTap(); }
+      else if (type === 'up' || type === 'cancel') S.releasing = false;
+      return;
+    }
     if (type === 'down') {
       Audio.unlock();
       const gi = GUARDS.findIndex((g, i) => hit(barRect(i), x, y)); if (gi >= 0) { equip(GUARDS[gi].k); return; }
@@ -461,7 +514,9 @@
     else if (type === 'up' || type === 'cancel') { S.down = false; motor(false); }
   }
   function onKey(key, down) {
-    S.keys[key] = down; if (!down) return;
+    S.keys[key] = down;
+    if (key === 'ArrowDown' || key === 'Shift') S.releasing = down && S.state === 'prep';   // hold to bleed the chair down
+    if (!down) return;
     if (S.state === 'done' && (key === 'Enter' || key === ' ')) { Engine.exit(); return; }
     if (S.state === 'result') { if (key === 'Enter' || key === ' ') proceed(false); else if (key === 'r' || key === 'R') proceed(true); return; }
     if (S.state === 'prep' || S.state === 'finish') { if (key === 'Enter' || key === ' ') ritTap(); return; }
@@ -471,7 +526,7 @@
   }
   window.addEventListener('keydown', e => { if (e.key === 'Tab') e.preventDefault(); });
 
-  const API = { LEVELS, GUARDS, S, load, equip, cutAt, finish, score, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, GUARDS, S, load, equip, cutAt, finish, score, tap: () => ritTap(), autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   Audio.unlock(); motor(false);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });

@@ -179,6 +179,20 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const r = await page.evaluate(() => ({ s: window.__game.state, stars: window.__game.S.result.stars, all: window.__game.S.result.all }));
     check(r.s === 'result' && r.stars >= 2, `salon L${i + 1} cut to the order earns ${r.stars} stars (${Math.round(r.all * 100)}% to style)`);
   }
+  // the chair: stamping the pedal sputters, timed strokes lift, overshooting has to be bled off, and it locks only in the green
+  const ch = await page.evaluate(() => { const g = window.__game; g.load(0); g.S.rit.i = 1; g.S.capeTo = 1;
+    for (let k = 0; k < 5; k++) g.tap(); const stamped = g.S.h;
+    g.load(0); g.S.rit.i = 1; let timed = 0; for (let k = 0; k < 5; k++) { g.tap(); g.step(25); } timed = g.S.h;
+    const [lo, hi] = g.S.L.band; for (let k = 0; k < 4; k++) { g.tap(); g.step(25); } const over = g.S.h > hi; g.step(90); const lockedHigh = g.S.pump.locked;
+    return { stamped, timed, over, lockedHigh }; });
+  check(ch.timed > ch.stamped * 2, `salon chair: timed pumps lift ${ch.timed.toFixed(2)}, stamping only ${ch.stamped.toFixed(2)}`);
+  check(ch.over && !ch.lockedHigh, 'salon chair: above the green it will not lock');
+  await page.evaluate(() => { const g = window.__game; g.S.releasing = true; });
+  await runUntil(page, () => window.__game.S.h < window.__game.S.L.band[1] - .02, 300, 2);
+  await page.evaluate(() => { window.__game.S.releasing = false; });
+  await runUntil(page, () => window.__game.S.pump.locked, 200, 5);
+  check(await page.evaluate(() => window.__game.S.pump.locked), 'salon chair: release back into the green and hold it to lock');
+
   // shaving everything with no guard is not what anyone asked for
   await page.evaluate(() => { window.__game.load(2); window.__game.autopilot = 'rituals'; });
   await runUntil(page, () => window.__game.state === 'play', 600, 10);
