@@ -3,7 +3,7 @@
 // (and always, for the last 300 events) they stay in this browser's localStorage under 'disc.stats'.
 (function () {
   'use strict';
-  const GC_CODE = '';   // your GoatCounter site code, e.g. 'demodisc' for demodisc.goatcounter.com
+  const GC_CODE = 'pappydapimp69';   // your GoatCounter site code, e.g. 'demodisc' for demodisc.goatcounter.com
   const live = GC_CODE && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname);
   const sent = [];
   function event(path, title) {
