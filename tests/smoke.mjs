@@ -614,6 +614,8 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     return { combos: combos.size, door, leak }; });
   check(ev.combos >= 5 && ev.door && ev.door.wall && !ev.door.took && ev.door.finished >= 7 && ev.leak,
     `trolleydash events: 10 seeds give ${ev.combos} different event plans; a shut roller door walls the alley, no CPU tries it, the race still finishes (${ev.door && ev.door.finished}/8)`);
+  const juice = await page.evaluate(() => { const g = window.__game, res = []; for (const shake of [false, true]) { g.load(0, 2); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) { if (shake) g.S.shake = 1; g.step(60); } res.push(g.S.order.map(k => k.id + ':' + k.finishT.toFixed(3)).join(' ')); } return res[0] === res[1]; });
+  check(juice, 'trolleydash: screen shake and speed lines are presentation only (the same seed finishes identically with them on)');
   const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
     for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
     const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints
