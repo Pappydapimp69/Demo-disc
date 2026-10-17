@@ -130,7 +130,7 @@
   // ---------- driving: one pure step for every kart, player and AI alike ----------
   // terrain: how fast you can go on it, and how much sideways grip it gives
   const SURF = { [T.ROAD]: [1, 1], [T.START]: [1, 1], [T.CURB]: [.95, 1], [T.BOOST]: [1, 1], [T.GRASS]: [.5, .7], [T.SAND]: [.45, .6], [T.ICE]: [1, .12] };
-  const BASE = { top: 150, accel: 95, turn: 2.3, grip: 7, weight: 1 };
+  const BASE = { top: 150, accel: 95, turn: 2.8, grip: 7, weight: 1 };
   const terrainAt = (trk, x, y) => { const ix = x | 0, iy = y | 0; return ix < 0 || iy < 0 || ix >= trk.N || iy >= trk.N ? T.WALL : trk.ter[iy * trk.N + ix]; };
   function newKart(x, y, a, stats) { return { x, y, a, vx: 0, vy: 0, st: { ...BASE, ...stats }, drift: 0, charge: 0, boost: 0, bump: 0, ter: T.ROAD, spin: 0 }; }
   const speedOf = k => k.vx * Math.cos(k.a) + k.vy * Math.sin(k.a);
@@ -187,19 +187,95 @@
   }
 
   // ---------- state ----------
-  const S = { t: 0, state: 'race', trk: null, player: null, inp: { steer: 0, gas: 1, brake: 0, drift: false } };
-  function load(ti) {
-    S.trk = buildTrack(TRACKS[ti]); S.scenery = scenery(S.trk); const p = S.trk.line[2];
-    S.player = newKart(p.x, p.y, Math.atan2(p.dy, p.dx), {});
+  // ---------- race: progress along the centreline, laps through checkpoints, AI, bumps ----------
+  const LAPS = 3, NK = 8, KR = 6;   // laps, karts, kart radius
+  // nearest centreline sample: search near the last one, fall back to a full search when far off the line
+  function nearest(trk, k) {
+    const L = trk.line, n = L.length; let best = k.li || 0, bd = 1e9;
+    const look = (i) => { const p = L[(i + n) % n], d = (p.x - k.x) ** 2 + (p.y - k.y) ** 2; if (d < bd) { bd = d; best = (i + n) % n; } };
+    for (let i = (k.li || 0) - 30; i <= (k.li || 0) + 30; i++) look(i);
+    if (bd > (trk.def.width * 2) ** 2) for (let i = 0; i < n; i++) look(i);
+    return best;
   }
+  // progress: laps done x L + distance along. A lap counts only after both checkpoints were crossed,
+  // and a jump forward is accepted up to 600 units (a shortcut), never backwards across the line.
+  function track(k, trk) {
+    const L = trk.L, i = nearest(trk, k), s = trk.line[i].s;
+    let ds = s - k.s; if (ds < -L / 2) ds += L; if (ds > L / 2) ds -= L;
+    if (ds > 600 || ds < -300) return;   // too far to be one move: ignore (the kart is off in the weeds)
+    k.li = i;
+    const prev = k.s; k.s = s;
+    for (const [c, frac] of [[0, 1 / 3], [1, 2 / 3]]) { const cs = L * frac; if (!k.cp[c] && ds > 0 && ((prev < cs && s >= cs) || (prev > s && (prev < cs || s >= cs)))) k.cp[c] = true; }
+    if (ds > 0 && prev > s) { if (k.cp[0] && k.cp[1]) { k.lap++; k.cp = [false, false]; if (k.lap >= LAPS && !k.done) { k.done = true; k.finishT = S.clock; S.order.push(k); } } else k.lap += 0; }
+    if (ds < 0 && prev < s) { /* backed over the line: nothing counts until you come forward again */ }
+    k.prog = k.lap * L + k.s;
+  }
+  // AI: steer at a point ahead on the centreline, shifted to its own lane; drift into tight corners
+  function aiInput(k, trk) {
+    const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.round((24 + v * .32) / 2);
+    const p = L[(k.li + ahead) % n], q = L[(k.li + ahead * 2) % n], lane = (k.ai ? k.ai.lane : 0) * trk.def.width * .45;
+    const tx = p.x - p.dy * lane, ty = p.y + p.dx * lane, want = Math.atan2(ty - k.y, tx - k.x), err = wrapA(want - k.a);
+    const bend = Math.abs(wrapA(Math.atan2(q.dy, q.dx) - Math.atan2(p.dy, p.dx)));
+    // corner speed: the tightest radius in the next stretch sets how fast it can take it (a drift turns tighter)
+    let vmax = 1e9; const h0 = Math.atan2(L[k.li].dy, L[k.li].dx);
+    for (let j = 5; j <= 70; j += 5) { const pj = L[(k.li + j) % n], ang = Math.abs(wrapA(Math.atan2(pj.dy, pj.dx) - h0)); if (ang > .05) vmax = Math.min(vmax, (j * 2 / ang) * k.st.turn * .8 * (k.ai ? k.ai.brave : 1) + j * 1.2); }
+    const turnDir = Math.sign(wrapA(Math.atan2(q.dy, q.dx) - Math.atan2(L[k.li].dy, L[k.li].dx)));
+    // drift only into the corner (same side as the bend and the steering), and let go once it straightens
+    const steer = clamp(err * 3, -1, 1), drift = k.drift ? (k.drift === turnDir && bend > .2) : (bend > .9 && v > k.st.top * .6 && Math.sign(steer) === turnDir && Math.abs(steer) > .4);
+    return { steer, gas: v < vmax ? 1 : 0, brake: v > vmax + 30 ? 1 : 0, drift };
+  }
+  // stuck: no progress for 3 s puts the kart back on the line where it was (progress kept, placement fixed)
+  function unstick(k, trk) {
+    if (S.clock - (k.lastProgT || 0) > 3) { const p = trk.line[k.li || 0]; Object.assign(k, { x: p.x, y: p.y, a: Math.atan2(p.dy, p.dx), vx: 0, vy: 0, drift: 0, lastProgT: S.clock }); k.rescues = (k.rescues || 0) + 1; }
+    if (k.prog > (k.bestProg || -1e9) + 5) { k.bestProg = k.prog; k.lastProgT = S.clock; }
+  }
+  // kart-kart bumps: push apart, the lighter one moves more, and swap some speed along the contact line
+  function bumps(ks) {
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
+      const a = ks[i], b = ks[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d >= KR * 2 || d === 0) continue;
+      const nx = dx / d, ny = dy / d, wa = a.st.weight, wb = b.st.weight, over = KR * 2 - d;
+      a.x -= nx * over * wb / (wa + wb); a.y -= ny * over * wb / (wa + wb); b.x += nx * over * wa / (wa + wb); b.y += ny * over * wa / (wa + wb);
+      const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny; if (rv >= 0) continue;
+      const imp = -1.3 * rv / (1 / wa + 1 / wb);
+      a.vx -= imp * nx / wa; a.vy -= imp * ny / wa; b.vx += imp * nx / wb; b.vy += imp * ny / wb; a.bump = b.bump = .2;
+    }
+  }
+  const S = { t: 0, clock: 0, state: 'count', trk: null, player: null, karts: [], order: [], inp: { steer: 0, gas: 1, brake: 0, drift: false }, seed: 1 };
+  function load(ti, seed = 1) {
+    S.trk = buildTrack(TRACKS[ti]); S.scenery = scenery(S.trk); S.seed = seed;
+    const L = S.trk.line, n = L.length, r = mkRng(seed * 97 + ti);
+    S.karts = [];
+    for (let g = 0; g < NK; g++) {   // grid: two columns behind the line, the player starts at the back
+      const back = 8 + Math.floor(g / 2) * 9, p = L[(n - back) % n], side = (g % 2 ? 1 : -1) * 14;
+      const k = newKart(p.x - p.dy * side, p.y + p.dx * side, Math.atan2(p.dy, p.dx), g === NK - 1 ? {} : { top: BASE.top * (.9 + r() * .08) });
+      Object.assign(k, { id: g, li: (n - back) % n, s: p.s, lap: -1, cp: [true, true], prog: p.s - S.trk.L, done: false, col: COLORS[g], spr: kartSprite(COLORS[g]),
+        ai: g === NK - 1 ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
+      k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
+    }
+    S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
+  }
+  const COLORS = ['#3a8aff', '#ffd23a', '#4ad05a', '#a77aff', '#ff9a3a', '#3ad0c8', '#ff6ad0', '#e83a5a'];
+  function kartSprite(col) { return spr(24, 18, g => { g.fillStyle = '#222'; g.fillRect(0, 10, 6, 8); g.fillRect(18, 10, 6, 8); g.fillStyle = col; g.fillRect(3, 6, 18, 9); g.fillStyle = '#ffd8b0'; g.fillRect(9, 0, 6, 6); g.fillStyle = '#333'; g.fillRect(8, 0, 8, 2); }); }
+  const place = k => S.karts.slice().sort((a, b) => (a.done && b.done) ? a.finishT - b.finishT : a.done ? -1 : b.done ? 1 : b.prog - a.prog).indexOf(k) + 1;
   function update(dt) {
     S.t += dt;
-    stepKart(S.player, S.inp, S.trk, dt);
+    if (S.state === 'count') { if (S.t - S.t0 > 3) { S.state = 'race'; } return; }
+    if (S.state === 'results') return;
+    S.clock += dt;
+    for (const k of S.karts) {
+      const inp = k.ai ? aiInput(k, S.trk) : (S.auto ? aiInput(k, S.trk) : k.done ? { steer: 0, gas: 0, brake: 1, drift: false } : S.inp);
+      stepKart(k, k.done && k.ai ? { ...inp, gas: 1 } : inp, S.trk, dt);
+    }
+    bumps(S.karts);
+    for (const k of S.karts) { track(k, S.trk); unstick(k, S.trk); }
+    if (S.player.done && !S.finishedAt) S.finishedAt = S.clock;
+    if (S.player.done && S.clock - S.finishedAt > 3 || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
   }
   function render(ctx) {
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     sky(cam, theme); ground(S.trk, cam, theme);
-    billboards(cam, [...S.scenery, { x: S.player.x, y: S.player.y, img: SPR.kart, size: 7, lift: S.player.hop ? 2 : 0 }]);
+    billboards(cam, [...S.scenery, ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
     const pk = S.player, pp = project(cam, pk.x, pk.y);
     if (pp && pk.drift) { const c = pk.charge >= 2 ? '#ff9a2a' : pk.charge >= 1 ? '#4ab8ff' : '#ffffff'; lctx.fillStyle = c; for (let i = 0; i < 4; i++) lctx.fillRect(Math.round(pp.x - 14 * pk.drift - 2 + (S.t * 60 + i * 7) % 6), Math.round(pp.y - 2 - i), 2, 2); }
     if (pp && pk.boost > 0) { lctx.fillStyle = (S.t * 20 | 0) % 2 ? '#ffd23a' : '#ff6a2a'; lctx.fillRect(Math.round(pp.x - 3), Math.round(pp.y), 6, 3); }
@@ -209,6 +285,10 @@
     ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff88'; ctx.fillText('◀ STEER ▶', PAD.x + PAD.w / 2, PAD.y + PAD.h - 16);
     ctx.fillStyle = S.inp.drift ? '#ff9a2a' : '#ffffff14'; Draw.rr(ctx, DRIFTB.x, DRIFTB.y, DRIFTB.w, DRIFTB.h, 24); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '900 26px system-ui'; ctx.fillText('DRIFT', DRIFTB.x + DRIFTB.w / 2, DRIFTB.y + DRIFTB.h / 2 + 8);
     ctx.font = '800 22px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.fillText(`${Math.round(Math.max(0, speedOf(S.player)) * .6)} km/h`, 24, LH * SCALE + 50);
+    const pl = place(S.player); Draw.bigText(ctx, `${pl}${['ST', 'ND', 'RD'][pl - 1] || 'TH'}`, W - 80, 90, 54, '#ffe14a', '#000');
+    Draw.bigText(ctx, `LAP ${clamp(S.player.lap + 1, 1, LAPS)}/${LAPS}`, 90, 90, 30, '#fff', '#000');
+    if (S.state === 'count') { const n = 3 - Math.floor(S.t - S.t0); Draw.bigText(ctx, n > 0 ? String(n) : 'GO!', W / 2, 300, 120, n > 0 ? '#fff' : '#4ad05a', '#000'); }
+    if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${k === S.player ? 'YOU' : 'CPU ' + (k.id + 1)}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.done ? k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
   }
   // touch: the bottom panel. Drag left/right on the steering pad; hold DRIFT. (One pointer each side.)
   const PAD = { x: 20, y: LH * SCALE + 150, w: 300, h: 190 }, DRIFTB = { x: 340, y: LH * SCALE + 150, w: 180, h: 190 };
@@ -230,5 +310,5 @@
 
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { S, TRACKS, T, SURF, BASE, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { S, TRACKS, T, SURF, BASE, LAPS, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();

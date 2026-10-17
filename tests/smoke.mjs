@@ -585,6 +585,14 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     return out; });
   check(ph.grass < ph.road * .6 && ph.boost >= 1 && ph.boostSpeed > ph.road * 1.25 && ph.inWall === 0,
     `trolleydash physics: road ${ph.road}, grass ${ph.grass}; a long drift fires a mini-turbo to ${ph.boostSpeed}; driving into the wall never ends up inside it`);
+  const race = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.auto = true; for (let i = 0; i < 300 && g.S.state !== 'results'; i++) g.step(120);
+    return { state: g.S.state, done: g.S.order.filter(k => k.done).length, laps: g.S.karts.map(k => k.lap), rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT }; });
+  check(race.state === 'results' && race.done === 8 && race.rescues <= 4, `trolleydash: 8 karts finish 3 laps on the real track (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues)`);
+  const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
+    for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
+    const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints
+    for (let i = 0; i < 200; i++) g.step(1); return { lap0, lap: k.lap }; });
+  check(cheat.lap === cheat.lap0, `trolleydash: crossing the line without passing the checkpoints doesn't count a lap (${cheat.lap0} -> ${cheat.lap})`);
   check(errors.length === 0, `trolleydash runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
