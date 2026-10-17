@@ -21,8 +21,12 @@
       tip: 'EU AND NA. MIX THEM AND EVERYONE LAGS: NOBODY IN THAT LOBBY IS HAPPY.' },
     { name: 'BRING A FRIEND', n: 4, gap: 1.4, len: 60, servers: 9, dur: 8, regions: false, party: .4, need: 24, quits: 5,
       tip: 'PARTIES (A, B, C...) QUEUE TOGETHER AND PLAY TOGETHER. TAP ONE, YOU GET BOTH.' },
+    { name: 'BACKFILL', n: 4, gap: 1.3, len: 60, servers: 9, dur: 10, regions: false, party: 0, leave: .45, need: 24, quits: 5,
+      tip: 'SOMEONE QUITS MID-MATCH. TAP ONE PLAYER CLOSE TO THAT LOBBY\'S SKILL AND MATCH TO FILL THE SEAT, OR THE OTHER THREE GIVE UP.' },
     { name: 'LAUNCH DAY', n: 4, gap: .55, len: 60, servers: 3, dur: 12, regions: false, party: .2, need: 40, quits: 99,
       tip: 'THE AD SAID TEN MILLION PLAYERS. YOU HAVE THREE SERVERS. MAKE THE MATCHES YOU CAN.' },
+    { name: 'SEASON 2', n: 4, gap: .55, len: 60, servers: 0, rent: 3, dur: 12, regions: false, party: 0, need: 70, quits: 99,
+      tip: 'THE AD PROMISED 100,000,000. THIS TIME YOU RENT SERVERS: EACH COSTS 3 HAPPY PLAYERS. PICK HOW MANY BEFORE THE SHIFT.' },
   ];
   function rng(s) { return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   const PRE = ['xX_', '', 'lil', 'big', 'not', 'the', '', 'mr', 'its'], MID = ['d00m', 'sk8r', 'n00b', 'gamer', 'pro', 'tank', 'sweat', 'camper', 'yeet', 'bot', 'goblin', 'ghost', 'toast', 'noodle', 'clutch', 'lag', 'grandma', 'potato'], SUF = ['_Xx', '99', '2009', '_ttv', 'HD', '_YT', '7', '', '', '_irl'];
@@ -62,24 +66,38 @@
   }
 
   // ---------- state ----------
-  const S = { li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
-    happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0 };
+  const S = { rentN: 5, li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
+    happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, sort: 'arrival' };
   const API = { S, LEVELS, tol, verdict, lobbies, arrivals, autopilot: null, step: n => game.step(n),
-    get state() { return S.state; }, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
+    get state() { return S.state; }, rent, net, visible: () => visible(), resort, fits, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
     result: () => ({ happy: S.happy, matched: S.matched, quits: S.quits, unhappy: S.unhappy, pass: passed(), stars: stars() }) };
   function load(i) {
     const L = LEVELS[i];
-    Object.assign(S, { li: i, L, state: 'intro', clock: 0, incoming: arrivals(i), queue: [], sel: new Set(), servers: Array(Math.min(L.servers, 9)).fill(0),
-      log: [], happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0 });
+    Object.assign(S, { li: i, L, state: 'intro', clock: 0, incoming: arrivals(i), queue: [], sel: new Set(), servers: Array(L.rent ? S.rentN : Math.min(L.servers, 9)).fill(0),
+      log: [], happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, leaves: [], open: [], mm: rng(5000 + i * 31), filled: 0, abandoned: 0 });
     pause(); API.autopilot = null;
   }
   function pause() { S.lockUntil = S.t + .6; }
   const paused = () => S.t < S.lockUntil;
   function start() { if (S.state !== 'intro') return; S.state = 'play'; pause(); Snd.boot(); }
-  const passed = () => S.happy >= S.L.need && S.quits <= S.L.quits;
+  function rentCost() { return S.L.rent ? S.L.rent * S.servers.length : 0; }
+  function net() { return S.happy - rentCost(); }
+  const passed = () => net() >= S.L.need && S.quits <= S.L.quits;
+  // renting: choose the server count on the intro screen (1-9)
+  function rent(k) { if (S.state !== 'intro' || !S.L.rent) return; S.rentN = Math.max(1, Math.min(9, k)); S.servers = Array(S.rentN).fill(0); Snd.key(); }
   function stars() { if (!passed()) return 0; const f = S.happy / Math.max(1, S.matched + S.quits); return f >= .8 ? 3 : f >= .6 ? 2 : 1; }
   function say(s, col = GREEN) { S.log.push({ s, col }); if (S.log.length > 5) S.log.shift(); }
-  const visible = () => S.queue.slice(0, ROWS);
+  // the queue as shown: by arrival, or by skill (ties: whoever has waited longest first) so close skills sit together
+  const visible = () => (S.sort === 'skill' ? S.queue.slice().sort((a, b) => a.skill - b.skill || a.at - b.at) : S.queue).slice(0, ROWS);
+  function resort() { S.sort = S.sort === 'skill' ? 'arrival' : 'skill'; Snd.key(); }
+  // would adding p (and their party) keep every selected player happy right now? null when it doesn't apply
+  function fits(p) {
+    if (!S.sel.size || S.sel.has(p.id)) return null;
+    const mates = p.party ? S.queue.filter(q => q.party === p.party && q.at === p.at) : [p];
+    const g = S.queue.filter(q => S.sel.has(q.id)).concat(mates);
+    if (g.length > S.L.n) return null;
+    const v = verdict(g, S.clock, S.L); return v.happy === g.length;
+  }
   function toggle(p) {
     if (S.state !== 'play' || paused()) return;
     const mates = p.party ? S.queue.filter(q => q.party === p.party && q.at === p.at) : [p];
@@ -90,21 +108,41 @@
   function match() {
     if (S.state !== 'play' || paused()) return false;
     const g = S.queue.filter(p => S.sel.has(p.id));
+    if (g.length === 1 && S.open.length) return backfill(g[0]);
     if (g.length !== S.L.n) { S.flash = { s: `NEED ${S.L.n} PLAYERS`, t: S.t }; Snd.err(); return false; }
     const k = S.servers.findIndex(f => f <= S.clock);
     if (k < 0) { S.flash = { s: 'NO FREE SERVER', t: S.t }; Snd.err(); return false; }
     const v = verdict(g, S.clock, S.L);
     S.servers[k] = S.clock + S.L.dur; S.queue = S.queue.filter(p => !S.sel.has(p.id)); S.sel.clear();
     S.happy += v.happy; S.unhappy += g.length - v.happy; S.matched += g.length;
+    if (S.L.leave && S.mm() < S.L.leave) S.leaves.push({ k, at: S.clock + 2 + S.mm() * (S.L.dur - 5), skill: Math.round(g.reduce((a, p) => a + p.skill, 0) / g.length) });
     const what = v.mixed ? 'LAG. EVERYONE IS MAD' : v.happy === g.length ? 'GG' : v.spread >= 5 ? 'STOMP' : `${g.length - v.happy} SALTY`;
     say(`> MATCH SRV${k + 1} SPREAD ${v.spread}  ${what}`, v.happy === g.length ? GREEN : v.happy ? AMBER : RED);
     v.happy === g.length ? Snd.gg() : Snd.meh();
     return true;
   }
 
+  // a seat left open mid-match: one player fills it, happy if the lobby's skill is inside their window
+  function backfill(p) {
+    const o = S.open.shift(), ok = Math.abs(p.skill - o.skill) <= tol(S.clock - p.at);
+    S.queue = S.queue.filter(q => q.id !== p.id); S.sel.clear(); S.matched++; S.filled++;
+    if (ok) S.happy++; else S.unhappy++;
+    say(`> BACKFILL SRV${o.k + 1} (~${o.skill}) WITH ${p.skill}  ${ok ? 'SAVED' : 'SALTY'}`, ok ? GREEN : AMBER); ok ? Snd.gg() : Snd.meh();
+    return true;
+  }
+  function seats() {
+    for (const l of S.leaves) if (!l.done && l.at <= S.clock && S.servers[l.k] > S.clock) { l.done = true; S.open.push({ k: l.k, skill: l.skill, until: S.clock + 8 }); say(`! SRV${l.k + 1} PLAYER LEFT. NEEDS 1 (~${l.skill})`, AMBER); Snd.err(); }
+    for (const o of S.open) if (o.until <= S.clock) { o.gone = true; S.abandoned += S.L.n - 1; S.happy = Math.max(0, S.happy - (S.L.n - 1)); say(`X SRV${o.k + 1} ABANDONED: -${S.L.n - 1} HAPPY`, RED); Snd.quit(); }
+    S.open = S.open.filter(o => !o.gone);
+  }
+
   // ---------- autopilot (tests): 'smart' waits for lobbies that please everyone; 'fifo' takes the queue in order ----------
   function autopilot() {
     if ((S.ap += 1) % 15) return;                      // decide four times a second
+    if (S.open.length && S.queue.length && API.autopilot !== 'fifo') {
+      const o = S.open[0], p = S.queue.slice().sort((a, b) => Math.abs(a.skill - o.skill) - Math.abs(b.skill - o.skill) || a.at - b.at)[0];
+      S.sel = new Set([p.id]); match(); return;
+    }
     if (S.servers.every(f => f > S.clock) || S.queue.length < S.L.n) return;
     let pick = null;
     if (API.autopilot === 'fifo') { const g = []; for (const u of units(S.queue)) if (g.length + u.length <= S.L.n) g.push(...u); if (g.length === S.L.n) pick = g; }
@@ -133,6 +171,7 @@
       say(`X ${p.name}${mates.length > 1 ? ' +1' : ''} RAGE-QUIT`, RED); Snd.quit();
     }
     S.queue = S.queue.filter(p => !p.gone);
+    seats();
     if (API.autopilot && !paused()) autopilot();
     if (S.clock >= S.L.len) { S.state = 'report'; S.endT = 0; S.sel.clear(); pause(); passed() ? Audio.sfx('win') : Audio.sfx('fail'); }
   }
@@ -149,9 +188,9 @@
   };
 
   // ---------- drawing: everything is monospace text on a phosphor screen ----------
-  const FONT = "bold 19px 'Courier New', Courier, monospace", ROWS = 12, ROW0 = 168, RH = 38;
+  const FONT = "bold 19px 'Courier New', Courier, monospace", ROWS = 11, ROW0 = 168, RH = 38;
   let CW = 11.4;
-  const BTN = { match: [24, 660, 230, 56], clear: [286, 660, 230, 56] };
+  const BTN = { less: [40, 630, 90, 50], more: [410, 630, 90, 50], match: [24, 660, 230, 56], clear: [286, 660, 230, 56], sort: [376, 86, 146, 36] };
   function T(c, s, x, y, col = GREEN) { c.fillStyle = col; c.fillText(s, x, y); }
   const pad = (s, n) => (s + ' '.repeat(n)).slice(0, n);
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -181,9 +220,13 @@
     let k = 0, y = 150;
     for (const s of [...lines, ...tip]) { const vis = s.slice(0, Math.max(0, shown - k)); k += s.length + 4; T(c, vis, 24, y, s.startsWith('> SHIFT') ? AMBER : GREEN); y += 34; }
     y += 20;
-    T(c, `GOAL: ${L.need} HAPPY PLAYERS`, 24, y); y += 34;
+    T(c, L.rent ? `GOAL: ${L.need} NET (HAPPY - RENT)` : `GOAL: ${L.need} HAPPY PLAYERS`, 24, y); y += 34;
     if (L.quits < 99) { T(c, `      ${L.quits} RAGE-QUITS MAX`, 24, y); y += 34; }
-    T(c, `SERVERS ${L.servers}   MATCH ${L.dur}s   LOBBY ${L.n}`, 24, y, DIM);
+    if (L.rent) {
+      T(c, `MATCH ${L.dur}s   LOBBY ${L.n}   GOAL IS NET`, 24, y, DIM);
+      box(c, BTN.less, '[ - ]', true); box(c, BTN.more, '[ + ]', true);
+      const s1 = `${S.rentN} SERVERS`, s2 = `RENT ${S.rentN * L.rent} HAPPY`; T(c, s1, W / 2 - s1.length * CW / 2, 652, AMBER); T(c, s2, W / 2 - s2.length * CW / 2, 690, DIM);
+    } else T(c, `SERVERS ${L.servers}   MATCH ${L.dur}s   LOBBY ${L.n}`, 24, y, DIM);
     if (!paused() && Math.floor(S.t * 2) % 2) T(c, '[ TAP TO START SHIFT ]_', W / 2 - 11.5 * CW, 820);
   }
   function wrap(s, n) { const out = []; let cur = ''; for (const w of s.split(' ')) { if ((cur + ' ' + w).trim().length > n) { out.push(cur.trim()); cur = w; } else cur += ' ' + w; } if (cur.trim()) out.push(cur.trim()); return out; }
@@ -200,28 +243,35 @@
       const bar = '#'.repeat(p.skill) + '.'.repeat(9 - p.skill);
       const row = `${sel ? '>' : ' '} ${pad(p.name, 14)} ${p.skill}  ${bar} ${mmss(w).padStart(4)} ${tol(w)}` + (L.regions ? ' ' + p.reg : '') + (L.party ? ' ' + (p.party || ' ') : '');
       T(c, row, 18, y, late ? RED : sel ? '#c8ffdc' : GREEN);
+      // with a lobby started, mark who would keep everyone in it happy if added now
+      const f = fits(p); if (f !== null) T(c, f ? '✓' : '·', W - 30, y, f ? '#c8ffdc' : DIM);
     });
     if (S.queue.length > ROWS) T(c, `  ... +${S.queue.length - ROWS} MORE IN QUEUE`, 18, ROW0 + ROWS * RH + 8, AMBER);
     // the lobby being built
     const g = S.queue.filter(p => S.sel.has(p.id));
     let ly = 648 - 22;
-    if (g.length) {
+    const o = S.open[0], fill = o && g.length === 1;
+    if (o && g.length <= 1) {
+      const ok = g.length && Math.abs(g[0].skill - o.skill) <= tol(S.clock - g[0].at);
+      T(c, g.length ? `FILL SRV${o.k + 1} (~${o.skill}) WITH ${g[0].skill}: ${ok ? 'FITS' : 'SALTY'}  ${Math.ceil(o.until - S.clock)}s` : `OPEN SEAT SRV${o.k + 1} (~${o.skill}): TAP 1 PLAYER  ${Math.ceil(o.until - S.clock)}s`, 18, ly, g.length && ok ? GREEN : AMBER);
+    } else if (g.length) {
       const v = verdict(g, S.clock, L);
       T(c, `LOBBY ${g.length}/${L.n}  SPREAD ${v.spread}${v.mixed ? '  MIXED REGIONS' : ''}  HAPPY ${v.happy}/${g.length}`, 18, ly, v.mixed || v.happy < g.length ? AMBER : GREEN);
     } else T(c, `LOBBY 0/${L.n}  TAP ${L.n} PLAYERS`, 18, ly, DIM);
-    box(c, BTN.match, '[ MATCH ]', g.length === L.n); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
+    box(c, BTN.sort, S.sort === 'skill' ? 'BY SKILL' : 'BY ARRIVAL', S.sort === 'skill'); box(c, BTN.match, fill ? '[ FILL SEAT ]' : '[ MATCH ]', g.length === L.n || fill); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
     // servers
     let sx = 18; T(c, 'SRV', sx, 744, DIM); sx += 4 * CW;   // each server shows the seconds its match has left
-    S.servers.forEach(f => { const busy = f > S.clock; T(c, busy ? `[${Math.min(9, Math.ceil(f - S.clock))}]` : '[ ]', sx, 744, busy ? GREEN : DIM); sx += 3.6 * CW; });
+    S.servers.forEach((f, k) => { const busy = f > S.clock, op = S.open.some(o => o.k === k); T(c, op ? '[?]' : busy ? `[${Math.min(9, Math.ceil(f - S.clock))}]` : '[ ]', sx, 744, op ? AMBER : busy ? GREEN : DIM); sx += 3.6 * CW; });
     S.log.forEach((l, i) => T(c, l.s.slice(0, 44), 18, 786 + i * 30, l.col));
     if (S.flash && S.t - S.flash.t < 1.2) { c.fillStyle = BG; c.fillRect(W / 2 - 150, 560, 300, 50); c.strokeStyle = RED; c.strokeRect(W / 2 - 150, 560, 300, 50); T(c, S.flash.s, W / 2 - S.flash.s.length * CW / 2, 586, RED); }
   }
   function drawReport(c) {
     const L = S.L, ok = passed(), st = stars();
-    const lines = [`> SHIFT ${S.li + 1} REPORT: ${L.name}`, '', `  MATCHED      ${S.matched}`, `  HAPPY        ${S.happy}  (GOAL ${L.need})`, `  SALTY        ${S.unhappy}`,
-      `  RAGE-QUITS   ${S.quits}${L.quits < 99 ? '  (MAX ' + L.quits + ')' : ''}`, `  STILL QUEUED ${S.queue.length + S.incoming.length}`, '', ok ? `  RATING  ${'* '.repeat(st)}${'. '.repeat(3 - st)}` : '  RATING  ---'];
+    const lines = [`> SHIFT ${S.li + 1} REPORT: ${L.name}`, '', `  MATCHED      ${S.matched}`, ...(L.rent ? [`  HAPPY        ${S.happy}`, `  RENT        -${rentCost()}  NET ${net()} (GOAL ${L.need})`] : [`  HAPPY        ${S.happy}  (GOAL ${L.need})`]), `  SALTY        ${S.unhappy}`,
+      `  RAGE-QUITS   ${S.quits}${L.quits < 99 ? '  (MAX ' + L.quits + ')' : ''}`, `  STILL QUEUED ${S.queue.length + S.incoming.length}`, ...(L.leave ? [`  BACKFILLED   ${S.filled}   ABANDONED ${S.abandoned / (L.n - 1)}`] : []), '', ok ? `  RATING  ${'* '.repeat(st)}${'. '.repeat(3 - st)}` : '  RATING  ---'];
     let y = 160; for (const s of lines) { T(c, s, 24, y, s.startsWith('> ') ? AMBER : GREEN); y += 36; }
-    const verdictLine = ok ? (S.li === LEVELS.length - 1 ? '> TEN MILLION? WE SERVED ' + S.matched + '. SHIP IT.' : '> SHIFT PASSED. NEXT SHIFT LOADING.') : S.quits > L.quits ? '> TOO MANY RAGE-QUITS. AGAIN.' : '> NOT ENOUGH HAPPY PLAYERS. AGAIN.';
+    const load = L.dur / L.gap / L.n;   // servers busy on average: players per second / lobby size x match length
+    const verdictLine = ok ? (L.rent ? `> THE LOAD KEPT ~${load.toFixed(1)} SERVERS BUSY. RENT ABOUT THAT PLUS ONE: FEWER AND THE QUEUE EXPLODES, MORE IS RENT FOR NOTHING.` : L.name === 'LAUNCH DAY' ? '> TEN MILLION? WE SERVED ' + S.matched + '. SHIP IT.' : '> SHIFT PASSED. NEXT SHIFT LOADING.') : S.quits > L.quits ? '> TOO MANY RAGE-QUITS. AGAIN.' : '> NOT ENOUGH HAPPY PLAYERS. AGAIN.';
     wrap(verdictLine, 40).forEach((s, i) => T(c, s, 24, y + 20 + i * 34, ok ? GREEN : RED));
     if (!paused() && Math.floor(S.t * 2) % 2) { const s = ok ? (S.li === LEVELS.length - 1 ? '[ TAP TO START OVER ]_' : '[ TAP FOR NEXT SHIFT ]_') : '[ TAP TO RETRY ]_'; T(c, s, W / 2 - s.length * CW / 2, 820); }
   }
@@ -231,9 +281,10 @@
   function onPointer(type, x, y) {
     if (type !== 'down' || paused()) return;
     Audio.unlock();
-    if (S.state === 'intro') { start(); return; }
+    if (S.state === 'intro') { if (S.L.rent && inBox(BTN.less, x, y)) rent(S.rentN - 1); else if (S.L.rent && inBox(BTN.more, x, y)) rent(S.rentN + 1); else start(); return; }
     if (S.state === 'report') { load(passed() ? (S.li + 1) % LEVELS.length : S.li); return; }
     if (inBox(BTN.match, x, y)) { match(); return; }
+    if (inBox(BTN.sort, x, y)) { resort(); return; }
     if (inBox(BTN.clear, x, y)) { if (S.sel.size) { S.sel.clear(); Snd.key(); } return; }
     const i = Math.floor((y - ROW0) / RH), vis = visible();
     if (y >= ROW0 && i >= 0 && i < vis.length) { S.cursor = i; toggle(vis[i]); }
@@ -247,6 +298,7 @@
     else if (k === ' ' || k === 'x') { const p = visible()[S.cursor]; if (p) toggle(p); }
     else if (k === 'Enter') match();
     else if (k === 'c' || k === 'Backspace') S.sel.clear();
+    else if (k === 's' || k === 'Tab') resort();
   }
 
   load(0);

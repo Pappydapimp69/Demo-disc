@@ -381,6 +381,20 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 440);
   const after = await page.evaluate(() => window.__game.S.beasts[0].flee);
   check(!after, 'embers: right after staring at the fire you cannot see (or shoo) what is at the treeline');
+  const sr = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.S.debt = 0;
+    const far = { a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 2 }, near = { a: g.S.look, d: .6, v: 0, flee: 0, snapT: 9, id: 3 }; g.S.beasts = [far, near];
+    const r = [g.shoo(far), g.shoo(near)]; g.S.voice = 0; const near2 = { a: g.S.look, d: .6, v: 0, flee: 0, snapT: 9, id: 4 }; r.push(g.shoo(near2));
+    g.S.debt = 9; const eye = { a: g.S.look, d: .5, v: 0, flee: 0, snapT: 9, id: 5 }; g.S.beasts = [eye]; return [...r, g.eyesOnly(eye)].join(); });
+  check(sr === 'false,true,false,true', `embers: a shout at the treeline is wasted, a close one works, no voice no shout, and eyes show before the body (${sr})`);
+  const told = await page.evaluate(() => { const g = window.__game; g.autopilot = null; g.load(0); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3; g.shoo({ a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 7 }); return g.S.callout && g.S.callout.text; });
+  check(/TOO FAR/.test(told || ''), `embers: the first wasted shout explains itself (${told})`);
+  const moon = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.dark); g.load(i); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3;
+    const b = { a: g.S.look, d: .45, v: 0, flee: 0, snapT: 9, id: 9, pack: 1 }; g.S.beasts = [b]; return { eyes: g.eyesOnly(b), shooed: g.shoo(b) }; });
+  check(moon.eyes && moon.shooed, `embers NEW MOON: even rested eyes see only eyeshine at middle distance, and a shout at the eyes works (${JSON.stringify(moon)})`);
+  const rush = await page.evaluate(() => { const g = window.__game; g.load(2); g.start(); g.step(40); g.S.nextSpawn = 99;
+    const a = { a: 0, d: .5, v: .08, flee: 0, snapT: 9, id: 1, pack: 7 }, b = { a: 2, d: .3, v: .08, flee: 0, snapT: 9, id: 2, pack: 7, lurk: true }; g.S.beasts = [a, b];
+    g.step(120); const held = b.d; a.flee = 1; const v0 = b.v; g.step(2); return { held: +held.toFixed(2), faster: +(b.v / v0).toFixed(1), lurk: b.lurk }; });
+  check(rush.held <= .38 && rush.faster > 2 && !rush.lurk, `embers: a pack's second one waits at the edge of the light (${rush.held}) and rushes ${rush.faster}x faster once you scare the first`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'embers: an accidental tap as the night opens is ignored');
   check(errors.length === 0, `embers runs without errors ${errors.join(' | ')}`);
@@ -484,9 +498,23 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   // the lesson: nearest-first strands the top floor until someone takes the stairs; the sweep bounds the wait
   const near = await runDay(2, 'nearest'), sw = await runDay(2, 'sweep');
   check(near.max >= 40 && near.hearts < 3 && sw.max < 20 && sw.hearts === 3, `goingup: on THE TOP FLOOR nearest-first left someone ${near.max} s (took the stairs), the sweep's longest wait was ${sw.max} s`);
+  // zoning is a trade: on the down-peak it bounds the longest wait (nobody takes the stairs) at a worse average
+  const bell = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.bell), L = g.LEVELS[i]; g.load(i); g.start(); g.step(40); let inWin = 0, before = 0, seen = new Set();
+    for (let k = 0; k < 4000 && g.S.clock < L.bell.at + L.bell.len; k++) { g.S.waiting.forEach(p => { if (!seen.has(p.id)) { seen.add(p.id); if (p.at >= L.bell.at) inWin++; else before++; } }); g.step(1); g.S.waiting.forEach(p => { p.at = p.at; }); g.S.hearts = 3; }
+    return { inWin, before }; });
+  check(bell.inWin >= 25, `goingup LUNCH BELL: the bell brings a real surge (${bell.inWin} people in 15 s after ${bell.before} in 45 s)`);
+  const fz = await runDay(4, 'zoned'), fs = await runDay(4, 'sweep');
+  check(fz.s === 'win' && fz.hearts === 3 && fz.max < fs.max, `goingup: on FIVE O'CLOCK zones cut the longest wait to ${fz.max} s from the sweep's ${fs.max} s`);
   // manual: tapping a floor sends the lift there
   const man = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.send(g.S.cars[0], 3); g.step(150); return Math.round(g.S.cars[0].y); });
   check(man === 3, 'goingup: a tapped floor gets the lift');
+  const pk = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(40); const c = g.S.cars[0]; g.S.waiting = []; c.y = 4; c.target = null; c.stops = []; g.park(c, 0); g.step(200); return Math.round(c.y); });
+  check(pk === 0, `goingup: an idle lift goes to its parking floor (${pk})`);
+  const q = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); const c = g.S.cars[0]; c.y = 0;
+    g.send(c, 4); g.send(c, 2); g.send(c, 3); g.send(c, 3); const queued = [c.target, ...c.stops].join();
+    let first = null; for (let k = 0; k < 400 && first === null; k++) { g.step(1); if (c.door > 0) first = Math.round(c.y); }
+    return { queued, first }; });
+  check(q.queued === '4,2' && q.first === 2, `goingup: taps queue stops, a second tap cancels one, and a queued floor on the way is served on the way (queued ${q.queued}, first stop ${q.first})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'goingup: an accidental tap as the day opens is ignored');
   check(errors.length === 0, `goingup runs without errors ${errors.join(' | ')}`);
@@ -519,17 +547,87 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `lobby-S${i + 1}-report.png`) });
     check(r.smart.pass && r.smart.happy > r.fifo.happy, `lobby shift ${i + 1}: waiting for fair lobbies passes (${r.smart.happy} happy, ${r.smart.quits} quits); first-come matching doesn't beat it (${r.fifo.happy} happy)`);
   }
-  const law = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[4]; g.load(4); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
-    return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(4).length }; });
+  const law = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.name === 'LAUNCH DAY'), L = g.LEVELS[i]; g.load(i); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
+    return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(i).length }; });
   check(law.served <= law.cap && law.arrived > law.cap, `lobby launch day: three servers cap the shift at ${law.cap} players however you play (served ${law.served} of ${law.arrived})`);
   const v = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[2], p = (skill, reg, at) => ({ skill, reg, at });
     return [g.tol(0), g.tol(16), g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 0, L).happy, g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 16, L).happy, g.verdict([p(4, 'EU', 0), p(4, 'NA', 0), p(4, 'EU', 0), p(4, 'EU', 0)], 30, L).happy]; });
   check(v.join() === '1,3,0,4,0', `lobby rules: the window widens with waiting and mixed regions please nobody (${v.join()})`);
   const party = await page.evaluate(() => { const g = window.__game; g.load(3); g.start(); g.step(60); g.step(1500); const p = g.S.queue.find(q => q.party); if (!p) return 'none'; g.toggle(p); return g.S.sel.size; });
   check(party === 2, `lobby: tapping one party member selects the whole party (${party})`);
+  const fit = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(60); g.S.clock = 0; const P = (id, skill) => ({ id, name: 'p' + id, skill, reg: 'EU', at: 0, pat: 99, party: null });
+    g.S.queue = [P(1, 5), P(2, 5), P(3, 9)]; g.S.sel = new Set([1]); return [g.fits(g.S.queue[1]), g.fits(g.S.queue[2]), g.fits(g.S.queue[0])].join(); });
+  check(fit === 'true,false,', `lobby: rows show whether adding them keeps the lobby fair (${fit})`);
+  const rentCurve = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.rent), out = {};
+    for (const c of [2, 6, 9]) { g.load(i); g.rent(c); g.autopilot = 'smart'; for (let k = 0; k < 700 && g.state !== 'report'; k++) g.step(10); out[c] = { net: g.net(), pass: g.result().pass }; } return out; });
+  check(rentCurve[6].pass && !rentCurve[2].pass && rentCurve[6].net > rentCurve[9].net && rentCurve[6].net > rentCurve[2].net,
+    `lobby SEASON 2: renting about the load wins (6 servers net ${rentCurve[6].net}); too few (2: ${rentCurve[2].net}) or too many (9: ${rentCurve[9].net}) lose happy players`);
+  const bf = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.leave), out = {};
+    for (const pol of ['smart', 'fifo']) { g.load(i); g.autopilot = pol; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10); out[pol] = { filled: g.S.filled, abandoned: g.S.abandoned, happy: g.S.happy }; } return out; });
+  check(bf.smart.filled > 0 && bf.smart.abandoned === 0 && bf.fifo.abandoned > 0, `lobby backfill: filling open seats saves matches (${bf.smart.filled} filled, 0 abandoned); ignoring them abandons ${bf.fifo.abandoned / 3}`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'lobby: an accidental tap as the shift opens is ignored');
   check(errors.length === 0, `lobby runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
+// ---------- TROLLEY DASH (the ad is a quiet cart-return puzzle; the game is a kart racer) ----------
+{
+  const { page, errors } = await open('games/trolleydash/index.html');
+  const tr = await page.evaluate(() => { const g = window.__game, out = [];
+    for (let i = 0; i < g.TRACKS.length; i++) { g.load(i); const t = g.S.trk, p = t.line[0]; out.push({ L: Math.round(t.L), start: t.ter[(p.y | 0) * t.N + (p.x | 0)] }); } return out; });
+  check(tr.every(t => t.L > 1500 && t.start === 7), `trolleydash: every track builds a closed road with the start line on it (${tr.map(t => t.L).join(', ')} units)`);
+  const ph = await page.evaluate(() => { const g = window.__game, t = g.S.trk, dt = 1 / 60, out = {}, G = { steer: 0, gas: 1, brake: 0, drift: false };
+    const flat = code => ({ N: t.N, ter: new Uint8Array(t.N * t.N).fill(code) }), run = (k, tr, inp, n) => { for (let i = 0; i < n; i++) { g.stepKart(k, inp, tr, dt); k.x = 500; k.y = 500; } };
+    for (const [name, code] of [['road', g.T.ROAD], ['grass', g.T.GRASS]]) { const k = g.newKart(500, 500, 0, {}); run(k, flat(code), G, 600); out[name] = Math.round(g.speedOf(k)); }
+    { const tr = flat(g.T.ROAD), k = g.newKart(500, 500, 0, {}); run(k, tr, G, 300); run(k, tr, { ...G, steer: 1, drift: true }, 150); run(k, tr, G, 1); out.boost = k.boost; let mx = 0; for (let i = 0; i < 60; i++) { run(k, tr, G, 1); mx = Math.max(mx, g.speedOf(k)); } out.boostSpeed = Math.round(mx); }
+    { const k = g.newKart(t.line[0].x, t.line[0].y, Math.atan2(t.line[0].dy, t.line[0].dx) - 1.4, {}); out.inWall = 0; for (let i = 0; i < 600; i++) { g.stepKart(k, { ...G, steer: -.5 }, t, dt); if (g.terrainAt(t, k.x, k.y) === g.T.WALL) out.inWall++; } }
+    return out; });
+  check(ph.grass < ph.road * .6 && ph.boost >= 1 && ph.boostSpeed > ph.road * 1.25 && ph.inWall === 0,
+    `trolleydash physics: road ${ph.road}, grass ${ph.grass}; a long drift fires a mini-turbo to ${ph.boostSpeed}; driving into the wall never ends up inside it`);
+  const ros = await page.evaluate(() => { const g = window.__game, blank = [], sums = [];
+    for (let c = 0; c < g.CHARS.length; c++) for (let v = 0; v < g.VEHS.length; v++) { const cv = g.kartSprite(c, v), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let px = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) px++; if (px < 60) blank.push(c + ':' + v); }
+    for (const x of [...g.CHARS, ...g.VEHS]) sums.push(Object.entries(x.pts).filter(([k]) => k !== 'weight').reduce((a, [, b]) => a + b, 0));
+    return { blank, sums, traits: new Set(g.CHARS.map(c => c.trait)).size }; });
+  check(!ros.blank.length && ros.sums.every(x => x === 0) && ros.traits === 8, `trolleydash roster: all 24 shopper+vehicle sprites drawn, speed/accel/handling/grip add to zero on every line, 8 different traits (${ros.blank.join() || 'ok'})`);
+  for (let ti = 0; ti < 3; ti++) {
+    const race = await page.evaluate(ti => { const g = window.__game; g.load(ti, 1); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120);
+      return { name: g.S.trk.def.name, state: g.S.state, done: g.S.order.filter(k => k.done).length, rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT, skips: g.S.trk.shortcuts.map(c => Math.round(c.skip)) }; }, ti);
+    await page.screenshot({ path: path.join(shots, `trolleydash-T${ti + 1}-results.png`) });
+    check(race.state === 'results' && race.done >= 7 && race.rescues <= 4 && race.skips.every(x => x < 600), `trolleydash ${race.name}: ${race.done}/8 karts finish 3 laps within 30 s of the player (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues); every shortcut skips under 600 units so laps count (${race.skips.join(', ')})`);
+  }
+  const sc = await page.evaluate(() => { const g = window.__game, out = [];
+    for (let ti = 0; ti < 3; ti++) { g.load(ti, 1); g.S.trk.shortcuts.forEach((c, si) => out.push({ name: c.name, road: c.ter === 'ROAD', main: g.timeShortcut(ti, si, false, false), cut: g.timeShortcut(ti, si, true, false), mainB: g.timeShortcut(ti, si, false, true), cutB: g.timeShortcut(ti, si, true, true) })); }
+    return out; });
+  for (const c of sc) {
+    if (c.road) check(c.cut < c.main - .5, `trolleydash ${c.name} (alley): saves ${(c.main - c.cut).toFixed(2)} s on the main line`);
+    else check(c.cut > c.main - .1 && c.cutB < c.mainB - .2, `trolleydash ${c.name} (off-road): ${(c.cut - c.main).toFixed(2)} s slower without a boost, ${(c.mainB - c.cutB).toFixed(2)} s faster with a coffee`);
+  }
+  const it = await page.evaluate(() => { const g = window.__game, r = g.mkRng(5), counts = {}; for (const pl of [1, 8]) { counts[pl] = {}; for (let i = 0; i < 2000; i++) { const x = g.rollItem(pl, r); counts[pl][x] = (counts[pl][x] || 0) + 1; } }
+    g.load(0, 1); g.S.state = 'race'; const a = g.S.karts[0], b = g.S.karts[1]; b.x = a.x + Math.cos(a.a) * 40; b.y = a.y + Math.sin(a.a) * 40; b.vx = b.vy = 0; a.item = 'melon'; g.useItem(a); for (let i = 0; i < 40; i++) g.step(1);
+    return { first: counts[1], last: counts[8], hit: (b.hits || 0) > 0 }; });
+  check(!it.first.espresso && !it.first.tannoy && !it.last.banana && it.last.espresso > 300 && it.first.banana > 500 && it.hit,
+    `trolleydash items: 1st gets defence (${it.first.banana} peels in 2000), 8th gets speed (${it.last.espresso} espressos) and never a peel; a thrown melon spins the kart ahead`);
+  const ev = await page.evaluate(() => { const g = window.__game, combos = new Set(); for (let seed = 1; seed <= 10; seed++) { const p = g.planEvents(seed, 0); combos.add(p.list.map(e => e.kind).join('+') + ':' + p.door); }
+    let door = null; for (let seed = 1; seed < 30 && !door; seed++) { g.load(0, seed); const sc = g.S.trk.shortcuts.find(c => c.closed); if (sc) { const d = sc.doorAt; door = { wall: g.terrainAt(g.S.trk, d.x, d.y) === g.T.WALL, seed }; g.S.auto = true; let took = false; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) { g.step(60); if (g.S.karts.some(k => k.route && g.S.trk.shortcuts[k.route.sc] === sc)) took = true; } door.took = took; door.finished = g.S.order.filter(k => !k.est).length; } }
+    g.load(0, 3); const leak = g.S.trk.shortcuts.some(c => c.closed) === (g.planEvents(3, 0).door >= 0);
+    return { combos: combos.size, door, leak }; });
+  check(ev.combos >= 5 && ev.door && ev.door.wall && !ev.door.took && ev.door.finished >= 7 && ev.leak,
+    `trolleydash events: 10 seeds give ${ev.combos} different event plans; a shut roller door walls the alley, no CPU tries it, the race still finishes (${ev.door && ev.door.finished}/8)`);
+  const juice = await page.evaluate(() => { const g = window.__game, res = []; for (const shake of [false, true]) { g.load(0, 2); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) { if (shake) g.S.shake = 1; g.step(60); } res.push(g.S.order.map(k => k.id + ':' + k.finishT.toFixed(3)).join(' ')); } return res[0] === res[1]; });
+  check(juice, 'trolleydash: screen shake and speed lines are presentation only (the same seed finishes identically with them on)');
+  const cup = await page.evaluate(() => { const g = window.__game, states = []; g.S.seedFixed = 7; g.startRace(); g.S.auto = true; let lastGrid = null, leaderAtBack = true;
+    for (let race = 0; race < 3; race++) { for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120); g.step(1); g.advanceCup(); g.step(60); g.advanceCup(); states.push(g.S.state);
+      if (g.S.state === 'standings') { const lead = Object.entries(g.S.cup.pts).sort((a, b) => b[1] - a[1])[0][0]; g.advanceCup(); g.S.auto = true; if (+g.S.karts[7].ci !== +lead) leaderAtBack = false; } }
+    const total = Object.values(g.S.cup.pts).reduce((a, b) => a + b, 0); g.advanceCup(); g.S.seedFixed = 0; return { states, total, leaderAtBack, back: g.S.state }; });
+  check(cup.states.join() === 'standings,standings,podium' && cup.total === 3 * 58 && cup.leaderAtBack && cup.back === 'select',
+    `trolleydash cup: 3 races, standings, podium, back to the menu; ${cup.total} points handed out (58 a race); the cup leader starts each next race at the back`);
+  const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
+    for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
+    const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints
+    for (let i = 0; i < 200; i++) g.step(1); return { lap0, lap: k.lap }; });
+  check(cheat.lap === cheat.lap0, `trolleydash: crossing the line without passing the checkpoints doesn't count a lap (${cheat.lap0} -> ${cheat.lap})`);
+  check(errors.length === 0, `trolleydash runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
 
@@ -551,6 +649,16 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `faro-L${i + 1}-win.png`) });
     check(st.s === 'win' && st.m === st.par, `faro hand ${i + 1} solved at par (${st.m}/${st.par})`);
   }
+  const poss = await page.evaluate(() => { const g = window.__game, n = 8, key = d => d.join(','), seen = new Set([key(g.newDeck(n))]), q = [g.newDeck(n)];
+    while (q.length) { const d = q.shift(); for (const f of [g.inFaro, g.outFaro]) { const e = f(d); if (!seen.has(key(e))) { seen.add(key(e)); q.push(e); } } }
+    const anyOdd = [...seen].some(k => g.odd(k.split(',').map(Number)));
+    const calls = g.LEVELS.filter(L => L.goal.target).map(L => g.possible(L) + (g.odd(L.goal.target) ? ':odd' : ':even'));
+    const i = g.LEVELS.findIndex(L => L.goal.target && g.possible(L)); g.load(i); g.start(); g.step(60); const m0 = g.S.moves; g.declare(); const penalty = g.S.moves - m0, still = g.state;
+    return { reach: seen.size, anyOdd, calls: calls.join(), penalty, still }; });
+  check(poss.reach === 24 && !poss.anyOdd && poss.calls === 'true:even,false:odd,false:even' && poss.penalty === 3 && poss.still === 'play',
+    `faro POSSIBLE?: 8 cards reach ${poss.reach} orders, none odd; hands are possible / odd / even-but-unreachable (${poss.calls}); a wrong IMPOSSIBLE call costs ${poss.penalty}`);
+  const house = await page.evaluate(() => { const g = window.__game; let bad = 0, min = 99; for (let k = 0; k < 30; k++) { const L = g.houseDeal(k), p = g.par(L); if (!(p >= 4)) bad++; min = Math.min(min, p); } return { bad, min }; });
+  check(house.bad === 0, `faro: 30 house deals are all solvable and at least 4 shuffles deep (shallowest ${house.min})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'faro: an accidental tap as the hand opens is ignored');
   check(errors.length === 0, `faro runs without errors ${errors.join(' | ')}`);
