@@ -58,7 +58,7 @@
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
       canvas.addEventListener(type, e => {
         if (type === 'pointerdown') { Audio.unlock(); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} }
-        const p = toLogical(e); onPointer && onPointer(type.replace('pointer', ''), p.x, p.y);
+        const p = toLogical(e); onPointer && onPointer(type.replace('pointer', ''), p.x, p.y, e.pointerId);
         e.preventDefault();
       }, { passive: false });
     }
