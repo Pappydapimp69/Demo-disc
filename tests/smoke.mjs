@@ -681,6 +681,13 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
 // ---------- STONEWAKE (the game: two-thumb combat; the dojo runs once before the story) ----------
 {
   const { page, errors } = await open('games/stonewake/index.html');
+  // a fresh load: Enter (keyboard or pad confirm) starts the game; the first-run dojo has full game state, so a strike works
+  await page.evaluate(() => { try { localStorage.clear(); } catch (_) {} }); await page.reload(); await page.waitForFunction(() => !!window.__game);
+  await page.keyboard.press('Enter'); await page.evaluate(() => window.__game.step(5));
+  const fresh = await page.evaluate(() => { const g = window.__game, inDojo = g.S.mode === 'battle' && !!g.dojo(); g.S.dojo.phase = 'practice'; g.S.battle.phase = 'after'; g.S.battle.t = 0;
+    for (let k = 0; k < 200 && g.S.battle.phase !== 'menu'; k++) g.step(1); return inDojo; });
+  const freshErrs = errors.length; await page.keyboard.press('z'); await page.evaluate(() => { const g = window.__game; for (let k = 0; k < 200 && g.S.battle.phase === 'timing'; k++) g.step(1); });
+  check(fresh && errors.length === freshErrs, `stonewake: on a fresh load Enter starts the dojo and a strike works (${errors.slice(freshErrs).join(' | ')})`);
   // a first-time player who holds the title is trained first, then the story starts
   const first = await page.evaluate(() => { const g = window.__game; try { localStorage.removeItem('stonewake-trained'); } catch (_) {} g.S.mode = 'title'; g.S.keys.x = true; g.S.keys.z = true; g.step(60); g.S.keys.x = false; g.S.keys.z = false;
     const inDojo = !!g.dojo() && g.S.battle && g.S.battle.kind === 'dojo'; g.S.dojo.phase = 'done'; return inDojo; });

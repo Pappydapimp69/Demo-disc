@@ -693,6 +693,7 @@
       lines: ['TAP LEFT: MAGIC.', 'TAP FIREBALL, THEN', 'LEFT RING, THEN RIGHT', 'BOTH PERFECT = THE', 'STRONGEST HIT.'] },
   ];
   function startDojo(after = 'pitch') {
+    if (!G.gear || !G.items) { newGame(); S.cut = null; S.dialog = null; }   // a fresh load has only G.endings
     S.dojo = { after, ch: 0, phase: 'explain', t: 0, reps: 0, fails: 0, streak: 0, fb: null };
     G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest';
     startBattle(['thand'], 'dojo'); S.battle.noLose = true; S.battle.foes[0].name = 'TRAINING HAND';
@@ -1444,7 +1445,7 @@
     const ok = key === 'Enter' || key === ' ' || key === 'z' || key === 'Z', left = key === 'x' || key === 'X';
     if (key === 'm' || key === 'M') return setSound(!SND.on);
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; return; }
-    if (S.mode === 'title') { if (PITCH && (key === 'w' || key === 'W')) startDemo(true); if (PITCH && (key === 'f' || key === 'F')) { S.demo = null; newGame(); } if (!PITCH && (key === 't' || key === 'T')) startDojo('title'); return; }
+    if (S.mode === 'title') { if (PITCH && (key === 'w' || key === 'W')) startDemo(true); if (PITCH && (key === 'f' || key === 'F')) { S.demo = null; newGame(); } if (!PITCH && (key === 't' || key === 'T')) startDojo('title'); if (key === 'Enter') { if (PITCH) startDemo(false); else startGame(); } return; }
     if (S.mode === 'inter') { if (left) interPick('L'); else if (ok) interPick('R'); return; }
     if (S.mode === 'card') { if (S.card.t > 2) { if (key === 'Enter' || key === ' ') cardPress('PLAY AGAIN'); if (key === 'w' || key === 'W') cardPress('WATCH IT'); if (key === 'f' || key === 'F') cardPress('FULL GAME'); } return; }
     if (S.mode === 'title' && ok) return newGame();
