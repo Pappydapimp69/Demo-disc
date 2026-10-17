@@ -636,6 +636,18 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const s = ui.right.find(b => b.o === 'STRIKE').b; await touch('touchStart', [[s[0] + s[2] / 2, s[1] + s[3] / 2, 4]]); await touch('touchEnd', []);
   const st = await page.evaluate(() => ({ pick: window.__game.S.battle.pick, phase: window.__game.S.battle.phase, target: window.__game.S.battle.target }));
   check(st.pick === 1 && st.phase === 'timing' && st.target === 1, `stonewake-proto: left thumb aims, one right-thumb tap strikes (${JSON.stringify(st)})`);
+  // the playable pitch: hold both thumbs on the title to begin (real touches), each lesson advances on the real battle stats,
+  // and WATCH mode (the autopilot) carries the same flow from the first lesson to the end card
+  await page.evaluate(() => { const g = window.__game; g.S.demo = null; g.autopilot = null; g.S.battle = null; g.S.mode = 'title'; g.S.titleHold = {}; g.S.idleT = g.S.t; });
+  await touch('touchStart', [[44, 270, 11]]); await touch('touchStart', [[44, 270, 11], [136, 270, 12]]);
+  await page.evaluate(() => window.__game.step(50));
+  await touch('touchEnd', [[136, 270, 12]]); await touch('touchEnd', []);
+  const begun = await page.evaluate(() => ({ mode: window.__game.S.mode, lesson: window.__game.lesson() && window.__game.lesson().id }));
+  check(begun.mode === 'battle' && begun.lesson === 'block', `stonewake-proto pitch: holding both thumbs starts the first lesson (${JSON.stringify(begun)})`);
+  const flow = await page.evaluate(() => { const g = window.__game, seen = []; g.startDemo(true);
+    for (let k = 0; k < 20000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(); const id = L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
+    return { mode: g.S.mode, seen: seen.join('>'), tot: g.S.demo && g.S.demo.tot }; });
+  check(flow.mode === 'card' && /block>parry>strike>string>skill>break/.test(flow.seen) && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();

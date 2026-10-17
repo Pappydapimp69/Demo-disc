@@ -162,7 +162,8 @@
     gdesert: { name: 'SAND GOLEM', hp: 660, atk: 23, spd: 6, xp: 55, pat: 'sh', brkMax: 6, draw: 'golem', tint: ['d0', 'd1'], boss: true },
     wraith: { name: 'SHARD WRAITH', hp: 800, atk: 23, spd: 15, xp: 60, pat: 'ssh', brkMax: 6, draw: 'golem', tint: ['n1', 'p1'], weak: 'fire', boss: true },
     eye: { name: 'TITAN EYE', hp: 680, atk: 20, spd: 7, xp: 0, pat: 'hs', brkMax: 6, draw: 'eye', weak: 'shard', boss: true },
-    lhand: { name: 'LEFT HAND', hp: 190, atk: 18, spd: 9, xp: 0, pat: 'h', brkMax: 3, draw: 'hand', boss: true }, rhand: { name: 'RIGHT HAND', hp: 190, atk: 18, spd: 10, xp: 0, pat: 's', brkMax: 3, draw: 'hand', boss: true },
+    thand: { name: 'STONE HAND', hp: 240, atk: 12, spd: 8, xp: 0, pat: 'sh', brkMax: 4, draw: 'hand', boss: true },
+    lhand: { short: 'LH', name: 'LEFT HAND', hp: 190, atk: 18, spd: 9, xp: 0, pat: 'h', brkMax: 3, draw: 'hand', boss: true }, rhand: { short: 'RH', name: 'RIGHT HAND', hp: 190, atk: 18, spd: 10, xp: 0, pat: 's', brkMax: 3, draw: 'hand', boss: true },
   };
   function newMember(id) { const b = MEMBERS[id]; return { id, name: b.name, spr: b.spr, lv: 1, xp: 0, maxhp: b.hp, hp: b.hp, maxmp: b.mp, mp: b.mp, atk: b.atk, mag: b.mag, def: b.def, spd: b.spd, skills: b.skills.slice() }; }
 
@@ -295,7 +296,7 @@
     const n = G.party.length, hs = 1 + .25 * (n - 1), as = 1 + .12 * (n - 1);
     const foes = foeIds.map((id, i) => { const b = FOES[id], hp = b.boss ? Math.round(b.hp * hs) : b.hp; return { id, ...b, atk: b.boss ? Math.round(b.atk * as) : b.atk, maxhp: hp, hp, i, open: id !== 'eye', brk: 0, stun: 0 }; });
     S.battle = { kind, foes, phase: 'intro', t: 0, turnQ: [], actor: null, sub: null, pick: 0, msg: null, pops: [], guard: 0, round: 0, cmd: null, ring: null, hitT: 0, combo: 0, banner: null,
-      wake: 2, hits: [], lock: { L: 0, R: 0 }, pressFx: { L: -9, R: -9 }, stats: { parry: 0, block: 0, crushed: 0, taken: 0, perfect: 0, breaks: 0, actions: 0, taps: 0 } };
+      wake: 2, hits: [], lock: { L: 0, R: 0 }, pressFx: { L: -9, R: -9 }, stats: { parry: 0, block: 0, crushed: 0, taken: 0, perfect: 0, breaks: 0, actions: 0, taps: 0, skills: 0, strings: 0 }, slow: 1, noLose: false };
     S.mode = 'battle'; S.flash = .3; S.battle.pick = firstAlive(); S.stick = null; S.dash = null; S.path = []; touches.clear();
     Audio.noise(.3, .15); [523, 659, 784, 1047].forEach((f, i) => Audio.tone(f, .08, 'square', .05, null, i * .05));
   }
@@ -307,7 +308,7 @@
     if (f.brk >= f.brkMax) {
       // it loses its next action (both, for a boss that acts twice); its queued turns come round as STUNNED skips
       f.stun = f.boss && f.id !== 'lhand' && f.id !== 'rhand' ? 2 : 1; f.shell = false; f.burrowed = false; f.phased = false; f.intent = null;
-      B.stats.breaks++; pop(B, 'BREAK!', foeX(f.i), aimY(f.i) - 22, 'au'); shake(.8); S.hitstop = .12; buzz(30); gainWake(B, 1);
+      B.stats.breaks++; B.breakT = S.t; burst(foeX(f.i), aimY(f.i), ['c2', 'c3', 'au', 's4'], 30, 70, .7); shock(foeX(f.i), aimY(f.i), 'au', 4, 30, .35); S.fieldFlash = .08; shake(.8); S.hitstop = .12; buzz(30); gainWake(B, 1);
       Audio.tone(220, .25, 'square', .07, 110); Audio.noise(.25, .2);
     }
   }
@@ -315,6 +316,8 @@
     const B = S.battle;
     if (!aliveFoes().length) return winBattle();
     if (!aliveParty().length) { B.phase = 'lose'; B.t = 0; Audio.sfx('fail'); return; }
+    B.slow = 1;
+    if (S.demo && demoTurn(B)) return;   // the playable pitch picks who acts while it is teaching
     if (!B.turnQ.length) {
       B.round++;
       if (B.foes.some(f => f.id === 'eye')) { const eye = B.foes.find(f => f.id === 'eye'); eye.open = B.round % 2 === 0; if (eye.open && eye.hp > 0) pop(B, 'THE EYE OPENS', 45, 22, 'au'); }
@@ -325,7 +328,7 @@
       if (B.guard > 0) B.guard--;
     }
     const nx = B.turnQ.shift();
-    if (nx.who === 'p') { if (nx.p.hp <= 0) return nextTurn(); B.actor = nx.p; B.phase = 'menu'; B.sub = null; B.t = 0; if (!B.foes[B.pick] || B.foes[B.pick].hp <= 0) B.pick = firstAlive(); }
+    if (nx.who === 'p') { if (nx.p.hp <= 0) return nextTurn(); partyAct(B, nx.p); }
     else {
       const f = nx.f;
       if (f.hp <= 0) return nextTurn();
@@ -334,15 +337,31 @@
       if (tr && !tr.pat) { B.actor = f; B.phase = 'after'; B.t = 0; return; }   // shell / burrow / phase: the trick is its turn
       if (tr && f.intent === 'erupt') f.burrowed = false;
       if (nx.extra && f.burrowed) { B.actor = f; B.phase = 'after'; B.t = 0; return; }
-      B.actor = f; B.phase = 'foeWind'; B.t = 0; const ps = aliveParty(); B.victim = ps[Math.floor(hash(B.round * 7 + f.i + (nx.extra ? 3 : 0)) * ps.length)];
-      const pat = tr ? tr.pat : f.pat, per = tr ? tr.big : [1, .65, .5, .42][pat.length - 1];
-      B.aoe = !!(tr && tr.aoe); B.big = !!tr;
-      B.hits = [...pat].map((k, j) => ({ kind: k, at: WIND + j * (k === 'h' ? HIT_GAP * 1.25 : HIT_GAP) * (f.id === 'wraith' || f.id === 'bat' ? .8 : 1), res: null, done: false, mult: per }));
-      B.lock = { L: 0, R: 0 };
+      foeAct(B, f, tr ? tr.pat : f.pat, tr, nx.extra);
     }
   }
-  function pop(B, s, x, y, c = 'wt') { B.pops.push({ s, x, y, c, t: S.t }); }
+  function partyAct(B, p) { B.actor = p; B.phase = 'menu'; B.sub = null; B.t = 0; if (!B.foes[B.pick] || B.foes[B.pick].hp <= 0) B.pick = firstAlive(); }
+  function foeAct(B, f, pat, tr, extra) {
+    B.actor = f; B.phase = 'foeWind'; B.t = 0; const ps = aliveParty(); B.victim = ps[Math.floor(hash(B.round * 7 + f.i + (extra ? 3 : 0)) * ps.length)];
+    const per = tr ? tr.big : [1, .65, .5, .42][pat.length - 1];
+    B.aoe = !!(tr && tr.aoe); B.big = !!tr;
+    B.hits = [...pat].map((k, j) => ({ kind: k, at: WIND + j * (k === 'h' ? HIT_GAP * 1.25 : HIT_GAP) * (f.id === 'wraith' || f.id === 'bat' ? .8 : 1), res: null, done: false, mult: per }));
+    B.lock = { L: 0, R: 0 };
+  }
+  function pop(B, s, x, y, c = 'wt', big = false) { B.pops.push({ s, x, y, c, t: S.t, big }); }
   function banner(B, s) { B.banner = { s, t: S.t }; }
+  // impact effects in battle-field pixels: sparks, expanding rings, counter slashes (one event fires several layers at once)
+  const FX = [];
+  function burst(x, y, cols, n, spd = 40, life = .45) { for (let i = 0; i < n; i++) { const a = (i / n) * 6.283 + hash(i * 13 + Math.floor(S.t * 60)) * .8, v = spd * (.45 + hash(i * 7 + Math.floor(S.t * 90)) * .8); FX.push({ k: 'p', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - spd * .25, t: 0, life: life * (.7 + hash(i + 3) * .6), c: cols[i % cols.length] }); } }
+  function shock(x, y, c, r0, r1, life = .25) { FX.push({ k: 'r', x, y, c, r0, r1, t: 0, life }); }
+  function slash(x0, y0, x1, y1, c) { FX.push({ k: 's', x0, y0, x1, y1, c, t: 0, life: .22 }); }
+  function updateFX(dt) { for (const f of FX) { f.t += dt; if (f.k === 'p') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 90 * dt; f.vx *= .96; } } for (let i = FX.length - 1; i >= 0; i--) if (FX[i].t >= FX[i].life) FX.splice(i, 1); }
+  function drawFX() {
+    for (const f of FX) { const k = f.t / f.life;
+      if (f.k === 'p') { const c = k < .3 ? 'wt' : f.c; px(f.x, f.y, c); if (k < .5) px(f.x - Math.sign(f.vx), f.y - Math.sign(f.vy), f.c); }
+      else if (f.k === 'r') ring(f.x, f.y, mix(f.r0, f.r1, easeOut(k)), k < .5 ? f.c : 's3');
+      else if (f.k === 's') { const n = 24, e = easeOut(Math.min(1, k * 2.5)); for (let i = 0; i < n * e; i++) { const q = i / n; rect(mix(f.x0, f.x1, q), mix(f.y0, f.y1, q) + Math.sin(q * 3.1) * -6, 2, 2, k < .5 ? 'wt' : f.c); } } }
+  }
   // each boss has a trick, announced at the start of the round it happens in (the party is faster, so it can answer)
   const TRICK = {
     slam: { say: 'IT WINDS UP A SLAM! HEAVY: BLOCK IT WITH YOUR LEFT THUMB!', pat: 'h', big: 2.4 },
@@ -404,20 +423,20 @@
   }
   function timingTap() {
     const B = S.battle;
-    if (B.phase === 'timing' && B.hitT === null) { B.hitT = B.t; const q = Math.abs(B.t - B.ring.dur); const grade = q < .07 ? 1.45 : q < .16 ? 1.2 : 1; B.combo = grade > 1.4 ? (B.combo || 0) + 1 : 0; pop(B, grade > 1.4 ? (B.combo > 1 ? `PERFECT x${B.combo}` : 'PERFECT!') : grade > 1 ? 'GOOD' : 'OK', 45, 54, grade > 1.4 ? 'au' : grade > 1 ? 'c3' : 's4'); if (grade > 1.4) { B.stats.perfect++; S.hitstop = .08; shake(.35); buzz(20); } Audio.tone(grade > 1.5 ? 1320 : 990, .06, 'square', .06); B.grade = grade; }
+    if (B.phase === 'timing' && B.hitT === null) { B.hitT = B.t; ghost(RPAD[0] + 43, PAD_Y + 36, 'R'); const q = Math.abs(B.t - B.ring.dur); const grade = q < .07 ? 1.45 : q < .16 ? 1.2 : 1; B.combo = grade > 1.4 ? (B.combo || 0) + 1 : 0; pop(B, grade > 1.4 ? (B.combo > 1 ? `PERFECT x${B.combo}` : 'PERFECT!') : grade > 1 ? 'GOOD' : 'OK', 45, 54, grade > 1.4 ? 'au' : grade > 1 ? 'c3' : 's4'); if (grade > 1.4) { B.stats.perfect++; S.hitstop = .08; shake(.35); buzz(20); } Audio.tone(grade > 1.5 ? 1320 : 990, .06, 'square', .06); B.grade = grade; }
   }
   // a thumb pressed during their attack: L blocks, R parries. Judged against the next hit that has not landed yet.
   function defend(hand) {
     const B = S.battle; if (B.phase !== 'foeWind') return;
     const h = B.hits.find(q => !q.done && q.res === null); if (!h) return;
-    B.pressFx[hand] = S.t;
+    B.pressFx[hand] = S.t; ghost(hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, PAD_Y + 36, hand);
     if (B.lock[hand] > B.t) return;
     const d = B.t - h.at, win = hand === 'L' ? BLOCK_WIN + (G.gear.mirror ? .07 : 0) : h.kind === 'h' ? BLOCK_WIN : PARRY_WIN + (G.gear.mirror ? .03 : 0);
     if (Math.abs(d) <= win) {
       h.res = hand === 'L' ? 'block' : h.kind === 'h' ? 'crushed' : 'parry';
-      if (h.res === 'parry') { pop(B, 'PARRY!', 66, 62, 'c2'); Audio.tone(1760, .06, 'square', .07); Audio.tone(2637, .08, 'square', .05, null, .04); S.hitstop = .09; buzz(20); }
-      else if (h.res === 'block') { pop(B, 'BLOCK', 66, 62, 'c3'); Audio.tone(1500, .05, 'square', .06); S.hitstop = .05; buzz(15); }
-      else { pop(B, 'CRUSHED!', 66, 62, 'r2'); Audio.tone(140, .2, 'square', .07); }
+      if (h.res === 'parry') { pop(B, 'PARRY!', 66, 58, 'c2', true); S.fieldFlash = .07; Audio.tone(1760, .06, 'square', .07); Audio.tone(2637, .08, 'square', .05, null, .04); S.hitstop = .09; buzz(20); }
+      else if (h.res === 'block') { pop(B, 'BLOCK', 66, 58, 'c3', true); Audio.tone(1500, .05, 'square', .06); S.hitstop = .05; buzz(15); }
+      else { pop(B, 'CRUSHED!', 66, 58, 'r2', true); Audio.tone(140, .2, 'square', .07); }
     } else if (d < -win) { B.lock[hand] = h.at + .06; pop(B, 'EARLY', hand === 'L' ? 20 : 70, 90, 's3'); Audio.tone(200, .05, 'square', .03); }
   }
   function resolveAction(target, grade) {
@@ -434,13 +453,14 @@
       f.hurtT = S.t; if (f.weak && f.weak === kind) { d = Math.round(d * 1.5); brk++; pop(B, 'WEAK!', foeX(f.i), aimY(f.i) - 14, 'n6'); }
       if (f.id === 'eye' && !f.open) { d = Math.round(d * .15); brk = 0; pop(B, 'CLOSED', foeX(f.i), aimY(f.i) - 14, 's3'); }
       if (f.stun > 0) d = Math.round(d * 1.5);
-      f.hp = Math.max(0, f.hp - d); pop(B, String(d), foeX(f.i), aimY(f.i) - 6, f.stun > 0 ? 'au' : 'wt');
+      f.hp = Math.max(0, f.hp - d); pop(B, String(d), foeX(f.i), aimY(f.i) - 6, f.stun > 0 ? 'au' : 'wt', grade > 1.4 || f.stun > 0);
+      burst(foeX(f.i), aimY(f.i), grade > 1.4 ? ['au', 'wt', 'n6'] : ['wt', 's4'], grade > 1.4 ? 16 : 8, grade > 1.4 ? 55 : 35); if (grade > 1.4) shock(foeX(f.i), aimY(f.i), 'au', 4, 18);
       if (brk) addBreak(B, f, brk);
       return d; };
     if (grade > 1.4) gainWake(B, 1, 45, 44);
     if (c.kind === 'fight') { const f = B.foes[target]; dmg((a.atk + (a.id === 'hero' && G.gear.sun ? 4 : 0)) * 1.4, f, a.id === 'archer' ? 'pierce' : 'phys'); Audio.noise(.08, .2); }
     else if (c.kind === 'skill') {
-      const sk = SKILL[c.name]; B.wake -= sk.w;
+      const sk = SKILL[c.name]; B.wake -= sk.w; B.stats.skills++;
       if (c.name === 'SHARD STRIKE') { const f = B.foes[target]; dmg((a.atk + (G.gear.sun ? 4 : 0)) * (1.3 + G.shards * .4), f, 'shard'); Audio.tone(1800, .3, 'square', .06, 400); B.fx = { kind: 'shard', t: S.t, i: target }; }
       else if (c.name === 'FIREBALL') { const f = B.foes[target]; dmg(a.mag * 2.2, f, 'fire'); Audio.noise(.4, .2); B.fx = { kind: 'fire', t: S.t, i: target }; }
       else if (c.name === 'VOLLEY') { for (const f of aliveFoes()) dmg(a.atk * 1.0, f, 'pierce'); Audio.tone(2400, .2, 'square', .04, 900); B.fx = { kind: 'volley', t: S.t }; }
@@ -464,12 +484,17 @@
       if (h.res === 'parry') { d = 0; counter += v.atk * .6; }
       if (h.res === 'crushed') d = Math.round(d * 1.3);
       if (B.guard > 0) d = Math.round(d * .5);
-      if (h.res !== 'parry') { d = Math.max(1, d); v.hp = Math.max(0, v.hp - d); B.stats.taken += d; pop(B, String(d), memberX(G.party.indexOf(v)) + 4, memberY(G.party.indexOf(v)) - 2, h.res === 'block' ? 'c3' : 'r2'); }
+      const vi = G.party.indexOf(v), vx = memberX(vi) + 5, vy = memberY(vi) + 7;
+      if (h.res === 'parry') { burst(vx - 3, vy, ['c2', 'c3', 'wt'], 14, 55); shock(vx, vy, 'c3', 3, 14); }
+      else if (h.res === 'block') { shock(vx, vy, 'b2', 9, 13, .2); burst(vx - 6, vy, ['s4', 'b2'], 7, 30, .3); }
+      else burst(vx, vy, ['r2', 'n6', 'r1'], 12, 45);
+      if (h.res !== 'parry') { d = Math.max(1, d); v.hp = Math.max(0, v.hp - d); if (B.noLose) v.hp = Math.max(1, v.hp); B.stats.taken += d; v.hurtT = S.t; pop(B, String(d), vx - 1, vy - 9, h.res === 'block' ? 'c3' : 'r2'); }
     }
     if (h.res) B.stats[h.res]++;
+    f.lungeT = S.t;
     if (h.res === 'parry') {   // the counter: a free riposte, a wake pip and a notch of break
       const cd = Math.max(1, Math.round(counter * (B.aoe ? .5 : 1)));
-      if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); }
+      if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); const v0 = B.aoe ? aliveParty()[0] : B.victim, vi = G.party.indexOf(v0); slash(memberX(vi) + 2, memberY(vi) + 6, foeX(f.i) + 4, aimY(f.i), 'c2'); burst(foeX(f.i), aimY(f.i), ['c3', 'wt'], 8, 35); }
       gainWake(B, 1, 66, 52); addBreak(B, f, 1);
       Audio.noise(.06, .12); shake(.3);
     } else { Audio.noise(.1, h.res === 'block' ? .08 : .2); S.flash = h.res === 'block' ? 0 : .06; shake(h.res === 'block' ? .25 : B.big ? .8 : .45); if (B.big && h.res !== 'block') { S.hitstop = .1; buzz(40); } }
@@ -481,7 +506,8 @@
     Audio.sfx('win');
   }
   function endBattle() {
-    const B = S.battle; S.battle = null; S.mode = 'map'; S.lockUntil = S.t + .4; API.lastBattle = B.stats;
+    const B = S.battle;
+    if (S.demo && (B.kind === 'demo1' || B.kind === 'demo2')) { S.battle = null; demoAfterBattle(B); S.lockUntil = S.t + .6; return; } S.battle = null; S.mode = 'map'; S.lockUntil = S.t + .4; API.lastBattle = B.stats;
     if (B.kind === 'boss') {
       G.cleared[G.region] = true; G.shards++;
       const ally = MAPS[G.region].ally, joined = newMember(ally);
@@ -525,6 +551,131 @@
     Audio.sfx('win');
   }
 
+  // ---------- the playable pitch ----------
+  // Opens on a two-thumb hold, then teaches by doing inside one real fight (a stone hand of the titan), one verb at a
+  // time, then throws everything at once (the titan's eye and both hands), then shows the player's own numbers and the
+  // plan. Each lesson is an observer on the real battle stats (Brain the-game-prologue#E15), so there is no separate
+  // tutorial rule set: the fight IS the game. WATCH mode plays the same flow with the autopilot and ghost thumbs.
+  const LESSONS = [
+    { id: 'block', who: 'foe', pat: 'h', slow: .4, hand: 'L', l1: 'HEAVY HIT', c1: 'r2', verb: 'BLOCK', ok: (s, b) => s.block > b.block, again: 'BLOCK AS THE RING CLOSES' },
+    { id: 'parry', who: 'foe', pat: 's', slow: .45, hand: 'R', l1: 'SWIFT HIT', c1: 'c2', verb: 'PARRY', ok: (s, b) => s.parry > b.parry, again: 'PARRY AS THE RING CLOSES' },
+    { id: 'strike', who: 'p', actor: 'hero', hand: 'R', l1: 'YOUR TURN', c1: 'au', verb: 'STRIKE', sub: 'TAP WHEN RINGS MEET', ok: (s, b) => s.actions > b.actions },
+    { id: 'string', who: 'foe', pat: 'shs', slow: .8, l1: 'A STRING', c1: 'wt', verb: 'READ EACH HIT', sub: 'RED=LEFT  BLUE=RIGHT', ok: (s, b) => s.strings > b.strings },
+    { id: 'skill', who: 'p', actor: 'hero', hand: 'R', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'break', who: 'free', l1: 'FILL ITS BREAK BAR', c1: 'au', verb: 'BREAK IT', sub: 'PERFECTS + PARRIES', ok: (s, b) => s.breaks > b.breaks },
+    { id: 'finish', who: 'free', l1: 'IT IS OPEN', c1: 'au', verb: 'FINISH IT', ok: () => false },
+  ];
+  function startDemo(watch) {
+    newGame(); S.cut = null; S.dialog = null;
+    G.party = [newMember('hero'), newMember('knight')]; API.setLevel(3); G.shards = 1; G.region = 'forest';
+    S.demo = { i: 0, base: null, watch: !!watch, shown: S.t, fails: 0, tot: { parry: 0, block: 0, crushed: 0, perfect: 0, breaks: 0, actions: 0, taps: 0, skills: 0 }, finale: false };
+    API.autopilot = watch ? 'perfect' : null; API.botThink = watch ? .8 : 0;
+    startBattle(['thand'], 'demo1'); S.battle.noLose = true;
+    S.lockUntil = S.t + .5;
+  }
+  function lesson() { const d = S.demo; return d && !d.finale ? LESSONS[d.i] : null; }
+  function demoTurn(B) {   // returns true when the lesson chose this turn
+    const d = S.demo, L = lesson(); if (!L) return false;
+    if (d.base && L.ok(B.stats, d.base)) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; Audio.tone(1047, .08, 'square', .05); Audio.tone(1568, .14, 'square', .05, null, .08); }
+    else if (d.base && L.who === 'foe') { d.fails++; d.shown = S.t; }
+    const N = lesson(); if (!N) return false;
+    if (!d.base) { d.base = { ...B.stats }; if (N.pre) N.pre(B); }
+    const f = aliveFoes()[0];
+    if (N.who === 'foe') { foeAct(B, f, N.pat, null, false); B.victim = G.party[0]; B.slow = N.slow; return true; }
+    if (N.who === 'p') { partyAct(B, G.party.find(p => p.id === N.actor)); return true; }
+    return false;   // 'free': the normal turn order runs, the prompt stays up
+  }
+  function demoAfterBattle(B) {
+    const d = S.demo; for (const k in d.tot) d.tot[k] += B.stats[k] || 0;
+    if (B.kind === 'demo1') { S.mode = 'inter'; S.inter = { t: 0 }; }
+    else { S.mode = 'card'; S.card = { t: 0 }; API.autopilot = null; }
+  }
+  function startFinale() {
+    const d = S.demo; d.finale = true; d.shown = S.t;
+    G.party = ['hero', 'knight', 'mage', 'archer'].map(newMember); API.setLevel(7); G.shards = 3; G.region = 'titan';
+    startBattle(['lhand', 'eye', 'rhand'], 'demo2'); for (const f of S.battle.foes) { f.maxhp = Math.round(f.maxhp * .5); f.hp = f.maxhp; }   // a demo-length encounter
+    banner(S.battle, 'EVERYTHING AT ONCE. HANDS ARE HEAVY AND SWIFT. STRIKE THE EYE WHILE IT IS OPEN.');
+  }
+  const handName = h => S.scheme === 'keys' ? (h === 'L' ? 'X KEY' : 'Z KEY') : (h === 'L' ? 'LEFT THUMB' : 'RIGHT THUMB');
+  function drawLesson(t) {   // the coach: big, short, on the field; an arrow over the pad that answers it
+    const B = S.battle, L = lesson(); if (!L || !B) return;
+    const busy = ['intro', 'after', 'win'].includes(B.phase); if (busy && L.who !== 'free') return;
+    if (L.who === 'p' && B.phase !== 'menu' && B.phase !== 'timing') return;
+    const d = S.demo, k = Math.min(1, (S.t - d.shown) * 4), y0 = 2, big = L.verb.length <= 11, hgt = 8 + (L.hand ? 11 : 0) + (big ? 18 : 11) + (L.sub ? 11 : 0);
+    rect(0, y0, W, hgt + 4, 'k'); rect(0, y0 + hgt + 3, W * k, 1, L.c1);
+    let y = y0 + 3;
+    text(d.fails && L.again ? 'AGAIN! ' + L.again : L.l1, 90, y, d.fails ? 'n6' : L.c1, 'center', null); y += 11;
+    if (L.hand) { text(handName(L.hand), 90, y, L.hand === 'L' ? 'au' : 'c2', 'center', null); y += 11; }
+    text(L.verb, 90, y, 'wt', 'center', 'k', big ? 16 : 8); y += big ? 18 : 11;
+    if (L.sub) text(L.sub, 90, y, 's4', 'center', null);
+    if (L.hand && Math.floor(t * 3) % 2 && (B.phase === 'foeWind' || B.phase === 'menu' || B.phase === 'timing')) {   // point at the answer
+      let x = L.hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, y = PAD_Y - 6;
+      if (B.phase === 'menu') { const b = rightButtons().find(q => q.o === (L.id === 'skill' ? 'SHARD STRIKE' : 'STRIKE')); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
+      for (let i = 0; i < 4; i++) rect(x - 4 + i, y + i, 9 - i * 2, 1, 'au');
+    }
+  }
+  // ghost thumbs (WATCH mode): where the autopilot pressed, drawn like a fingertip
+  const GHOSTS = [];
+  function ghost(x, y, hand) { if (S.demo && S.demo.watch) GHOSTS.push({ x, y, hand, t: S.t }); }
+  function drawGhosts() { for (let i = GHOSTS.length - 1; i >= 0; i--) { const g = GHOSTS[i], k = (S.t - g.t) / .35; if (k > 1) { GHOSTS.splice(i, 1); continue; } const c = g.hand === 'L' ? 'au' : 'c2'; disc(g.x, g.y, Math.round(9 - k * 3), c); ring(g.x, g.y, Math.round(11 + k * 6), 'wt'); } }
+  function drawInter(t) {   // between the lesson and the climax: the mountain stands up
+    const k = S.inter.t;
+    ['n0', 'n1', 'n2', 'n3', 'n4'].forEach((c, i) => rect(0, i * 48, W, 49, c));
+    const rise = easeOut(clamp(k / 1.6)) * 40, sh = k < 1.6 ? (Math.floor(t * 30) % 2 ? 1 : -1) : 0;
+    cx.fillStyle = P('s1'); cx.beginPath(); cx.moveTo(-40 + sh, 320); cx.lineTo(20 + sh, 200 - rise); cx.lineTo(90 + sh, 160 - rise); cx.lineTo(160 + sh, 200 - rise); cx.lineTo(220 + sh, 320); cx.fill();
+    const e = easeOut(clamp((k - .8) / .5)), oh = Math.max(1, Math.round(9 * e)), ex = 90 + sh, ey = 205 - rise;
+    for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(22 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(ex - w, ey + dy, w * 2 + 1, 1, dy < -oh / 2 ? 'n6' : 'n7'); }
+    if (e > .6) rect(ex - 2, ey - oh + 1, 5, oh * 2 - 1, 'k');
+    rect(0, 40, W, 40, 'k'); text('YOU HAVE THE VERBS.', 90, 46, 'wt', 'center'); text('NOW IT STANDS UP.', 90, 62, 'au', 'center');
+  }
+  function drawCard(t) {   // the pitch, after the player has felt it
+    const d = S.demo.tot, k = S.card.t, n = d.actions || 1;
+    rect(0, 0, W, H, 'n0'); for (let i = 0; i < 40; i++) px(hash(i) * W, hash(i + 5) * H, Math.floor(t * 2 + i) % 7 ? 'n1' : 'n2');
+    text('YOU JUST PLAYED', 90, 14, 's4', 'center'); text('TWO HANDS', 90, 26, 'au', 'center', 'k', 16);
+    const rows = [['PARRIES', d.parry, 'c2'], ['BLOCKS', d.block, 'b2'], ['PERFECT HITS', d.perfect, 'au'], ['BREAKS', d.breaks, 'n6'], ['SKILLS FROM WAKE', d.skills, 'c2']];
+    rows.forEach(([l, v, c], i) => { if (k < .25 + i * .15) return; text(l, 12, 52 + i * 12, 'wt'); text(String(v), 168, 52 + i * 12, c, 'right'); });
+    if (k > 1.1) { panel(6, 116, 168, 32, 'b1'); text('TAPS TO ATTACK', 12, 122, 's4'); text('3', 140, 122, 'r2'); text('2', 166, 122, 'g4', 'right'); rect(148, 125, 7, 2, 'wt'); text('AIM WITHOUT REACHING', 12, 134, 'wt', 'left', null); }
+    if (k > 1.5) {
+      text('THE PLAN', 12, 156, 'au');
+      const plan = [['M1', 'TWO THUMBS: BUILT', 'g4', ''], ['M2', 'A RHYTHM PER HERO', 'wt', ''], ['M3', 'FOES THAT FEINT', 'wt', ''], ['M4', 'DOJO + LEFTY MODE', 'wt', ''], ['M5', '10 REAL PLAYERS', 'wt', '']];
+      plan.forEach(([m, l, c, tag], i) => { text(m, 12, 168 + i * 11, c === 'g4' ? 'g4' : 's3'); text(l, 34, 168 + i * 11, c); if (tag) text(tag, 168, 168 + i * 11, 'g4', 'right'); });
+    }
+    if (k > 2) CARD_BTNS.forEach(b => button(b.b, b.o, b.o === 'PLAY AGAIN', b.o === 'PLAY AGAIN' ? 'r1' : 'b0'));
+  }
+  const CARD_BTNS = [{ o: 'PLAY AGAIN', b: [92, 236, 84, 36] }, { o: 'WATCH IT', b: [4, 236, 84, 36] }, { o: 'FULL GAME', b: [4, 278, 172, 30] }];
+  function cardPress(o) { if (o === 'PLAY AGAIN') startDemo(false); else if (o === 'WATCH IT') startDemo(true); else { S.demo = null; API.autopilot = null; newGame(); } }
+  // title: hold both thumbs to begin (the first thing the pitch asks for is the thing it is about)
+  const HOLD = { L: [44, 270], R: [136, 270] };
+  function drawDemoTitle(t) {
+    ['n0', 'n0', 'n1', 'n1', 'n2', 'n3'].forEach((c, i) => rect(0, i * 54, W, 55, c));
+    for (let i = 0; i < 50; i++) px(hash(i) * W, hash(i + 5) * 200, Math.floor(t * 3 + i) % 6 ? 'n7' : 'c3');
+    cx.fillStyle = P('s1'); cx.beginPath(); cx.moveTo(-30, 250); cx.lineTo(30, 170); cx.lineTo(90, 140); cx.lineTo(150, 166); cx.lineTo(220, 250); cx.fill();
+    const blink = Math.floor(t * .7) % 5 === 0 && (t * .7) % 1 < .2; for (let dy = -4; dy <= 4; dy++) { const w = Math.round(12 * Math.sqrt(Math.max(0, 1 - (dy / 4.5) ** 2))); rect(90 - w, 186 + dy, w * 2 + 1, blink ? 0 : 1, dy < -2 ? 'n6' : 'n7'); }
+    if (!blink) rect(89, 183, 3, 7, 'k');
+    cx.font = `16px ${FONT}`; cx.textAlign = 'center'; cx.textBaseline = 'top'; cx.fillStyle = P('k'); for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [2, 2]]) cx.fillText('STONEWAKE', 90 + dx, 54 + dy); cx.fillStyle = P('au'); cx.fillText('STONEWAKE', 90, 54);
+    text('TWO HANDS', 90, 78, 'c3', 'center');
+    text('ONE THUMB DEFENDS.', 90, 100, 'au', 'center'); text('ONE THUMB ATTACKS.', 90, 112, 'c2', 'center');
+    rect(0, 236, W, 84, 'k');
+    const hl = S.titleHold || {}, k = clamp((S.holdT || 0) / .7);
+    for (const h of ['L', 'R']) { const [x, y] = HOLD[h], on = !!hl[h], c = h === 'L' ? 'au' : 'c2'; ring(x, y, 20, on ? c : 's2'); ring(x, y, 19, on ? c : 's1'); if (on) disc(x, y, Math.round(4 + 13 * k), c); text(S.scheme === 'keys' ? (h === 'L' ? 'X' : 'Z') : h === 'L' ? 'LEFT' : 'RIGHT', x, y - 4, on ? 'k' : 'wt', 'center', null); }
+    text(S.scheme === 'keys' ? 'HOLD X AND Z' : 'HOLD BOTH THUMBS', 90, 244, Math.floor(t * 2) % 2 ? 'wt' : 's4', 'center');
+    text('TO BEGIN', 90, 300, 's4', 'center');
+    button(TITLE_BTNS[0].b, 'WATCH IT', false); button(TITLE_BTNS[1].b, 'FULL GAME', false);
+    if (S.t - (S.idleT || 0) > 11 && Math.floor(t * 2) % 2) text('OR WAIT: IT PLAYS ITSELF', 90, 222, 's3', 'center', null);
+  }
+  const TITLE_BTNS = [{ o: 'WATCH', b: [8, 196, 80, 22] }, { o: 'FULL', b: [92, 196, 80, 22] }];   // labels fit 10 characters
+  function updateTitle(dt) {
+    const hl = S.titleHold || {}, keyHold = S.keys.x || S.keys.X, keyHold2 = S.keys.z || S.keys.Z;
+    const both = (hl.L || keyHold) && (hl.R || keyHold2);
+    if (keyHold) hl.L = hl.L || 'key'; if (keyHold2) hl.R = hl.R || 'key';
+    if (!keyHold && hl.L === 'key') delete hl.L; if (!keyHold2 && hl.R === 'key') delete hl.R;
+    S.titleHold = hl;
+    if (both) { S.holdT = (S.holdT || 0) + dt; if (Math.floor(S.holdT * 20) !== Math.floor((S.holdT - dt) * 20)) Audio.tone(300 + S.holdT * 900, .03, 'square', .03); if (S.holdT > .7) { S.holdT = 0; S.titleHold = {}; touches.clear(); buzz(30); startDemo(false); } }
+    else S.holdT = 0;
+    if (hl.L || hl.R) S.idleT = S.t;
+    if (S.t - (S.idleT || 0) > 14) startDemo(true);   // attract mode
+  }
+
   // ---------- update ----------
   // bots for tests and the attract film. 'perfect' parries swift and blocks heavy on the frame; 'fightonly' strikes on time
   // and blocks everything; 'human' is a seeded player with real timing spread (API.human: sd seconds, parry true/false).
@@ -536,6 +687,7 @@
     const eye = B.foes.find(f => f.id === 'eye' && f.open && f.hp > 0), shelled = B.foes.find(f => f.shell && f.hp > 0), sunk = B.foes.find(f => f.burrowed && f.hp > 0), lit = B.foes.find(f => f.phased && f.hp > 0);
     const rainy = B.foes.find(f => f.hp > 0 && f.intent && TRICK[f.intent].aoe), hurt = G.party.find(p => p.hp > 0 && p.hp < p.maxhp * .35);
     const at = f => B.foes.indexOf(f), plain = B.foes.find(f => f.hp > 0 && f.open !== false && !f.shell && !f.burrowed && !f.phased) || B.foes.find(f => f.hp > 0);
+    if (lesson() && lesson().id === 'skill' && a.id === 'hero') return { cmd: 'SHARD STRIKE', pick: at(plain) };
     if (auto === 'fightonly') return { cmd: 'STRIKE', pick: at(B.foes.find(f => f.hp > 0 && f.open !== false) || plain) };
     if (hurt && can('HEAL')) return { cmd: 'HEAL', ally: G.party.indexOf(hurt) };
     if (eye && can('SHARD STRIKE')) return { cmd: 'SHARD STRIKE', pick: at(eye) };
@@ -548,7 +700,9 @@
   }
   function botPlan(B) {
     const d = botDecide(B);
+    if (d.pick !== undefined && d.pick !== B.pick) { const c = foeChips().find(q => q.i === d.pick); if (c) ghost(c.b[0] + c.b[2] / 2, c.b[1] + c.b[3] / 2, 'L'); }
     if (d.pick !== undefined) B.pick = d.pick;
+    const btn = rightButtons().find(q => q.o === d.cmd); if (btn) ghost(btn.b[0] + btn.b[2] / 2, btn.b[1] + btn.b[3] / 2, 'R');
     choose(d.cmd);
     if (d.ally !== undefined && B.phase === 'allyTarget') startTiming(d.ally);
   }
@@ -567,13 +721,17 @@
   function update(dt) {
     S.trauma = Math.max(0, (S.trauma || 0) - dt * 1.8);
     if (S.hitstop > 0) { S.hitstop -= dt; return; }   // hit-stop: the world holds still for a few frames on a big hit
-    S.t += dt; S.mt += dt; S.flash = Math.max(0, S.flash - dt);
+    S.t += dt; S.mt += dt; S.flash = Math.max(0, S.flash - dt); S.fieldFlash = Math.max(0, (S.fieldFlash || 0) - dt); updateFX(dt);
+    if (S.mode === 'title') { updateTitle(dt); return; }
+    if (S.mode === 'inter') { S.inter.t += dt; if (S.inter.t > 3.4) startFinale(); return; }
+    if (S.mode === 'card') { S.card.t += dt; if (S.demo.watch && S.card.t > 9) { S.demo = null; S.mode = 'title'; S.idleT = S.t; } return; }
     if (S.mode === 'cut') { S.cut.t += dt; if (S.cut.t > 6.5) endCut(); return; }
     if (S.mode === 'map') { if (!S.dialog && !S.choice) updateMap(dt); return; }
     if (S.mode === 'calm') { updateCalm(dt); return; }
     if (S.mode === 'ending') { S.ending.t += dt; return; }
     if (S.mode !== 'battle') return;
-    const B = S.battle; B.t += dt;
+    const B = S.battle; B.t += dt * (B.phase === 'foeWind' ? B.slow || 1 : 1);
+    if (B.phase === 'lose' && S.demo && S.demo.watch && B.t > 1.5) return startFinale();
     const auto = API.autopilot;
     if (B.phase === 'intro' && B.t > .7) nextTurn();
     else if (B.phase === 'menu' && auto && B.t > (API.botThink || 0)) botPlan(B);
@@ -585,7 +743,7 @@
       if (auto && !B.botPress) botDefend(B);
       if (B.botPress) for (const p of B.botPress) if (!p.used && B.t >= p.at) { p.used = true; defend(p.hand); }
       for (const h of B.hits) if (!h.done && (h.res !== null ? B.t >= h.at : B.t > h.at + BLOCK_WIN + .07)) landHit(h);
-      if (B.hits.every(h => h.done)) { B.phase = 'after'; B.t = 0; B.botPress = null; }
+      if (B.hits.every(h => h.done)) { B.phase = 'after'; B.t = 0; B.botPress = null; if (B.hits.length > 1) B.stats.strings++; }
     }
     else if (B.phase === 'after' && B.t > .55) nextTurn();
     else if (B.phase === 'win' && B.t > 1.6 && auto) endBattle();
@@ -599,19 +757,23 @@
     return [12 + i * 22, 66 + (i % 2) * 10];
   }
   const foeX = i => foePos(i)[0], foeY = i => foePos(i)[1];
-  const memberX = i => 62 + (i % 2) * 10, memberY = i => 20 + i * 15;
+  const memberX = i => 62 + (i % 2) * 10, memberY = i => 30 + i * 13;
   const aimY = i => S.battle.foes[i].id === 'eye' ? foeY(i) : foeY(i) - (S.battle.foes[i].boss ? 16 : 5);
   function drawFoe(f, t) {
     const [x, y] = foePos(f.i), hurt = S.battle.pops.some(p => S.t - p.t < .3 && Math.abs(p.x - x) < 3);
     if (f.hp <= 0) return;
-    const kb = f.hurtT && S.t - f.hurtT < .15 ? -2 : 0, sink = f.burrowed ? 14 : 0;
+    const B = S.battle, attacking = B.phase === 'foeWind' && B.actor === f, nh = attacking && B.hits.find(q => !q.done);
+    const wind = nh ? clamp(1 - (nh.at - B.t) / WIND) : 0, lunge = f.lungeT && S.t - f.lungeT < .12 ? 6 : 0;
+    const kb = (f.hurtT && S.t - f.hurtT < .15 ? -3 : 0) - Math.round(easeOut(wind) * 3) + lunge, sink = f.burrowed ? 14 : 0;
+    if (nh && Math.floor(t * 12) % 2) { const c = nh.kind === 'h' ? 'r2' : 'c2', r = f.boss ? 20 : 10; for (let a = 0; a < 28; a++) { const q = a / 28 * 6.283; px(x + kb + Math.cos(q) * r, aimY(f.i) + Math.sin(q) * r * .8, c); } }   // anticipation: it glows the colour of the hit it is about to throw
     if (f.draw === 'golem') { cx.save(); cx.translate(x + kb, y + sink); cx.scale(.62, .62); if (f.phased) cx.globalAlpha = .45; golemArt(0, 0, t, f.tint, hurt); cx.restore(); if (sink) rect(x - 20, y - 2, 40, 6, 'd1'); }
-    else if (f.draw === 'eye') { const oh = f.open ? 12 : 2; rect(x - 30, y - 18, 60, 3, 's0'); for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(28 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(x - w, y + dy, w * 2 + 1, 1, dy < -oh / 2 ? 'n6' : 'n7'); } if (f.open) rect(x - 2, y - oh + 2, 5, oh * 2 - 3, 'k'); }
-    else if (f.draw === 'hand') { const bob = Math.round(Math.sin(t * 3 + f.i) * 2); rect(x - 9, y - 16 + bob, 18, 13, 's1'); for (let k = 0; k < 4; k++) rect(x - 9 + k * 5, y - 23 + bob + (k % 2) * 2, 4, 8, 's2'); rect(x - 9, y - 16 + bob, 18, 2, 's3'); }
-    else spr(f.draw, x - 6, y - 10, Math.floor(t * 4) % 2);
+    else if (f.draw === 'eye') { const oh = 12; rect(x - 30, y - 18, 60, 3, 's0'); for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(28 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(x - w, y + dy, w * 2 + 1, 1, f.open ? (dy < -oh / 2 ? 'n6' : 'n7') : dy === 0 ? 'k' : dy < 0 ? 's3' : 's2'); } if (f.open) { rect(x - 2, y - oh + 2, 5, oh * 2 - 3, 'k'); px(x + 1, y - 6, 'wt'); } else for (let i = -3; i <= 3; i++) rect(x + i * 7, y + 1, 1, 3, 'k'); }   // closed: a stone lid with lashes
+    else if (f.draw === 'hand') { const bob = Math.round(Math.sin(t * 3 + f.i) * 2) - Math.round(wind * 4), sc = f.id === 'thand' ? 1.7 : 1.15; cx.save(); cx.translate(x + kb, y); cx.scale(sc, sc); cx.translate(-x, -y); rect(x - 10, y - 17 + bob, 20, 15, 'k'); for (let k = 0; k < 4; k++) rect(x - 10 + k * 5, y - 24 + bob + (k % 2) * 2, 5, 9, 'k'); rect(x - 9, y - 16 + bob, 18, 13, 's3'); for (let k = 0; k < 4; k++) rect(x - 9 + k * 5, y - 23 + bob + (k % 2) * 2, 4, 8, 's4'); rect(x - 9, y - 16 + bob, 18, 2, 'wt'); rect(x - 9, y - 6 + bob, 18, 3, 's2'); px(x - 4, y - 11 + bob, f.stun ? 's3' : 'r2'); px(x + 3, y - 11 + bob, f.stun ? 's3' : 'r2'); cx.restore(); }
+    else spr(f.draw, x - 6 + kb, y - 10, Math.floor(t * 4) % 2);
+    if (f.stun > 0) for (let i = 0; i < 3; i++) { const a = t * 4 + i * 2.09; px(x + Math.cos(a) * 9, aimY(f.i) - 14 + Math.sin(a) * 2, 'au'); }
     if (f.shell) { for (let i = 0; i < 7; i++) px(x - 12 + i * 4, y - 22 + (i % 2) * 3, 'c3'); rect(x - 13, y - 24, 26, 1, 'c2'); }
     if (f.intent && TRICK[f.intent].big && Math.floor(t * 4) % 2) { rect(x - 1, y - 34, 3, 6, 'r2'); rect(x - 1, y - 26, 3, 2, 'r2'); }   // ! the trick is coming this round
-    const bw = f.boss ? 26 : 14, by = f.id === 'eye' ? y + 15 : y + 3; rect(x - bw / 2, by, bw, 2, 'k'); rect(x - bw / 2, by, bw * f.hp / f.maxhp, 2, f.hp / f.maxhp < .3 ? 'r1' : 'g3');
+    const bw = f.boss ? 26 : 14, by = f.id === 'eye' ? y + 15 : y + 3; rect(x - bw / 2, by, bw, 2, 'k'); rect(x - bw / 2, by, bw * f.hp / f.maxhp, 2, f.hp / f.maxhp < .3 ? 'r1' : 'g3'); if (f.brkMax) { rect(x - bw / 2, by + 3, bw, 1, 'k'); rect(x - bw / 2, by + 3, Math.round(bw * (f.stun > 0 ? 1 : f.brk / f.brkMax)), 1, 'au'); }
   }
   function drawField(t) {
     const B = S.battle, th = MAPS[G.region].theme;
@@ -621,7 +783,7 @@
     rect(0, 46, FW, FH - 46, th === 'cave' ? 'n1' : th === 'sand' ? 'd1' : th === 'titan' ? 's2' : 'g2');
     for (let x = 0; x < FW; x += 4) px(x + (x * 7 % 3), 50 + (x * 13 % 44), th === 'sand' ? 'd0' : th === 'cave' ? 'p0' : th === 'titan' ? 's3' : 'g3');
     for (const f of B.foes) drawFoe(f, t);
-    G.party.forEach((p, i) => { const act = B.actor === p && ['menu', 'timing', 'allyTarget'].includes(B.phase), ko = p.hp <= 0; spr(p.spr, memberX(i) - (act ? 5 : 0), memberY(i), 0, true, ko ? 's1' : null); if (B.guard > 0 && !ko) px(memberX(i) + 11, memberY(i), 'c3'); });
+    G.party.forEach((p, i) => { const act = B.actor === p && ['menu', 'timing', 'allyTarget'].includes(B.phase), ko = p.hp <= 0; const hurt = p.hurtT && S.t - p.hurtT < .18; spr(p.spr, memberX(i) - (act ? 5 : 0) + (hurt ? 2 : 0), memberY(i), 0, true, ko ? 's1' : hurt && Math.floor(t * 30) % 2 ? 'wt' : null); if (B.guard > 0 && !ko) px(memberX(i) + 11, memberY(i), 'c3'); });
     if (B.fx && S.t - B.fx.t < .5) { const k = (S.t - B.fx.t) / .5;
       if (B.fx.kind === 'fire') { const x = foeX(B.fx.i), y = aimY(B.fx.i); disc(x, y, 9 * (1 - k) + 1, 'n6'); disc(x, y, 5 * (1 - k), 'n7'); }
       if (B.fx.kind === 'shard') { const x = foeX(B.fx.i), y = aimY(B.fx.i); for (let r = 0; r < 2; r++) for (let a = 0; a < 16; a++) px(x + Math.cos(a / 16 * 6.28) * (k * 18 + r * 3), y + Math.sin(a / 16 * 6.28) * (k * 18 + r * 3), 'c3'); }
@@ -632,10 +794,15 @@
     }
     if (B.phase === 'foeWind') {   // each hit of the string drops onto the victim, red for heavy, blue for swift
       for (const v of B.aoe ? aliveParty() : [B.victim]) { const i = G.party.indexOf(v), x = memberX(i) + 5, y = memberY(i) - 2;
-        for (const h of B.hits) { if (h.done) continue; const k = clamp(1 - (h.at - B.t) / WIND); if (k <= 0) continue; rect(x - 1, Math.round(mix(y - 26, y, k)), 3, 3, h.kind === 'h' ? 'r2' : 'c2'); }
+        const h = B.hits.find(q => !q.done);
+        if (h) { const k = clamp(1 - (h.at - B.t) / WIND), c = h.kind === 'h' ? 'r2' : 'c2', cy = y + 9;
+          ring(x, cy, 9, 'au'); if (k > 0) ring(x, cy, Math.round(mix(26, 9, k)), c);
+          if (h.kind === 'h') shieldIcon(x, y - 10, Math.floor(t * 8) % 2 ? 'r2' : 'wt'); else swordIcon(x, y - 10, Math.floor(t * 8) % 2 ? 'c2' : 'wt'); }
         rect(x - 4, y + 15, 9, 1, 'au'); }
       if (B.actor.draw !== 'eye' && Math.floor(t * 8) % 2) rect(foeX(B.actor.i) - 1, aimY(B.actor.i) - 14, 3, 3, 'r2');
     }
+    drawFX();
+    if (S.fieldFlash > 0) rect(0, 0, FW, FH, 'wt');
     if (B.phase === 'menu' && Math.floor(t * 4) % 2) { const i = B.pick; if (B.foes[i] && B.foes[i].hp > 0) { const x = foeX(i), y = aimY(i) - 16; rect(x - 2, y, 5, 2, 'au'); rect(x - 1, y + 2, 3, 1, 'au'); px(x, y + 3, 'au'); } }
   }
   function ring(x, y, r, c) { for (let a = 0; a < 48; a++) { const q = a / 48 * 6.28; px(x + Math.cos(q) * r, y + Math.sin(q) * r, c); } }
@@ -669,17 +836,18 @@
       text('TARGET', L[0] + L[2] / 2, L[1] + 6, 's3', 'center', null);
       for (const c of foeChips()) { const f = B.foes[c.i], b = c.b, dead = f.hp <= 0, on = B.pick === c.i && !dead;
         panel(b[0], b[1], b[2], b[3], dead ? 's0' : on ? 'au' : f.stun > 0 ? 'n6' : 'b0');
-        if (!dead) { const nm = f.name.split(' ').pop(); text(b[2] > 40 ? nm : nm.slice(0, 3), b[0] + b[2] / 2, b[1] + 6, on ? 'au' : 'wt', 'center', null);
+        if (!dead) { const nm = f.name.split(' ').pop(); text(b[2] > 40 ? nm : f.short || nm.slice(0, 3), b[0] + b[2] / 2, b[1] + 6, on ? 'au' : 'wt', 'center', null);
           rect(b[0] + 3, b[1] + 20, b[2] - 6, 3, 'k'); rect(b[0] + 3, b[1] + 20, Math.round((b[2] - 6) * f.hp / f.maxhp), 3, 'g3');
           if (f.brkMax) { const n = f.brkMax, w = Math.max(2, Math.floor((b[2] - 6) / n) - 1); for (let j = 0; j < n; j++) rect(b[0] + 3 + j * (w + 1), b[1] + 26, w, 3, j < f.brk ? 'au' : 's1'); }
           if (f.weak && b[2] > 30) text(f.weak === 'fire' ? 'FIRE!' : f.weak === 'pierce' ? 'ARROW' : 'SHARD', b[0] + b[2] / 2, b[1] + 31, 'n6', 'center', null);
         } }
       text('◀ SWIPE ▶', L[0] + L[2] / 2, L[1] + 70, 's2', 'center', null);
       for (const btn of rightButtons()) { const o = btn.o, sk = SKILL[o]; let lab = o;
-        if (sk) lab = (btn.b[2] < 50 ? o.split(' ')[0].slice(0, 4) : o.split(' ').pop()) + ' ' + '◆'.repeat(sk.w);
+        if (sk) lab = btn.b[2] < 50 ? o.split(' ')[0].slice(0, 4) : o.split(' ').pop();
         if (o === 'POTION' || o === 'ETHER') lab = `${o} x${G.items[o]}`;
         const off = (sk && B.wake < sk.w) || ((o === 'POTION' || o === 'ETHER') && !G.items[o]);
-        button(btn.b, lab, o === 'STRIKE', o === 'STRIKE' ? 'r1' : 'b0', off ? 's2' : null); }
+        button(btn.b, lab, o === 'STRIKE', o === 'STRIKE' ? 'r1' : 'b0', off ? 's2' : null);
+        if (sk) { for (let j = 0; j < sk.w; j++) rect(btn.b[0] + btn.b[2] / 2 - sk.w * 3 + j * 6 + 1, btn.b[1] + btn.b[3] - 7, 4, 3, off ? 's2' : 'c2'); } }
     } else if (B.phase === 'allyTarget') { text('TAP AN ALLY ABOVE', 90, 252, 'au', 'center'); button([RPAD[0], RPAD[1] + 52, 86, 28], 'BACK', false); }
     else if (B.phase === 'timing') { const k = clamp(B.t / B.ring.dur), r = Math.round(mix(30, 10, k)); panel(R[0], R[1], R[2], R[3], 'r1'); swordIcon(R[0] + 43, R[1] + 36, 'au'); ring(R[0] + 43, R[1] + 36, 10, 'au'); if (B.hitT === null) ring(R[0] + 43, R[1] + 36, r, 'wt'); text('TAP!', R[0] + 43, R[1] + 64, 'wt', 'center', null); text('WAIT FOR', 46, 262, 's4', 'center', null); text('THE RING', 46, 274, 's4', 'center', null); }
   }
@@ -694,7 +862,8 @@
     cx = fieldCx; cx.setTransform(1, 0, 0, 1, 0, 0); drawField(t); cx = mainCx;
     const tr = (S.trauma || 0) ** 2, ox = Math.round((hash(Math.floor(S.t * 60)) - .5) * 8 * tr), oy = Math.round((hash(Math.floor(S.t * 60) + 7) - .5) * 8 * tr);   // trauma^2 shake
     cx.imageSmoothingEnabled = false; rect(0, 0, W, FH * 2, 'k'); cx.drawImage(field, 0, 0, FW, FH, ox, oy, FW * 2, FH * 2);
-    for (const p of B.pops) { const k = (S.t - p.t) / .9; if (k < 1) text(p.s, p.x * 2, p.y * 2 - k * 14, p.c, 'center'); }
+    for (const p of B.pops) { const k = (S.t - p.t) / (p.big ? 1.1 : .9); if (k < 1) text(p.s, p.x * 2, p.y * 2 - (p.big ? easeOut(Math.min(1, k * 4)) * 8 : k * 14), p.c, 'center', 'k', p.big && k < .85 ? 16 : 8); }
+    if (B.breakT && S.t - B.breakT < 1.1) { const k = (S.t - B.breakT) / 1.1; rect(0, 78, W, 30, 'k'); rect(0, 79, W * Math.min(1, k * 5), 1, 'au'); rect(W * (1 - Math.min(1, k * 5)), 106, W, 1, 'au'); text('BREAK!', 90, 85, Math.floor(k * 12) % 2 ? 'au' : 'wt', 'center', 'k', 16); }
     if (B.banner && S.t - B.banner.t < 2.6) { const ls = wrap(B.banner.s, 21), y0 = 182 - ls.length * 10; rect(0, y0 - 3, W, 3 + ls.length * 10, 'k'); ls.forEach((l, i) => text(l, 90, y0 + i * 10, 'au', 'center')); }
     else if (B.phase === 'foeWind') { const h = B.hits.find(q => !q.done); if (h) { rect(0, 170, W, 13, 'k'); text(h.kind === 'h' ? '◀ HEAVY: BLOCK' : 'SWIFT: PARRY ▶', 90, 172, h.kind === 'h' ? 'r2' : 'c2', 'center'); } }
     if (B.combo > 1 && B.phase !== 'foeWind' && !(B.banner && S.t - B.banner.t < 2.6)) text(`COMBO x${B.combo}`, 176, 160, 'au', 'right');
@@ -826,10 +995,12 @@
   function render(ctx) {
     cx.setTransform(1, 0, 0, 1, 0, 0); rect(0, 0, W, H, 'k');
     const t = S.t;
-    if (S.mode === 'title') drawTitle(t);
+    if (S.mode === 'title') drawDemoTitle(t);
+    else if (S.mode === 'inter') drawInter(t);
+    else if (S.mode === 'card') { drawCard(t); drawGhosts(); }
     else if (S.mode === 'cut') drawCut(t);
     else if (S.mode === 'map') drawMap(t);
-    else if (S.mode === 'battle') drawBattle(t);
+    else if (S.mode === 'battle') { drawBattle(t); drawLesson(t); drawGhosts(); }
     else if (S.mode === 'calm') drawCalm(t);
     else if (S.mode === 'ending') drawEnding(t);
     else if (S.mode === 'over') { text('THE PARTY FELL', 90, 140, 'r2', 'center'); text('TAP TO TRY AGAIN', 90, 160, 's4', 'center'); }
@@ -851,11 +1022,20 @@
     const x = X / SC, y = Y / SC;
     if (type === 'move') { const tc = touches.get(id); if (tc && tc.kind === 'stick') { tc.x = x; tc.y = y; } else if (tc && tc.kind === 'swipe') swipeMove(tc, x); return; }
     if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; return; }
+    if ((type === 'up' || type === 'cancel') && S.titleHold) { for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; }
     if (type !== 'down') return;
-    Audio.unlock();
+    Audio.unlock(); S.scheme = 'touch'; S.idleT = S.t;
+    if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; S.lockUntil = S.t + .4; return; }
     if (S.battle) S.battle.stats.taps++;
     if (S.lockUntil && S.t < S.lockUntil) return;   // after a stage change, ignore presses for a beat (Brain demo-disc#E5)
-    if (S.mode === 'title') { newGame(); return; }
+    if (S.mode === 'title') {
+      if (inBox(x, y, TITLE_BTNS[0].b)) return startDemo(true);
+      if (inBox(x, y, TITLE_BTNS[1].b)) { S.demo = null; return newGame(); }
+      if (y >= 236) { (S.titleHold = S.titleHold || {})[x < 90 ? 'L' : 'R'] = id; Audio.tone(x < 90 ? 330 : 440, .05, 'square', .04); }
+      return;
+    }
+    if (S.mode === 'inter') return;
+    if (S.mode === 'card') { if (S.card.t > 2) for (const b of CARD_BTNS) if (inBox(x, y, b.b)) cardPress(b.o); return; }
     if (S.mode === 'cut') { if (S.cut.t > 5) endCut(); return; }
     if (S.mode === 'over') { healParty(1); enterRegion(G.region); return; }
     if (S.mode === 'ending') { if (S.ending.t > 1.5) S.mode = 'title'; return; }
@@ -872,7 +1052,7 @@
     if (S.mode === 'battle') {
       const B = S.battle;
       if (B.phase === 'win') { endBattle(); return; }
-      if (B.phase === 'lose') { S.battle = null; healParty(1); enterRegion(G.region); return; }
+      if (B.phase === 'lose') { if (S.demo) return startFinale(); S.battle = null; healParty(1); enterRegion(G.region); return; }
       if (B.phase === 'timing') { timingTap(); return; }
       if (B.phase === 'foeWind') { defend(x < 90 ? 'L' : 'R'); return; }
       if (B.phase === 'menu') {
@@ -915,6 +1095,10 @@
   // keys: arrows move / aim, Z = right thumb (STRIKE, PARRY, ACT), X = left thumb (BLOCK); 1-2 skills, I items, R run
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
+    S.scheme = 'keys'; S.idleT = S.t;
+    if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; return; }
+    if (S.mode === 'title') { if (key === 'w' || key === 'W') startDemo(true); if (key === 'f' || key === 'F') { S.demo = null; newGame(); } return; }
+    if (S.mode === 'card') { if (S.card.t > 2) { if (key === 'Enter' || key === ' ') cardPress('PLAY AGAIN'); if (key === 'w' || key === 'W') cardPress('WATCH IT'); if (key === 'f' || key === 'F') cardPress('FULL GAME'); } return; }
     const ok = key === 'Enter' || key === ' ' || key === 'z' || key === 'Z', left = key === 'x' || key === 'X';
     if (S.mode === 'title' && ok) return newGame();
     if (S.mode === 'cut' && ok && S.cut.t > 5) return endCut();
@@ -930,7 +1114,7 @@
     if (S.mode === 'battle') {
       const B = S.battle;
       if (B.phase === 'win' && ok) return endBattle();
-      if (B.phase === 'lose' && ok) { S.battle = null; healParty(1); return enterRegion(G.region); }
+      if (B.phase === 'lose' && ok) { if (S.demo) return startFinale(); S.battle = null; healParty(1); return enterRegion(G.region); }
       if (B.phase === 'timing' && (ok || left)) return timingTap();
       if (B.phase === 'foeWind' && (ok || left)) return defend(left ? 'L' : 'R');
       if (B.phase === 'menu') {
@@ -948,7 +1132,7 @@
 
   // ---------- test hooks ----------
   const API = {
-    G, S, MAPS, FINDS, newGame, enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
+    G, S, MAPS, FINDS, newGame, startDemo, startFinale, lesson: () => lesson(), enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
     get state() { return S.mode; },
     decide: () => botDecide(S.battle), ui: () => S.battle ? { right: S.battle.actor && G.party.includes(S.battle.actor) ? rightButtons() : [], chips: foeChips(), L: LPAD, R: RPAD, act: ACT } : { act: ACT },
     seed(n) { botSeed = n >>> 0 || 1; },
