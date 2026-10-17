@@ -522,6 +522,7 @@
     if (h.res === 'parry') {   // the counter: a free riposte, a wake pip and a notch of break
       const cd = Math.max(1, Math.round(counter * (B.aoe ? .5 : 1)));
       if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); lessonFloor(f); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); const v0 = B.aoe ? aliveParty()[0] : B.victim, vi = G.party.indexOf(v0); slash(memberX(vi) + 2, memberY(vi) + 6, foeX(f.i) + 4, aimY(f.i), 'c2'); burst(foeX(f.i), aimY(f.i), ['c3', 'wt'], 8, 35); }
+      if (f.hp <= 0) for (const q of B.hits) q.done = true;   // a dead attacker's string ends here
       gainWake(B, 1, 66, 52); addBreak(B, f, 1);
       Audio.noise(.06, .12); shake(.3);
     } else { if (h.res !== 'block') FXS.hurt(B.big || h.kind === 'h'); S.flash = h.res === 'block' ? 0 : .06; shake(h.res === 'block' ? .25 : B.big ? .8 : .45); if (B.big && h.res !== 'block') { S.hitstop = .1; buzz(40); } }
@@ -1355,8 +1356,7 @@
   function onPointer(type, X, Y, id = 0) {
     const x = X / SC, y = Y / SC;
     if (type === 'move') { const tc = touches.get(id); if (tc && tc.kind === 'stick') { tc.x = x; tc.y = y; } else if (tc && tc.kind === 'swipe') swipeMove(tc, x); return; }
-    if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; if (tc && tc.kind === 'swipe' && tc.swap && !tc.done) swapStance(); return; }
-    if ((type === 'up' || type === 'cancel') && S.titleHold) { for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; }
+    if (type === 'up' || type === 'cancel') { if (S.titleHold) for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; if (tc && tc.kind === 'swipe' && tc.swap && !tc.done) swapStance(); return; }
     if (type !== 'down') return;
     Audio.unlock(); if (SND.on) sndInit(); S.scheme = COARSE ? 'touch' : 'keys'; S.idleT = S.t;
     if (['title', 'battle', 'card', 'inter'].includes(S.mode) && inBox(x, y, SPK)) { setSound(!SND.on); return; }
@@ -1432,12 +1432,12 @@
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
     S.scheme = 'keys'; S.idleT = S.t; if (SND.on) sndInit();
+    const ok = key === 'Enter' || key === ' ' || key === 'z' || key === 'Z', left = key === 'x' || key === 'X';
     if (key === 'm' || key === 'M') return setSound(!SND.on);
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; return; }
     if (S.mode === 'title') { if (key === 'w' || key === 'W') startDemo(true); if (key === 'f' || key === 'F') { S.demo = null; newGame(); } return; }
     if (S.mode === 'inter') { if (left) interPick('L'); else if (ok) interPick('R'); return; }
     if (S.mode === 'card') { if (S.card.t > 2) { if (key === 'Enter' || key === ' ') cardPress('PLAY AGAIN'); if (key === 'w' || key === 'W') cardPress('WATCH IT'); if (key === 'f' || key === 'F') cardPress('FULL GAME'); } return; }
-    const ok = key === 'Enter' || key === ' ' || key === 'z' || key === 'Z', left = key === 'x' || key === 'X';
     if (S.mode === 'title' && ok) return newGame();
     if (S.mode === 'cut' && ok && S.cut.t > 5) return endCut();
     if (S.mode === 'over' && ok) { healParty(1); return enterRegion(G.region); }

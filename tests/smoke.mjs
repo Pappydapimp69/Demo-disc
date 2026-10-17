@@ -777,6 +777,20 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await touch('touchStart', [[30, 290, 22]]); await touch('touchMove', [[60, 290, 22]]); await touch('touchEnd', []);
   const slid = await page.evaluate(() => window.__game.ui().right.map(q => q.o).join(','));
   check(sw.includes('STRIKE') && magic.includes('FIREBALL') && magic.includes('HEAL') && !magic.includes('STRIKE') && slid === magic, `stonewake-proto: a left-thumb tap swaps ATTACK and MAGIC, a slide only aims (${sw} -> ${magic})`);
+  // review fixes: the two-thumb hold needs both thumbs DOWN at once; a key works at the ending choice; a dead attacker's string ends
+  await page.evaluate(() => { const g = window.__game; g.S.demo = null; g.autopilot = null; g.S.battle = null; g.S.mode = 'title'; g.S.titleHold = {}; g.S.idleT = g.S.t; });
+  await touch('touchStart', [[44, 274, 31]]); await touch('touchEnd', []); await touch('touchStart', [[136, 274, 32]]); await page.evaluate(() => window.__game.step(60)); await touch('touchEnd', []);
+  const held = await page.evaluate(() => ({ mode: window.__game.S.mode, hold: JSON.stringify(window.__game.S.titleHold || {}) }));
+  check(held.hold === '{}', `stonewake-proto: a released thumb no longer counts toward the two-thumb hold (${JSON.stringify(held)})`);
+  await page.evaluate(() => { const g = window.__game; g.startDemo(false); g.startInter(); g.S.inter.t = 2.5; });
+  const keyErrs = errors.length; await page.keyboard.press('z'); await page.evaluate(() => window.__game.step(2));
+  const picked = await page.evaluate(() => window.__game.S.mode);
+  check(picked === 'battle' && errors.length === keyErrs, `stonewake-proto: Z at the ending choice picks FIGHT (${picked})`);
+  const dead = await page.evaluate(() => { const g = window.__game; g.S.demo = null; g.autopilot = null; g.newGame(); g.finish(); g.setLevel(5); g.startBattle(['wolf'], 'foe');
+    const B = g.S.battle; for (let k = 0; k < 400 && B.phase !== 'foeWind'; k++) g.step(1); B.actor.hp = 1; const hp0 = g.G.party[0].hp;
+    g.autopilot = 'perfect'; for (let k = 0; k < 200 && !B.hits[0].done; k++) g.step(1); g.autopilot = null; B.botPress = []; for (let k = 0; k < 200 && B.phase === 'foeWind'; k++) g.step(1);
+    return hp0 - g.G.party[0].hp; });
+  check(dead === 0, `stonewake-proto: a foe killed by a parry counter lands no more hits (party lost ${dead})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();
