@@ -152,7 +152,7 @@
   };
   const SKILL = {
     'SHARD STRIKE': { w: 2, target: 'foe', desc: 'shards x dmg' }, GUARD: { w: 1, target: 'none', desc: 'party dmg /2' },
-    FIREBALL: { w: 2, target: 'foe', desc: 'fire', fire: true }, HEAL: { w: 1, target: 'ally', desc: '+30 HP' }, VOLLEY: { w: 2, target: 'all', desc: 'hits all', pierce: true },
+    FIREBALL: { w: 2, target: 'foe', desc: 'fire', fire: true, cast: true }, HEAL: { w: 1, target: 'ally', desc: '+HP', cast: true }, VOLLEY: { w: 2, target: 'all', desc: 'hits all', pierce: true },
   };
   const FOES = {
     slime: { name: 'SLIME', hp: 26, atk: 9, spd: 5, xp: 6, pat: 's', brkMax: 2, draw: 'slime' }, wolf: { name: 'WOLF', hp: 34, atk: 13, spd: 11, xp: 9, pat: 'ss', brkMax: 3, draw: 'wolf' },
@@ -162,7 +162,7 @@
     gdesert: { name: 'SAND GOLEM', hp: 660, atk: 23, spd: 6, xp: 55, pat: 'sh', brkMax: 6, draw: 'golem', tint: ['d0', 'd1'], boss: true },
     wraith: { name: 'SHARD WRAITH', hp: 800, atk: 23, spd: 15, xp: 60, pat: 'ssh', brkMax: 6, draw: 'golem', tint: ['n1', 'p1'], weak: 'fire', boss: true },
     eye: { name: 'TITAN EYE', hp: 680, atk: 20, spd: 7, xp: 0, pat: 'hs', brkMax: 6, draw: 'eye', weak: 'shard', boss: true },
-    thand: { name: 'STONE HAND', hp: 240, atk: 12, spd: 8, xp: 0, pat: 'sh', brkMax: 4, draw: 'hand', boss: true },
+    thand: { name: 'STONE HAND', weak: 'fire', hp: 240, atk: 12, spd: 8, xp: 0, pat: 'sh', brkMax: 4, draw: 'hand', boss: true },
     lhand: { short: 'LH', name: 'LEFT HAND', hp: 190, atk: 18, spd: 9, xp: 0, pat: 'h', brkMax: 3, draw: 'hand', boss: true }, rhand: { short: 'RH', name: 'RIGHT HAND', hp: 190, atk: 18, spd: 10, xp: 0, pat: 's', brkMax: 3, draw: 'hand', boss: true },
   };
   function newMember(id) { const b = MEMBERS[id]; return { id, name: b.name, spr: b.spr, lv: 1, xp: 0, maxhp: b.hp, hp: b.hp, maxmp: b.mp, mp: b.mp, atk: b.atk, mag: b.mag, def: b.def, spd: b.spd, skills: b.skills.slice() }; }
@@ -418,11 +418,25 @@
   function validPick() { const B = S.battle; if (!B.foes[B.pick] || B.foes[B.pick].hp <= 0) B.pick = firstAlive(); return B.pick; }
   function startTiming(target) {
     const B = S.battle; B.stats.actions++;
-    if (B.cmd.kind === 'item' || (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'ally')) return resolveAction(target, 1);
-    B.target = target; B.phase = 'timing'; B.t = 0; B.ring = { dur: .85 }; B.hitT = null;
+    const sk = B.cmd.kind === 'skill' && SKILL[B.cmd.name];
+    if (B.cmd.kind === 'item' || (sk && sk.target === 'ally' && !sk.cast)) return resolveAction(target, 1);
+    B.target = target; B.targetAlly = !!(sk && sk.target === 'ally'); B.phase = 'timing'; B.t = 0; B.hitT = null;
+    // MAGIC is two-handed: a ring closes on the left pad, then one on the right; tap each as it closes
+    B.ring = sk && sk.cast ? { dur: 1.05, cast: true, t1: .7, t2: 1.05, gL: null, gR: null } : { dur: .85 };
+    if (B.ring.cast) B.stats.casts = (B.stats.casts || 0) + 1;
   }
-  function timingTap() {
+  const gradeOf = q => q < .07 ? 1.45 : q < .16 ? 1.2 : 1;
+  function castTap(B, hand) {   // one hand of a two-hand cast; the spell resolves when both are in (or the second ring passes)
+    const r = B.ring, key = hand === 'L' ? 'gL' : 'gR'; if (r[key] !== null) return;
+    if (hand === 'R' && r.gL === null && B.t < r.t1 + .16) { r.gL = 1; pop(B, 'LEFT FIRST', 45, 54, 'r2'); }   // the right hand cannot start the spell
+    const g = gradeOf(Math.abs(B.t - (hand === 'L' ? r.t1 : r.t2))); r[key] = g; ghost(hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, PAD_Y + 36, hand);
+    pop(B, g > 1.4 ? 'PERFECT' : g > 1 ? 'GOOD' : 'OK', hand === 'L' ? 30 : 60, 54, g > 1.4 ? 'au' : g > 1 ? 'c3' : 's4');
+    FXS.castNote(hand, g); if (g > 1.4) { B.stats.perfect++; buzz(12); }
+    if (r.gL !== null && r.gR !== null) { B.hitT = B.t; B.grade = (r.gL + r.gR) / 2 * (r.gL > 1.4 && r.gR > 1.4 ? 1.15 : 1); if (B.grade > 1.6) { pop(B, 'TWO-HAND!', 45, 40, 'p2', true); S.hitstop = .1; shake(.4); } }
+  }
+  function timingTap(hand = 'R') {
     const B = S.battle;
+    if (B.phase === 'timing' && B.ring.cast) return castTap(B, hand);
     if (B.phase === 'timing' && B.hitT === null) { B.hitT = B.t; ghost(RPAD[0] + 43, PAD_Y + 36, 'R'); const q = Math.abs(B.t - B.ring.dur); const grade = q < .07 ? 1.45 : q < .16 ? 1.2 : 1; B.combo = grade > 1.4 ? (B.combo || 0) + 1 : 0; pop(B, grade > 1.4 ? (B.combo > 1 ? `PERFECT x${B.combo}` : 'PERFECT!') : grade > 1 ? 'GOOD' : 'OK', 45, 54, grade > 1.4 ? 'au' : grade > 1 ? 'c3' : 's4'); if (grade > 1.4) { B.stats.perfect++; S.hitstop = .08; shake(.35); buzz(20); } Audio.tone(grade > 1.5 ? 1320 : 990, .06, 'square', .06); B.grade = grade; }
   }
   // a thumb pressed during their attack: L blocks, R parries. Judged against the next hit that has not landed yet.
@@ -453,7 +467,8 @@
       f.hurtT = S.t; if (f.weak && f.weak === kind) { d = Math.round(d * 1.5); brk++; pop(B, 'WEAK!', foeX(f.i), aimY(f.i) - 14, 'n6'); }
       if (f.id === 'eye' && !f.open) { d = Math.round(d * .15); brk = 0; pop(B, 'CLOSED', foeX(f.i), aimY(f.i) - 14, 's3'); }
       if (f.stun > 0) d = Math.round(d * 1.5);
-      f.hp = Math.max(0, f.hp - d); pop(B, String(d), foeX(f.i), aimY(f.i) - 6, f.stun > 0 ? 'au' : 'wt', grade > 1.4 || f.stun > 0);
+      f.hp = Math.max(0, f.hp - d); lessonFloor(f);
+      pop(B, String(d), foeX(f.i), aimY(f.i) - 6, f.stun > 0 ? 'au' : 'wt', grade > 1.4 || f.stun > 0);
       burst(foeX(f.i), aimY(f.i), grade > 1.4 ? ['au', 'wt', 'n6'] : ['wt', 's4'], grade > 1.4 ? 16 : 8, grade > 1.4 ? 55 : 35); if (grade > 1.4) shock(foeX(f.i), aimY(f.i), 'au', 4, 18);
       if (brk) addBreak(B, f, brk);
       return d; };
@@ -462,12 +477,13 @@
     else if (c.kind === 'skill') {
       const sk = SKILL[c.name]; B.wake -= sk.w; B.stats.skills++;
       if (c.name === 'SHARD STRIKE') { const f = B.foes[target]; dmg((a.atk + (G.gear.sun ? 4 : 0)) * (1.3 + G.shards * .4), f, 'shard'); Audio.tone(1800, .3, 'square', .06, 400); B.fx = { kind: 'shard', t: S.t, i: target }; }
-      else if (c.name === 'FIREBALL') { const f = B.foes[target]; dmg(a.mag * 2.2, f, 'fire'); Audio.noise(.4, .2); B.fx = { kind: 'fire', t: S.t, i: target }; }
+      else if (c.name === 'FIREBALL') { const f = B.foes[target]; dmg(a.mag * 2.2, f, 'fire'); FXS.fire(grade); B.fx = { kind: 'fire', t: S.t, i: target }; burst(foeX(target), aimY(target), ['n6', 'n7', 'r2'], 22, 50, .6); }
       else if (c.name === 'VOLLEY') { for (const f of aliveFoes()) dmg(a.atk * 1.0, f, 'pierce'); Audio.tone(2400, .2, 'square', .04, 900); B.fx = { kind: 'volley', t: S.t }; }
       else if (c.name === 'GUARD') { B.guard = 2; pop(B, 'GUARD UP', 66, 50, 'c3'); Audio.tone(440, .2, 'triangle', .07); }
-      else if (c.name === 'HEAL') { const p = G.party[target]; p.hp = Math.min(p.maxhp, p.hp + 30); pop(B, '+30', memberX(target) + 4, memberY(target), 'g4'); Audio.tone(880, .2, 'triangle', .06, 1320); }
+      else if (c.name === 'HEAL') { const p = G.party[target], hp = Math.round(24 * grade); p.hp = Math.min(p.maxhp, p.hp + hp); pop(B, '+' + hp, memberX(target) + 4, memberY(target), 'g4', grade > 1.4); burst(memberX(target) + 5, memberY(target) + 7, ['g4', 'g3', 'wt'], 12, 30, .6); FXS.heal(); }
     } else if (c.kind === 'item') {
-      G.items[c.name]--;
+      G.items[c.name]--; B.stats.items = (B.stats.items || 0) + 1;
+      FXS.potion();
       if (c.name === 'POTION') { const p = G.party[target]; p.hp = Math.min(p.maxhp, p.hp + 35); pop(B, '+35 HP', memberX(target), memberY(target), 'g4'); } else gainWake(B, 2, 45, 44);
       Audio.tone(880, .15, 'triangle', .06, 1320);
     }
@@ -494,7 +510,7 @@
     f.lungeT = S.t;
     if (h.res === 'parry') {   // the counter: a free riposte, a wake pip and a notch of break
       const cd = Math.max(1, Math.round(counter * (B.aoe ? .5 : 1)));
-      if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); const v0 = B.aoe ? aliveParty()[0] : B.victim, vi = G.party.indexOf(v0); slash(memberX(vi) + 2, memberY(vi) + 6, foeX(f.i) + 4, aimY(f.i), 'c2'); burst(foeX(f.i), aimY(f.i), ['c3', 'wt'], 8, 35); }
+      if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); lessonFloor(f); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); const v0 = B.aoe ? aliveParty()[0] : B.victim, vi = G.party.indexOf(v0); slash(memberX(vi) + 2, memberY(vi) + 6, foeX(f.i) + 4, aimY(f.i), 'c2'); burst(foeX(f.i), aimY(f.i), ['c3', 'wt'], 8, 35); }
       gainWake(B, 1, 66, 52); addBreak(B, f, 1);
       Audio.noise(.06, .12); shake(.3);
     } else { if (h.res !== 'block') FXS.hurt(B.big || h.kind === 'h'); S.flash = h.res === 'block' ? 0 : .06; shake(h.res === 'block' ? .25 : B.big ? .8 : .45); if (B.big && h.res !== 'block') { S.hitstop = .1; buzz(40); } }
@@ -644,6 +660,10 @@
     breakIt() { if (!this.ok()) return; const t = Audio.ctx.currentTime; for (let i = 0; i < 7; i++) { hiss(SND.bus, t + i * .045, .12, .35, 3000 + i * 900, 3, 'bandpass', (i % 2 ? .5 : -.5)); voice(SND.bus, 'triangle', mtof(96 - i * 3), t + i * .045, .14, .1); } voice(SND.bus, 'sine', 70, t, .5, .5, 35); },
     wake() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sine', 1320, t, .12, .1, 1980); },
     lesson() { if (!this.ok()) return; const t = Audio.ctx.currentTime; [76, 79, 84].forEach((m, i) => voice(SND.bus, 'square', mtof(m), t + i * .07, .14, .09)); },
+    castNote(hand, g) { if (!this.ok()) return; const t = Audio.ctx.currentTime, m = hand === 'L' ? 69 : 76; voice(SND.bus, 'triangle', mtof(m + 12), t, .3, .2, null, hand === 'L' ? -.5 : .5); if (g > 1.4) voice(SND.bus, 'square', mtof(m + 24), t + .03, .2, .07, null, hand === 'L' ? -.5 : .5); },
+    fire(g) { if (!this.ok()) return; const t = Audio.ctx.currentTime; hiss(SND.bus, t, .5, .5, 700, 1, 'lowpass'); voice(SND.bus, 'sawtooth', 220, t, .45, .2, 60); if (g > 1.6) voice(SND.bus, 'square', mtof(81), t, .3, .08, mtof(93)); },
+    heal() { if (!this.ok()) return; const t = Audio.ctx.currentTime; [72, 76, 79, 84].forEach((m, i) => voice(SND.bus, 'triangle', mtof(m), t + i * .06, .3, .1)); },
+    potion() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sine', 300, t, .12, .2, 900); voice(SND.bus, 'sine', 600, t + .1, .15, .15, 1200); },
     tap() { if (!this.ok()) return; voice(SND.bus, 'square', 990, Audio.ctx.currentTime, .03, .05); },
     rumble() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sawtooth', 55, t, 2.4, .35, 35); hiss(SND.bus, t, 2.4, .4, 300, 1, 'lowpass'); },
   };
@@ -669,17 +689,21 @@
     { id: 'strike', who: 'p', actor: 'hero', hand: 'R', l1: 'YOUR TURN', c1: 'au', verb: 'STRIKE', sub: 'TAP WHEN RINGS MEET', ok: (s, b) => s.actions > b.actions },
     { id: 'string', who: 'foe', pat: 'shs', slow: .8, l1: 'A STRING', c1: 'wt', verb: 'READ EACH HIT', sub: 'RED=LEFT  BLUE=RIGHT', ok: (s, b) => s.strings > b.strings },
     { id: 'skill', who: 'p', actor: 'hero', hand: 'R', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'magic', who: 'p', actor: 'mage', hand: 'B', l1: 'MAGIC = TWO HANDS', c1: 'p2', verb: 'FIREBALL', sub: 'LEFT RING, THEN RIGHT', pre: B => { B.wake = Math.max(B.wake, 2); }, ok: (s, b) => (s.casts || 0) > (b.casts || 0) && s.actions > b.actions },
+    { id: 'item', who: 'p', actor: 'mage', hand: 'R', l1: 'BRUNA IS HURT', c1: 'g4', verb: 'POTION', sub: 'ITEM > POTION > BRUNA', pre: () => { const k = G.party.find(p => p.id === 'knight'); k.hp = Math.min(k.hp, Math.round(k.maxhp * .3)); }, ok: (s, b) => (s.items || 0) > (b.items || 0) },
     { id: 'break', who: 'free', l1: 'FILL ITS BREAK BAR', c1: 'au', verb: 'BREAK IT', sub: 'PERFECTS + PARRIES', ok: (s, b) => s.breaks > b.breaks },
     { id: 'finish', who: 'free', l1: 'IT IS OPEN', c1: 'au', verb: 'FINISH IT', ok: () => false },
   ];
   function startDemo(watch) {
     newGame(); S.cut = null; S.dialog = null;
-    G.party = [newMember('hero'), newMember('knight')]; API.setLevel(3); G.shards = 1; G.region = 'forest';
-    S.demo = { i: 0, base: null, watch: !!watch, shown: S.t, fails: 0, tot: { parry: 0, block: 0, crushed: 0, perfect: 0, breaks: 0, actions: 0, taps: 0, skills: 0 }, finale: false };
+    G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest'; G.items = { POTION: 3, ETHER: 1 };
+    S.demo = { i: 0, base: null, watch: !!watch, shown: S.t, fails: 0, tot: { parry: 0, block: 0, crushed: 0, perfect: 0, breaks: 0, actions: 0, taps: 0, skills: 0, casts: 0, items: 0 }, finale: false };
     API.autopilot = watch ? 'perfect' : null; API.botThink = watch ? .8 : 0;
     startBattle(['thand'], 'demo1'); S.battle.noLose = true;
     S.lockUntil = S.t + .5;
   }
+  // the lesson fight cannot end before every verb is taught: until the break lesson, the foe stays above 30% HP
+  function lessonFloor(f) { const L = lesson(); if (L && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
   function lesson() { const d = S.demo; return d && !d.finale ? LESSONS[d.i] : null; }
   function demoTurn(B) {   // returns true when the lesson chose this turn
     const d = S.demo, L = lesson(); if (!L) return false;
@@ -703,21 +727,22 @@
     startBattle(['lhand', 'eye', 'rhand'], 'demo2'); for (const f of S.battle.foes) { f.maxhp = Math.round(f.maxhp * .5); f.hp = f.maxhp; }   // a demo-length encounter
     banner(S.battle, 'EVERYTHING AT ONCE. HANDS ARE HEAVY AND SWIFT. STRIKE THE EYE WHILE IT IS OPEN.');
   }
-  const handName = h => S.scheme === 'keys' ? (h === 'L' ? 'X KEY' : 'Z KEY') : (h === 'L' ? 'LEFT THUMB' : 'RIGHT THUMB');
+  const handName = h => h === 'B' ? (S.scheme === 'keys' ? 'X THEN Z' : 'BOTH THUMBS') : S.scheme === 'keys' ? (h === 'L' ? 'X KEY' : 'Z KEY') : (h === 'L' ? 'LEFT THUMB' : 'RIGHT THUMB');
   function drawLesson(t) {   // the coach: big, short, on the field; an arrow over the pad that answers it
     const B = S.battle, L = lesson(); if (!L || !B) return;
     const busy = ['intro', 'after', 'win'].includes(B.phase); if (busy && L.who !== 'free') return;
-    if (L.who === 'p' && B.phase !== 'menu' && B.phase !== 'timing') return;
+    if (L.who === 'p' && !['menu', 'timing', 'allyTarget'].includes(B.phase)) return;
     const d = S.demo, k = Math.min(1, (S.t - d.shown) * 4), y0 = 2, big = L.verb.length <= 11, hgt = 8 + (L.hand ? 11 : 0) + (big ? 18 : 11) + (L.sub ? 11 : 0);
     rect(0, y0, W, hgt + 4, 'k'); rect(0, y0 + hgt + 3, W * k, 1, L.c1);
     let y = y0 + 3;
     text(d.fails && L.again ? 'AGAIN! ' + L.again : L.l1, 90, y, d.fails ? 'n6' : L.c1, 'center', null); y += 11;
-    if (L.hand) { text(handName(L.hand), 90, y, L.hand === 'L' ? 'au' : 'c2', 'center', null); y += 11; }
+    if (L.hand) { text(handName(L.hand), 90, y, L.hand === 'L' ? 'au' : L.hand === 'B' ? 'p2' : 'c2', 'center', null); y += 11; }
     text(L.verb, 90, y, 'wt', 'center', 'k', big ? 16 : 8); y += big ? 18 : 11;
     if (L.sub) text(L.sub, 90, y, 's4', 'center', null);
     if (L.hand && Math.floor(t * 3) % 2 && (B.phase === 'foeWind' || B.phase === 'menu' || B.phase === 'timing')) {   // point at the answer
       let x = L.hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, y = PAD_Y - 6;
-      if (B.phase === 'menu') { const b = rightButtons().find(q => q.o === (L.id === 'skill' ? 'SHARD STRIKE' : 'STRIKE')); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
+      if (B.phase === 'allyTarget') { const i = G.party.findIndex(p => p.id === 'knight'); x = 4 + (i % 2) * 88 + 20; y = 193 + Math.floor(i / 2) * 13; }
+      if (B.phase === 'menu') { const want = { skill: 'SHARD STRIKE', magic: 'FIREBALL', item: B.sub === 'item' ? 'POTION' : 'ITEM' }[L.id] || 'STRIKE', b = rightButtons().find(q => q.o === want); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
       for (let i = 0; i < 4; i++) rect(x - 4 + i, y + i, 9 - i * 2, 1, 'au');
     }
   }
@@ -739,7 +764,7 @@
     const d = S.demo.tot, k = S.card.t, n = d.actions || 1;
     rect(0, 0, W, H, 'n0'); for (let i = 0; i < 40; i++) px(hash(i) * W, hash(i + 5) * H, Math.floor(t * 2 + i) % 7 ? 'n1' : 'n2');
     text('YOU JUST PLAYED', 90, 14, 's4', 'center'); text('TWO HANDS', 90, 26, 'au', 'center', 'k', 16);
-    const rows = [['PARRIES', d.parry, 'c2'], ['BLOCKS', d.block, 'b2'], ['PERFECT HITS', d.perfect, 'au'], ['BREAKS', d.breaks, 'n6'], ['SKILLS FROM WAKE', d.skills, 'c2']];
+    const rows = [['PARRIES', d.parry, 'c2'], ['BLOCKS', d.block, 'b2'], ['PERFECT HITS', d.perfect, 'au'], ['BREAKS', d.breaks, 'n6'], ['SPELLS CAST', d.casts, 'p2']];
     rows.forEach(([l, v, c], i) => { if (k < .25 + i * .15) return; text(l, 12, 52 + i * 12, 'wt'); text(String(v), 168, 52 + i * 12, c, 'right'); });
     if (k > 1.1) { panel(6, 116, 168, 32, 'b1'); text('TAPS TO ATTACK', 12, 122, 's4'); text('3', 140, 122, 'r2'); text('2', 166, 122, 'g4', 'right'); rect(148, 125, 7, 2, 'wt'); text('AIM WITHOUT REACHING', 12, 134, 'wt', 'left', null); }
     if (k > 1.5) {
@@ -796,6 +821,8 @@
     const rainy = B.foes.find(f => f.hp > 0 && f.intent && TRICK[f.intent].aoe), hurt = G.party.find(p => p.hp > 0 && p.hp < p.maxhp * .35);
     const at = f => B.foes.indexOf(f), plain = B.foes.find(f => f.hp > 0 && f.open !== false && !f.shell && !f.burrowed && !f.phased) || B.foes.find(f => f.hp > 0);
     if (lesson() && lesson().id === 'skill' && a.id === 'hero') return { cmd: 'SHARD STRIKE', pick: at(plain) };
+    if (lesson() && lesson().id === 'magic' && a.id === 'mage') return { cmd: 'FIREBALL', pick: at(plain) };
+    if (lesson() && lesson().id === 'item') return { cmd: 'POTION', ally: G.party.findIndex(p => p.id === 'knight') };
     if (auto === 'fightonly') return { cmd: 'STRIKE', pick: at(B.foes.find(f => f.hp > 0 && f.open !== false) || plain) };
     if (hurt && can('HEAL')) return { cmd: 'HEAL', ally: G.party.indexOf(hurt) };
     if (eye && can('SHARD STRIKE')) return { cmd: 'SHARD STRIKE', pick: at(eye) };
@@ -808,6 +835,7 @@
   }
   function botPlan(B) {
     const d = botDecide(B);
+    if (d.cmd === 'POTION' || d.cmd === 'ETHER') { const ib = rightButtons().find(q => q.o === 'ITEM'); if (ib) ghost(ib.b[0] + ib.b[2] / 2, ib.b[1] + ib.b[3] / 2, 'R'); choose('ITEM'); choose(d.cmd); if (B.phase === 'allyTarget') startTiming(d.ally); return; }
     if (d.pick !== undefined && d.pick !== B.pick) { const c = foeChips().find(q => q.i === d.pick); if (c) ghost(c.b[0] + c.b[2] / 2, c.b[1] + c.b[3] / 2, 'L'); }
     if (d.pick !== undefined) B.pick = d.pick;
     const btn = rightButtons().find(q => q.o === d.cmd); if (btn) ghost(btn.b[0] + btn.b[2] / 2, btn.b[1] + btn.b[3] / 2, 'R');
@@ -845,8 +873,10 @@
     if (B.phase === 'intro' && B.t > .7) nextTurn();
     else if (B.phase === 'menu' && auto && B.t > (API.botThink || 0)) botPlan(B);
     else if (B.phase === 'timing') {
-      if (auto && B.hitT === null) { const off = auto === 'human' ? (B.botOff = B.botOff ?? gauss() * (API.human || { sd: .06 }).sd) : 0; if (B.t >= B.ring.dur - .01 + off) { timingTap(); B.botOff = undefined; } }
-      if (B.t > B.ring.dur + .3) { B.botOff = undefined; const g = B.hitT === null ? 1 : B.grade; if (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'all') resolveAction(null, g); else resolveAction(B.target, g); }
+      if (auto && B.ring.cast) { const sd = auto === 'human' ? (API.human || { sd: .06 }).sd : 0; B.botCast = B.botCast || { L: B.ring.t1 + gauss() * sd, R: B.ring.t2 + gauss() * sd }; if (B.ring.gL === null && B.t >= B.botCast.L - .01) timingTap('L'); if (B.ring.gR === null && B.ring.gL !== null && B.t >= B.botCast.R - .01) timingTap('R'); }
+      else if (auto && B.hitT === null) { const off = auto === 'human' ? (B.botOff = B.botOff ?? gauss() * (API.human || { sd: .06 }).sd) : 0; if (B.t >= B.ring.dur - .01 + off) { timingTap(); B.botOff = undefined; } }
+      if (B.ring.cast && B.hitT === null && B.t > B.ring.t2 + .3) { const r = B.ring; B.grade = ((r.gL ?? .85) + (r.gR ?? .85)) / 2; B.hitT = B.t; }
+      if (B.t > B.ring.dur + .3 && (!B.ring.cast || B.hitT !== null)) { B.botCast = null; B.botOff = undefined; const g = B.hitT === null ? 1 : B.grade; if (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'all') resolveAction(null, g); else resolveAction(B.target, g); }
     }
     else if (B.phase === 'foeWind') {
       if (auto && !B.botPress) botDefend(B);
@@ -897,8 +927,10 @@
       if (B.fx.kind === 'fire') { const x = foeX(B.fx.i), y = aimY(B.fx.i); disc(x, y, 9 * (1 - k) + 1, 'n6'); disc(x, y, 5 * (1 - k), 'n7'); }
       if (B.fx.kind === 'shard') { const x = foeX(B.fx.i), y = aimY(B.fx.i); for (let r = 0; r < 2; r++) for (let a = 0; a < 16; a++) px(x + Math.cos(a / 16 * 6.28) * (k * 18 + r * 3), y + Math.sin(a / 16 * 6.28) * (k * 18 + r * 3), 'c3'); }
       if (B.fx.kind === 'volley') for (let i = 0; i < 5; i++) rect(mix(64, 8, k) + i * 5, 40 + i * 6, 3, 1, 'w3'); }
+    if (B.phase === 'timing' && B.ring.cast) { const i = G.party.indexOf(B.actor), x = memberX(i) + 3, y = memberY(i) + 8, n = 6 + Math.floor(B.t * 10);   // a rune circle builds around the caster
+      for (let a = 0; a < Math.min(32, n); a++) { const q = a / 32 * 6.283 + B.t; px(x + Math.cos(q) * 11, y + Math.sin(q) * 5, a % 4 ? 'p2' : 'wt'); } }
     if (B.phase === 'timing') {   // the ring shrinks onto the target; tap as it meets the inner circle
-      const hasT = B.target !== null && B.target !== undefined, tx = hasT ? foeX(B.target) : 30, ty = hasT ? aimY(B.target) : 60, k = clamp(B.t / B.ring.dur), r = Math.round(mix(24, 6, k));
+      const hasT = B.target !== null && B.target !== undefined, tx = B.targetAlly ? memberX(B.target) + 5 : hasT ? foeX(B.target) : 30, ty = B.targetAlly ? memberY(B.target) + 7 : hasT ? aimY(B.target) : 60, k = clamp(B.t / B.ring.dur), r = Math.round(mix(24, 6, k));
       for (let a = 0; a < 40; a++) { const q = a / 40 * 6.28; px(tx + Math.cos(q) * 6, ty + Math.sin(q) * 6, 'au'); if (B.hitT === null) px(tx + Math.cos(q) * r, ty + Math.sin(q) * r, 'wt'); }
     }
     if (B.phase === 'foeWind') {   // each hit of the string drops onto the victim, red for heavy, blue for swift
@@ -958,6 +990,13 @@
         button(btn.b, lab, o === 'STRIKE', o === 'STRIKE' ? 'r1' : 'b0', off ? 's2' : null);
         if (sk) { for (let j = 0; j < sk.w; j++) rect(btn.b[0] + btn.b[2] / 2 - sk.w * 3 + j * 6 + 1, btn.b[1] + btn.b[3] - 7, 4, 3, off ? 's2' : 'c2'); } }
     } else if (B.phase === 'allyTarget') { text('TAP AN ALLY ABOVE', 90, 252, 'au', 'center'); button([RPAD[0], RPAD[1] + 52, 86, 28], 'BACK', false); }
+    else if (B.phase === 'timing' && B.ring.cast) {   // two rings: left closes first, then right
+      const r = B.ring;
+      for (const [h, P0, tt, g] of [['L', L, r.t1, r.gL], ['R', R, r.t2, r.gR]]) { const x = P0[0] + 43, y = P0[1] + 36, k = clamp(B.t / tt);
+        panel(P0[0], P0[1], P0[2], P0[3], g !== null ? (g > 1.4 ? 'au' : 'b1') : 'p1'); ring(x, y, 10, 'p2'); if (g === null) ring(x, y, Math.round(mix(34, 10, k)), 'wt'); else disc(x, y, 6, g > 1.4 ? 'au' : 'p2');
+        text(h === 'L' ? '1' : '2', x, y - 4, 'wt', 'center', 'k'); }
+      text('CAST', 90, PAD_Y + 66, 'p2', 'center', 'k'); text('LEFT', L[0] + 43, L[1] + 66, 'wt', 'center', null); text('RIGHT', R[0] + 43, R[1] + 66, 'wt', 'center', null);
+    }
     else if (B.phase === 'timing') { const k = clamp(B.t / B.ring.dur), r = Math.round(mix(30, 10, k)); panel(R[0], R[1], R[2], R[3], 'r1'); swordIcon(R[0] + 43, R[1] + 36, 'au'); ring(R[0] + 43, R[1] + 36, 10, 'au'); if (B.hitT === null) ring(R[0] + 43, R[1] + 36, r, 'wt'); text('TAP!', R[0] + 43, R[1] + 64, 'wt', 'center', null); text('WAIT FOR', 46, 262, 's4', 'center', null); text('THE RING', 46, 274, 's4', 'center', null); }
   }
   function drawTimeline(t) {   // who acts next: party in blue, foes in red, the current actor first
@@ -1165,7 +1204,7 @@
       const B = S.battle;
       if (B.phase === 'win') { endBattle(); return; }
       if (B.phase === 'lose') { if (S.demo) return startFinale(); S.battle = null; healParty(1); enterRegion(G.region); return; }
-      if (B.phase === 'timing') { timingTap(); return; }
+      if (B.phase === 'timing') { timingTap(x < 90 ? 'L' : 'R'); return; }
       if (B.phase === 'foeWind') { defend(x < 90 ? 'L' : 'R'); return; }
       if (B.phase === 'menu') {
         if (x < 90 && y >= PAD_Y) { touches.set(id, { kind: 'swipe', x0: x, done: false });
@@ -1228,7 +1267,7 @@
       const B = S.battle;
       if (B.phase === 'win' && ok) return endBattle();
       if (B.phase === 'lose' && ok) { if (S.demo) return startFinale(); S.battle = null; healParty(1); return enterRegion(G.region); }
-      if (B.phase === 'timing' && (ok || left)) return timingTap();
+      if (B.phase === 'timing' && (ok || left)) return timingTap(left ? 'L' : 'R');
       if (B.phase === 'foeWind' && (ok || left)) return defend(left ? 'L' : 'R');
       if (B.phase === 'menu') {
         if (key === 'ArrowLeft' || key === 'ArrowRight') return cycleTarget(key === 'ArrowRight' ? 1 : -1);

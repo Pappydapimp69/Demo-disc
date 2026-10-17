@@ -647,7 +647,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const flow = await page.evaluate(() => { const g = window.__game, seen = []; g.startDemo(true);
     for (let k = 0; k < 20000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(); const id = L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
     return { mode: g.S.mode, seen: seen.join('>'), tot: g.S.demo && g.S.demo.tot }; });
-  check(flow.mode === 'card' && /block>parry>strike>string>skill>break/.test(flow.seen) && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
+  check(flow.mode === 'card' && /block>parry>strike>string>skill>magic>item>break/.test(flow.seen) && flow.tot.casts > 0 && flow.tot.items > 0 && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();
