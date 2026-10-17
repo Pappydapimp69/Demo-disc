@@ -63,9 +63,9 @@
 
   // ---------- state ----------
   const S = { li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
-    happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0 };
+    happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, sort: 'arrival' };
   const API = { S, LEVELS, tol, verdict, lobbies, arrivals, autopilot: null, step: n => game.step(n),
-    get state() { return S.state; }, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
+    get state() { return S.state; }, visible: () => visible(), resort, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
     result: () => ({ happy: S.happy, matched: S.matched, quits: S.quits, unhappy: S.unhappy, pass: passed(), stars: stars() }) };
   function load(i) {
     const L = LEVELS[i];
@@ -79,7 +79,9 @@
   const passed = () => S.happy >= S.L.need && S.quits <= S.L.quits;
   function stars() { if (!passed()) return 0; const f = S.happy / Math.max(1, S.matched + S.quits); return f >= .8 ? 3 : f >= .6 ? 2 : 1; }
   function say(s, col = GREEN) { S.log.push({ s, col }); if (S.log.length > 5) S.log.shift(); }
-  const visible = () => S.queue.slice(0, ROWS);
+  // the queue as shown: by arrival, or by skill (ties: whoever has waited longest first) so close skills sit together
+  const visible = () => (S.sort === 'skill' ? S.queue.slice().sort((a, b) => a.skill - b.skill || a.at - b.at) : S.queue).slice(0, ROWS);
+  function resort() { S.sort = S.sort === 'skill' ? 'arrival' : 'skill'; Snd.key(); }
   function toggle(p) {
     if (S.state !== 'play' || paused()) return;
     const mates = p.party ? S.queue.filter(q => q.party === p.party && q.at === p.at) : [p];
@@ -149,9 +151,9 @@
   };
 
   // ---------- drawing: everything is monospace text on a phosphor screen ----------
-  const FONT = "bold 19px 'Courier New', Courier, monospace", ROWS = 12, ROW0 = 168, RH = 38;
+  const FONT = "bold 19px 'Courier New', Courier, monospace", ROWS = 11, ROW0 = 168, RH = 38;
   let CW = 11.4;
-  const BTN = { match: [24, 660, 230, 56], clear: [286, 660, 230, 56] };
+  const BTN = { match: [24, 660, 230, 56], clear: [286, 660, 230, 56], sort: [376, 86, 146, 36] };
   function T(c, s, x, y, col = GREEN) { c.fillStyle = col; c.fillText(s, x, y); }
   const pad = (s, n) => (s + ' '.repeat(n)).slice(0, n);
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -209,7 +211,7 @@
       const v = verdict(g, S.clock, L);
       T(c, `LOBBY ${g.length}/${L.n}  SPREAD ${v.spread}${v.mixed ? '  MIXED REGIONS' : ''}  HAPPY ${v.happy}/${g.length}`, 18, ly, v.mixed || v.happy < g.length ? AMBER : GREEN);
     } else T(c, `LOBBY 0/${L.n}  TAP ${L.n} PLAYERS`, 18, ly, DIM);
-    box(c, BTN.match, '[ MATCH ]', g.length === L.n); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
+    box(c, BTN.sort, S.sort === 'skill' ? 'BY SKILL' : 'BY ARRIVAL', S.sort === 'skill'); box(c, BTN.match, '[ MATCH ]', g.length === L.n); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
     // servers
     let sx = 18; T(c, 'SRV', sx, 744, DIM); sx += 4 * CW;   // each server shows the seconds its match has left
     S.servers.forEach(f => { const busy = f > S.clock; T(c, busy ? `[${Math.min(9, Math.ceil(f - S.clock))}]` : '[ ]', sx, 744, busy ? GREEN : DIM); sx += 3.6 * CW; });
@@ -234,6 +236,7 @@
     if (S.state === 'intro') { start(); return; }
     if (S.state === 'report') { load(passed() ? (S.li + 1) % LEVELS.length : S.li); return; }
     if (inBox(BTN.match, x, y)) { match(); return; }
+    if (inBox(BTN.sort, x, y)) { resort(); return; }
     if (inBox(BTN.clear, x, y)) { if (S.sel.size) { S.sel.clear(); Snd.key(); } return; }
     const i = Math.floor((y - ROW0) / RH), vis = visible();
     if (y >= ROW0 && i >= 0 && i < vis.length) { S.cursor = i; toggle(vis[i]); }
@@ -247,6 +250,7 @@
     else if (k === ' ' || k === 'x') { const p = visible()[S.cursor]; if (p) toggle(p); }
     else if (k === 'Enter') match();
     else if (k === 'c' || k === 'Backspace') S.sel.clear();
+    else if (k === 's' || k === 'Tab') resort();
   }
 
   load(0);

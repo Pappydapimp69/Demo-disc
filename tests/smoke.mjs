@@ -381,6 +381,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.mouse.click(270, 440);
   const after = await page.evaluate(() => window.__game.S.beasts[0].flee);
   check(!after, 'embers: right after staring at the fire you cannot see (or shoo) what is at the treeline');
+  const sr = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.S.debt = 0;
+    const far = { a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 2 }, near = { a: g.S.look, d: .6, v: 0, flee: 0, snapT: 9, id: 3 }; g.S.beasts = [far, near];
+    const r = [g.shoo(far), g.shoo(near)]; g.S.voice = 0; const near2 = { a: g.S.look, d: .6, v: 0, flee: 0, snapT: 9, id: 4 }; r.push(g.shoo(near2));
+    g.S.debt = 9; const eye = { a: g.S.look, d: .5, v: 0, flee: 0, snapT: 9, id: 5 }; g.S.beasts = [eye]; return [...r, g.eyesOnly(eye)].join(); });
+  check(sr === 'false,true,false,true', `embers: a shout at the treeline is wasted, a close one works, no voice no shout, and eyes show before the body (${sr})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'embers: an accidental tap as the night opens is ignored');
   check(errors.length === 0, `embers runs without errors ${errors.join(' | ')}`);
@@ -487,6 +492,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   // manual: tapping a floor sends the lift there
   const man = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.send(g.S.cars[0], 3); g.step(150); return Math.round(g.S.cars[0].y); });
   check(man === 3, 'goingup: a tapped floor gets the lift');
+  const q = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); const c = g.S.cars[0]; c.y = 0;
+    g.send(c, 4); g.send(c, 2); g.send(c, 3); g.send(c, 3); const queued = [c.target, ...c.stops].join();
+    let first = null; for (let k = 0; k < 400 && first === null; k++) { g.step(1); if (c.door > 0) first = Math.round(c.y); }
+    return { queued, first }; });
+  check(q.queued === '4,2' && q.first === 2, `goingup: taps queue stops, a second tap cancels one, and a queued floor on the way is served on the way (queued ${q.queued}, first stop ${q.first})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'goingup: an accidental tap as the day opens is ignored');
   check(errors.length === 0, `goingup runs without errors ${errors.join(' | ')}`);

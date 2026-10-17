@@ -12,7 +12,7 @@
   // traffic: (rng, floors) -> [from, to]; rate = new people per second
   const anywhere = (r, F) => { const a = Math.floor(r() * F); let b = Math.floor(r() * (F - 1)); if (b >= a) b++; return [a, b]; };
   const LEVELS = [
-    { name: 'FIRST DAY', floors: 5, cars: 1, rate: .3, goal: 20, time: 120, tip: 'TAP A FLOOR TO SEND THE LIFT. LIT FLOORS ARE WHERE YOUR RIDERS WANT TO GO.', traffic: anywhere },
+    { name: 'FIRST DAY', floors: 5, cars: 1, rate: .3, goal: 20, time: 120, tip: 'TAP FLOORS TO QUEUE STOPS; TAP ONE AGAIN TO CANCEL. LIT FLOORS ARE WHERE RIDERS WANT TO GO; ▲▼ SHOW WHICH WAY THE WAITING ONES ARE GOING.', traffic: anywhere },
     { name: 'MORNING RUSH', floors: 7, cars: 1, rate: .55, goal: 50, time: 135, tip: 'EVERYONE ARRIVES AT THE LOBBY AND GOES UP.', traffic: (r, F) => [0, 1 + Math.floor(r() * (F - 1))] },
     { name: 'THE TOP FLOOR', floors: 9, cars: 1, rate: .9, goal: 75, time: 130, tip: "THE LOW FLOORS ARE BUSY. DON'T FORGET WHO IS WAITING AT THE TOP.",
       traffic: (r, F) => r() < .1 ? [F - 1, 0] : (() => { const a = Math.floor(r() * 4); let b = Math.floor(r() * 3); if (b >= a) b++; return [a, b]; })() },
@@ -25,7 +25,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', lt: 0, clock: 0, waiting: [], delivered: 0, hearts: 3, sel: 0, auto: null, rng: mkRng(500 + i * 13), nextP: 1, pops: [], maxWait: 0, waits: [], endT: 0, usedAuto: false,
-      cars: Array.from({ length: L.cars }, (_, k) => ({ y: k ? L.floors - 1 : 0, target: null, door: 0, riders: [], dir: 1, id: k })) });
+      cars: Array.from({ length: L.cars }, (_, k) => ({ y: k ? L.floors - 1 : 0, target: null, stops: [], door: 0, riders: [], dir: 1, id: k })) });
     pause();
   }
   function pause() { S.lockUntil = S.t + .6; }
@@ -35,7 +35,16 @@
   function start() { S.state = 'play'; pause(); }
 
   // ---------- the lifts ----------
-  function send(car, f) { if (S.state !== 'play') return; car.target = f; Snd.beep(f); }
+  // manual control queues stops: tap floors in the order you want them; tap a queued floor again to cancel it
+  function send(car, f) {
+    if (S.state !== 'play') return;
+    if (car.target === f) { car.target = car.stops.shift() ?? null; Snd.cancel(); return; }
+    const i = car.stops.indexOf(f); if (i >= 0) { car.stops.splice(i, 1); Snd.cancel(); return; }
+    if (car.target === null) car.target = f; else car.stops.push(f);
+    Snd.beep(f);
+  }
+  function goNow(car, f) { if (S.state !== 'play') return; car.target = f; car.stops = car.stops.filter(x => x !== f); Snd.beep(f); }
+  function setAuto(rule) { S.auto = rule; if (rule) S.cars.forEach(c => { c.stops = []; }); }
   function arrive(car, f) {
     car.door = DOOR; car.target = null; Snd.ding();
     const off = car.riders.filter(p => p.to === f); car.riders = car.riders.filter(p => p.to !== f);
@@ -52,7 +61,11 @@
         if (c.riders.length < CAP && S.waiting.some(p => p.from === here) && !S.cars.some(o => o !== c && Math.abs(o.y - here) < .01 && o.door > 0)) { arrive(c, here); continue; }
         c.target = pick(c, S.auto);
       }
+      if (!S.auto && c.target === null && c.stops.length) c.target = c.stops.shift();
       if (c.target === null) continue;
+      // a queued floor on the way gets served on the way, like a real car call
+      if (!S.auto) { const on = c.stops.filter(f => (f - c.y) * Math.sign(c.target - c.y) > .02 && Math.abs(f - c.y) < Math.abs(c.target - c.y)).sort((a, b) => Math.abs(a - c.y) - Math.abs(b - c.y))[0];
+        if (on !== undefined) { c.stops.splice(c.stops.indexOf(on), 1); c.stops.unshift(c.target); c.target = on; } }
       const d = c.target - c.y;
       if (Math.abs(d) <= SPEED * dt) { c.y = c.target; arrive(c, c.target); }
       else { c.y += Math.sign(d) * SPEED * dt; c.dir = Math.sign(d); }
@@ -93,6 +106,7 @@
   const Snd = {
     ding() { Audio.tone(1568, .5, 'sine', .1); Audio.tone(1319, .6, 'sine', .08, null, .12); },
     beep(f) { Audio.tone(700 + f * 40, .05, 'square', .05); },
+    cancel() { Audio.tone(300, .06, 'square', .04); },
     call() { Audio.tone(1200, .03, 'sine', .04); },
     huff() { Audio.noise(.3, .15); Audio.tone(200, .3, 'sawtooth', .06, 120); },
   };
@@ -116,6 +130,7 @@
       here.slice(0, 7).forEach((p, k) => { const w = S.clock - p.at, col = w > ANGRY ? '#e02a2a' : w > ANGRY / 2 ? '#e09a2a' : '#3a5a8a'; stick(64 + k * 18, y + fh / 2 - 4, col, Math.min(1, fh / 48)); });
       if (here.length > 7) { ctx.font = '800 14px system-ui'; ctx.fillStyle = '#5a4a3a'; ctx.fillText('+' + (here.length - 7), 64 + 7 * 18, y + 5); }
       const oldest = here.reduce((m, p) => Math.max(m, S.clock - p.at), 0);
+      if (here.length) { const up = here.some(p => p.to > f), dn = here.some(p => p.to < f); ctx.font = `800 ${Math.min(16, fh * .4)}px system-ui`; ctx.textAlign = 'left'; ctx.fillStyle = '#2a5ac0'; ctx.fillText((up ? '▲' : '') + (dn ? '▼' : ''), 190, y - fh / 2 + 14); }
       if (here.length) { ctx.fillStyle = '#0002'; Draw.rr(ctx, 64, y - fh / 2 + 4, 120, 5, 2); ctx.fill(); ctx.fillStyle = oldest > ANGRY ? '#e02a2a' : '#3a8a3a'; Draw.rr(ctx, 64, y - fh / 2 + 4, 120 * (1 - oldest / PATIENCE), 5, 2); ctx.fill(); }
       // destination lamps: a floor any rider wants lights up on the right
       const want = S.cars.some(c => c.riders.some(p => p.to === f));
@@ -126,6 +141,8 @@
     S.cars.forEach((c, k) => {
       const x = shaftX(k);
       ctx.fillStyle = '#5a5a6a'; ctx.fillRect(x - SHAFTW / 2, TOP - 10, SHAFTW, BOT - TOP + 20);
+      c.stops.forEach((f, i) => { ctx.fillStyle = '#ffd23a'; Draw.circ(ctx, x + SHAFTW / 2 + 12, floorY(f), 10); ctx.fillStyle = '#1a2a4a'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(i + 2, x + SHAFTW / 2 + 12, floorY(f) + 4); });
+      if (c.target !== null && !S.auto) { ctx.fillStyle = '#ff9a2a'; Draw.circ(ctx, x + SHAFTW / 2 + 12, floorY(c.target), 10); ctx.fillStyle = '#fff'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(1, x + SHAFTW / 2 + 12, floorY(c.target) + 4); }
       if (c.target !== null) { ctx.strokeStyle = '#ffd23a'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, floorY(c.y)); ctx.lineTo(x, floorY(c.target)); ctx.stroke(); ctx.setLineDash([]); }
       const y = floorY(c.y), hh = fh * .86, open = c.door > 0 ? Math.sin(clamp(c.door / DOOR) * Math.PI) : 0;
       ctx.fillStyle = k === S.sel && S.L.cars > 1 ? '#ffe9a0' : '#d8d8e0'; Draw.rr(ctx, x - SHAFTW / 2 + 4, y - hh / 2, SHAFTW - 8, hh, 6); ctx.fill();
@@ -176,9 +193,9 @@
     if (S.state === 'intro') { start(); return; }
     if (S.state === 'lost') { load(S.li); return; }
     if (S.state === 'win') { if (S.endT > 1) next(); return; }
-    for (const b of AUTO) if (hit(b, x, y)) { S.auto = b.rule; Audio.sfx('select'); return; }
+    for (const b of AUTO) if (hit(b, x, y)) { setAuto(b.rule); Audio.sfx('select'); return; }
     for (const c of S.cars) { const sx = shaftX(c.id); if (Math.abs(x - sx) < SHAFTW / 2 && Math.abs(y - floorY(c.y)) < FH() / 2) { S.sel = c.id; Audio.sfx('select'); return; } }
-    if (y > TOP - 10 && y < BOT + 10) { const f = clamp(Math.floor((BOT - y) / FH()), 0, S.L.floors - 1); S.auto = null; send(S.cars[S.sel], f); }
+    if (y > TOP - 10 && y < BOT + 10) { const f = clamp(Math.floor((BOT - y) / FH()), 0, S.L.floors - 1); setAuto(null); send(S.cars[S.sel], f); }
   }
   function onKey(key, down) {
     if (!down || paused()) return;
@@ -186,15 +203,15 @@
     if (S.state !== 'play') return;
     if (key === 'Tab') { S.sel = (S.sel + 1) % S.L.cars; return; }
     const c = S.cars[S.sel];
-    if (key === 'ArrowUp') { S.auto = null; send(c, Math.min(S.L.floors - 1, (c.target ?? Math.round(c.y)) + 1)); }
-    if (key === 'ArrowDown') { S.auto = null; send(c, Math.max(0, (c.target ?? Math.round(c.y)) - 1)); }
-    if (key === 'n' || key === 'N') S.auto = 'nearest';
-    if (key === 's' || key === 'S') S.auto = 'sweep';
-    if (key === 'm' || key === 'M') S.auto = null;
+    if (key === 'ArrowUp') { setAuto(null); goNow(c, Math.min(S.L.floors - 1, (c.target ?? Math.round(c.y)) + 1)); }
+    if (key === 'ArrowDown') { setAuto(null); goNow(c, Math.max(0, (c.target ?? Math.round(c.y)) - 1)); }
+    if (key === 'n' || key === 'N') setAuto('nearest');
+    if (key === 's' || key === 'S') setAuto('sweep');
+    if (key === 'm' || key === 'M') setAuto(null);
   }
   window.addEventListener('keydown', e => { if (e.key === 'Tab') e.preventDefault(); });
 
-  const API = { LEVELS, S, load, start, send, pick, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, send, goNow, setAuto, pick, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   window.__game = API;

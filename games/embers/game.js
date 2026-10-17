@@ -9,10 +9,11 @@
   const { createGame, Audio, Draw, back, clamp } = Engine;
   const W = 540, H = 960, HOR = 430, FOV = 1.75;        // horizon y, field of view (rad)
   const GLANCE = 2, STARE = 17, BLEACH_T = 5;           // night-minutes of re-adaptation: a glance, a full stare, and how fast a look grows from one to the other
+  const SHOUT = .3, VOICE = 3, VOICE_BACK = 2.5;      // a shout only scares what is this close; you have three in you, one back every 2.5 s
   const HEAT = 9, HEAT_RAMP = .8;                      // warmth per second once your hands have caught the heat, and how long that takes (a flick of a glance barely warms)
 
   const LEVELS = [
-    { name: 'FIRST NIGHT', tip: "DON'T LOOK AT THE FIRE. YOUR EYES NEED THE DARK. TAP WHAT COMES OUT OF THE TREES.", len: 60, cold: 1.0, spawn: 7, speed: .06, pack: 1, torch: 0 },
+    { name: 'FIRST NIGHT', tip: "DON'T LOOK AT THE FIRE. YOUR EYES NEED THE DARK. EYES IN THE TREES COME FIRST; SHOUT (TAP) ONCE IT'S CLOSE ENOUGH TO CARE. SHOUTS COST VOICE.", len: 60, cold: 1.0, spawn: 7, speed: .06, pack: 1, torch: 0 },
     { name: 'COLD SNAP', tip: 'IT IS COLDER. WARM YOUR HANDS, BUT EVERY LOOK AT THE FIRE COSTS YOU YOUR EYES. HANDS TAKE A MOMENT TO CATCH THE HEAT.', len: 70, cold: 1.8, spawn: 6, speed: .07, pack: 1, torch: 0 },
     { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. LISTEN FOR THE TWIGS AND TURN TOWARD THEM.', len: 75, cold: 1.8, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
     { name: 'RED LIGHT', tip: 'A RED TORCH DOES NOT SPOIL NIGHT SIGHT, BUT IT ONLY REACHES WHAT IS CLOSE.', len: 80, cold: 2.0, spawn: 6, speed: .08, pack: 2, torch: 25 },
@@ -34,7 +35,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', lt: 0, look: 0, warming: false, expo: 0, debt: 0, warmth: 100, lives: 3, night: 0, beasts: [], rng: mkRng(300 + i * 31),
-      torch: false, battery: L.torch, nextSpawn: 3, flash: [], hurt: 0, ap: null, looks: 0, warmTime: 0, why: null, endT: 0, shivered: false });
+      torch: false, battery: L.torch, nextSpawn: 3, flash: [], hurt: 0, voice: VOICE, notes: [], ap: null, looks: 0, warmTime: 0, why: null, endT: 0, shivered: false });
     pause();
   }
   function pause() { S.lockUntil = S.t + .6; S.warming = false; }
@@ -84,7 +85,15 @@
     const rel = wrap(b.a - S.look); if (Math.abs(rel) > FOV / 2) return false;
     return canSee(V(), b.d) || (S.torch && b.d > .55 && Math.abs(rel) < .5);
   }
-  function shoo(b) { b.flee = 1; Snd.shout(); S.flash.push({ t: S.t, a: b.a, d: b.d }); }
+  // a shout costs voice; one at something still at the treeline is wasted on it
+  function shoo(b) {
+    if (S.voice < 1) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'HOARSE…' }); Snd.croak(); return false; }
+    S.voice -= 1;
+    if (b.d < SHOUT) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'TOO FAR. IT WATCHES.' }); Snd.shout(); return false; }
+    b.flee = 1; Snd.shout(); S.flash.push({ t: S.t, a: b.a, d: b.d }); return true;
+  }
+  // eyeshine: eyes catch the firelight before you can make out the body
+  const eyesOnly = b => !S.warming && !b.flee && Math.abs(wrap(b.a - S.look)) <= FOV / 2 && !visible(b) && canSee(V(), Math.min(1, b.d + .3));
 
   function update(dt) {
     S.t += dt; S.lt += dt; S.hurt = Math.max(0, S.hurt - dt * 1.5);
@@ -94,7 +103,7 @@
     if (API.autopilot) autopilot(dt);
     if (S.torch) { S.battery -= dt; if (S.battery <= 0) { S.battery = 0; S.torch = false; } }
     S.look = wrap(S.look + (S.turn || 0) * 2.2 * dt);
-    eyes(dt); beasts(dt);
+    eyes(dt); beasts(dt); S.voice = Math.min(VOICE, S.voice + dt / VOICE_BACK);
     S.night += dt;
     if (S.lives <= 0 || S.warmth <= 0) { S.state = 'lost'; S.why = S.warmth <= 0 ? 'THE COLD GOT YOU' : 'THE DARK GOT YOU'; S.endT = 0; setWarming(false); Audio.sfx('fail'); pause(); }
     else if (S.night >= S.L.len) { S.state = 'dawn'; S.endT = 0; setWarming(false); Snd.dawn(); pause(); }
@@ -116,7 +125,7 @@
       else if (S.warmth < 35) setWarming(true);
     }
     if (S.warming) { S.turn = 0; return; }
-    for (const b of S.beasts) { if (visible(b)) { b.seen = (b.seen || 0) + dt; if (b.seen > .5) shoo(b); } else b.seen = 0; }
+    for (const b of S.beasts) { if (visible(b) && b.d >= SHOUT && S.voice >= 1) { b.seen = (b.seen || 0) + dt; if (b.seen > .5) shoo(b); } else b.seen = 0; }
     // turn toward the nearest thing it has heard (the snaps tell it where)
     const heard = S.beasts.filter(b => !b.flee).sort((x, y) => y.d - x.d)[0];
     if (heard) { const rel = wrap(heard.a - S.look); S.turn = Math.abs(rel) < .1 ? 0 : clamp(rel * 3, -1, 1); }
@@ -137,6 +146,7 @@
       } catch (_) {}
     },
     snap(rel, d) { const back = Math.abs(rel) > Math.PI / 2; this.burst(back ? 1400 : 2600, 3, .06, .12 + d * .3, Math.sin(rel)); this.burst(back ? 900 : 1800, 4, .05, .08 + d * .2, Math.sin(rel), .07); },
+    croak() { this.burst(500, 2, .15, .12); },
     shout() { Audio.tone(220, .25, 'sawtooth', .12, 160); this.burst(800, 1, .2, .2); },
     lunge() { Audio.tone(110, .5, 'sawtooth', .2, 60); this.burst(400, .8, .5, .4); },
     fire(on) { const c = this.ctx(); if (!c) return; if (!this.fg) { const s = c.createBufferSource(); s.buffer = this.noise(c); s.loop = true; const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1500; this.fg = c.createGain(); this.fg.gain.value = .02; s.connect(f).connect(this.fg).connect(c.destination); s.start(); } this.fg.gain.setTargetAtTime(on ? .12 : .03, c.currentTime, .1); },
@@ -169,7 +179,7 @@
       const x = sx(b.a); if (x < -80 || x > W + 80) continue;
       const y = HOR + 10 + b.d * b.d * 330, s = .35 + b.d * 1.6, see = visible(b), torchOnly = see && !canSee(v, b.d);
       if (b.flee) { ctx.globalAlpha = clamp(b.d * 2); beast(x, y, s, '#000', false, true); ctx.globalAlpha = 1; continue; }
-      if (!see) continue;
+      if (!see) { if (eyesOnly(b)) { ctx.fillStyle = `rgba(255,200,90,${.35 + .4 * Math.abs(Math.sin(S.t * 1.3 + b.id))})`; const e = 4 + b.d * 8; Draw.circ(ctx, x - 10 * s, y - 26 * s, e * .6); Draw.circ(ctx, x + 10 * s, y - 26 * s, e * .6); } continue; }
       beast(x, y, s, torchOnly ? '#5a0a0a' : `rgb(${20 + v * 30},${20 + v * 30},${30 + v * 30})`, torchOnly, false);
     }
     // the fire's glow at the bottom of the view
@@ -201,10 +211,12 @@
     bar(120, 'NIGHT SIGHT', V(), '#9ab8ff');
     bar(144, 'DAWN', S.night / S.L.len, '#ffe14a');
     ctx.font = '800 22px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = '#ff6a6a'; ctx.fillText('♥'.repeat(Math.max(0, S.lives)), 424, 160);
+    ctx.font = '800 13px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'right'; ctx.fillText('VOICE', 122, 181);
+    for (let i = 0; i < VOICE; i++) { const k = clamp(S.voice - i); ctx.fillStyle = '#0008'; Draw.circ(ctx, 142 + i * 26, 176, 9); ctx.fillStyle = '#ffd8a0'; Draw.circ(ctx, 142 + i * 26, 176, 9 * k); }
     const btn = (b, label, sub, on, col) => { ctx.fillStyle = on ? col : '#1a1a22cc'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 24); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke(); Draw.bigText(ctx, label, b.x + b.w / 2, b.y + 44, 24, '#fff', '#000'); ctx.font = '700 13px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'center'; ctx.fillText(sub, b.x + b.w / 2, b.y + 80); };
     btn(WARM, 'WARM HANDS', 'HOLD · LOOKS AT THE FIRE', S.warming, '#ff7a2a');
     if (S.L.torch) btn(TORCH, 'RED TORCH', `${Math.ceil(S.battery)} S LEFT`, S.torch, '#c02a2a');
-    if (S.lt < 6 && S.state === 'play' && !S.looks) { ctx.font = '800 16px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'center'; ctx.fillText('DRAG TO LOOK AROUND · TAP WHAT YOU SEE', W / 2, H - 175); }
+    if (S.lt < 6 && S.state === 'play' && !S.looks) { ctx.font = '800 16px system-ui'; ctx.fillStyle = '#ffd8a0'; ctx.textAlign = 'center'; ctx.fillText('DRAG TO LOOK AROUND · TAP TO SHOUT WHEN IT IS CLOSE', W / 2, H - 175); }
     // the cold creeping in at the edges, and a nudge before it's too late
     if (S.state === 'play' && S.warmth < 30 && !S.warming) {
       const k = clamp((30 - S.warmth) / 30), fv = ctx.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 620);
@@ -229,6 +241,7 @@
     if (S.state === 'done') { card('DAWN', '#ffe14a', ['FIVE NIGHTS. YOU KEPT YOUR EYES AND YOUR FINGERS.', 'DEMO COMPLETE'], 'TAP FOR THE DISC MENU'); return; }
     if (S.warming && S.state === 'play') fireView(); else panorama();
     for (const f of S.flash) { const k = (S.t - f.t) / .5; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, 'HEY!', sx(f.a), HOR + 40 + f.d * 200, 40, '#fff'); ctx.globalAlpha = 1; } }
+    for (const f of S.notes) { const k = (S.t - f.t) / 1; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, f.s, clamp(sx(f.a), 120, W - 120), HOR + 40 + f.d * 200 - k * 20, 22, '#ffd8a0'); ctx.globalAlpha = 1; } }
     hud();
     if (S.state === 'intro') card(`NIGHT ${S.li + 1}`, '#ff9a3a', [S.L.name, S.L.tip], 'TAP TO START');
     if (S.state === 'lost') card(S.why, '#ff6a6a', ['THE NIGHT WINS THIS ONE.'], 'TAP TO TRY AGAIN');
@@ -276,7 +289,7 @@
     S.turn = (keys.ArrowRight || keys.d || keys.D ? 1 : 0) - (keys.ArrowLeft || keys.a || keys.A ? 1 : 0);
   }
 
-  const API = { LEVELS, S, load, start, lookCost, sight, heatRate, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, shoo, eyesOnly, SHOUT, lookCost, sight, heatRate, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   Audio.unlock();
