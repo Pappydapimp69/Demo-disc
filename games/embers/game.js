@@ -32,6 +32,9 @@
 
   const S = { li: 0, L: null, state: 'intro', t: 0, lt: 0, lockUntil: 0, look: 0, warming: false, expo: 0, debt: 0, warmth: 100, lives: 3, night: 0,
     beasts: [], rng: null, torch: false, battery: 0, nextSpawn: 0, flash: [], hurt: 0, ap: null, looks: 0, warmTime: 0 };
+  // first-time callouts: each new system says what it is the first time it happens (once per visit)
+  const told = new Set();
+  function callout(key, text) { if (told.has(key) || API.autopilot) return; told.add(key); S.callout = { text, t: S.t }; }
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', lt: 0, look: 0, warming: false, expo: 0, debt: 0, warmth: 100, lives: 3, night: 0, beasts: [], rng: mkRng(300 + i * 31),
@@ -57,7 +60,7 @@
       S.warmth = Math.min(100, S.warmth + heatRate(S.expo) * dt);
     } else S.debt = Math.max(0, S.debt - dt);                 // one night-minute of recovery per second
     S.warmth -= S.L.cold * dt;
-    if (S.warmth < 25 && !S.shivered) { S.shivered = true; Snd.shiver(); } else if (S.warmth > 40) S.shivered = false;
+    if (S.warmth < 25 && !S.shivered) { S.shivered = true; Snd.shiver(); callout('cold', 'YOUR HANDS ARE GOING NUMB. HOLD WARM HANDS, BUT EVERY LOOK COSTS YOUR EYES.'); } else if (S.warmth > 40) S.shivered = false;
   }
 
   // ---------- what comes out of the trees ----------
@@ -87,9 +90,9 @@
   }
   // a shout costs voice; one at something still at the treeline is wasted on it
   function shoo(b) {
-    if (S.voice < 1) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'HOARSE…' }); Snd.croak(); return false; }
+    if (S.voice < 1) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'HOARSE…' }); Snd.croak(); callout('hoarse', 'OUT OF VOICE. IT COMES BACK SLOWLY: ONE SHOUT EVERY FEW SECONDS.'); return false; }
     S.voice -= 1;
-    if (b.d < SHOUT) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'TOO FAR. IT WATCHES.' }); Snd.shout(); return false; }
+    if (b.d < SHOUT) { S.notes.push({ t: S.t, a: b.a, d: b.d, s: 'TOO FAR. IT WATCHES.' }); Snd.shout(); callout('far', 'TOO FAR TO CARE. WAIT UNTIL IT LEAVES THE TREES, THEN SHOUT.'); return false; }
     b.flee = 1; Snd.shout(); S.flash.push({ t: S.t, a: b.a, d: b.d }); return true;
   }
   // eyeshine: eyes catch the firelight before you can make out the body
@@ -179,7 +182,7 @@
       const x = sx(b.a); if (x < -80 || x > W + 80) continue;
       const y = HOR + 10 + b.d * b.d * 330, s = .35 + b.d * 1.6, see = visible(b), torchOnly = see && !canSee(v, b.d);
       if (b.flee) { ctx.globalAlpha = clamp(b.d * 2); beast(x, y, s, '#000', false, true); ctx.globalAlpha = 1; continue; }
-      if (!see) { if (eyesOnly(b)) { ctx.fillStyle = `rgba(255,200,90,${.35 + .4 * Math.abs(Math.sin(S.t * 1.3 + b.id))})`; const e = 4 + b.d * 8; Draw.circ(ctx, x - 10 * s, y - 26 * s, e * .6); Draw.circ(ctx, x + 10 * s, y - 26 * s, e * .6); } continue; }
+      if (!see) { if (eyesOnly(b)) { callout('eyes', 'EYES IN THE DARK. THE BODY SHOWS WHEN IT IS CLOSER, OR WHEN YOUR SIGHT COMES BACK.'); ctx.fillStyle = `rgba(255,200,90,${.35 + .4 * Math.abs(Math.sin(S.t * 1.3 + b.id))})`; const e = 4 + b.d * 8; Draw.circ(ctx, x - 10 * s, y - 26 * s, e * .6); Draw.circ(ctx, x + 10 * s, y - 26 * s, e * .6); } continue; }
       beast(x, y, s, torchOnly ? '#5a0a0a' : `rgb(${20 + v * 30},${20 + v * 30},${30 + v * 30})`, torchOnly, false);
     }
     // the fire's glow at the bottom of the view
@@ -243,6 +246,7 @@
     for (const f of S.flash) { const k = (S.t - f.t) / .5; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, 'HEY!', sx(f.a), HOR + 40 + f.d * 200, 40, '#fff'); ctx.globalAlpha = 1; } }
     for (const f of S.notes) { const k = (S.t - f.t) / 1; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, f.s, clamp(sx(f.a), 120, W - 120), HOR + 40 + f.d * 200 - k * 20, 22, '#ffd8a0'); ctx.globalAlpha = 1; } }
     hud();
+    if (S.callout && S.state === 'play' && S.t - S.callout.t < 4) { const k = clamp((4 - (S.t - S.callout.t)) * 2); ctx.globalAlpha = k; ctx.fillStyle = '#000c'; Draw.rr(ctx, 30, 204, W - 60, 76, 16); ctx.fill(); ctx.strokeStyle = '#ffd8a0'; ctx.lineWidth = 2; ctx.stroke(); wrapText(S.callout.text, W / 2, 236, W - 100, 24, '800 18px system-ui', '#ffe8c8'); ctx.globalAlpha = 1; }
     if (S.state === 'intro') card(`NIGHT ${S.li + 1}`, '#ff9a3a', [S.L.name, S.L.tip], 'TAP TO START');
     if (S.state === 'lost') card(S.why, '#ff6a6a', ['THE NIGHT WINS THIS ONE.'], 'TAP TO TRY AGAIN');
     if (S.state === 'dawn') {
@@ -289,7 +293,7 @@
     S.turn = (keys.ArrowRight || keys.d || keys.D ? 1 : 0) - (keys.ArrowLeft || keys.a || keys.A ? 1 : 0);
   }
 
-  const API = { LEVELS, S, load, start, shoo, eyesOnly, SHOUT, lookCost, sight, heatRate, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, shoo, eyesOnly, SHOUT, told, lookCost, sight, heatRate, canSee, setWarming, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   Audio.unlock();

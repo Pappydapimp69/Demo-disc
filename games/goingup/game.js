@@ -7,13 +7,13 @@
 (function () {
   'use strict';
   const { createGame, Audio, Draw, back, clamp } = Engine;
-  const W = 540, H = 960, TOP = 170, BOT = 860, CAP = 8, SPEED = 2.4, DOOR = .9, PATIENCE = 40, ANGRY = 25;
+  const HOLD = .45, W = 540, H = 960, TOP = 170, BOT = 860, CAP = 8, SPEED = 2.4, DOOR = .9, PATIENCE = 40, ANGRY = 25;
 
   // traffic: (rng, floors) -> [from, to]; rate = new people per second
   const anywhere = (r, F) => { const a = Math.floor(r() * F); let b = Math.floor(r() * (F - 1)); if (b >= a) b++; return [a, b]; };
   const LEVELS = [
-    { name: 'FIRST DAY', floors: 5, cars: 1, rate: .3, goal: 20, time: 120, tip: 'TAP FLOORS TO QUEUE STOPS; TAP ONE AGAIN TO CANCEL. LIT FLOORS ARE WHERE RIDERS WANT TO GO; ▲▼ SHOW WHICH WAY THE WAITING ONES ARE GOING.', traffic: anywhere },
-    { name: 'MORNING RUSH', floors: 7, cars: 1, rate: .55, goal: 50, time: 135, tip: 'EVERYONE ARRIVES AT THE LOBBY AND GOES UP.', traffic: (r, F) => [0, 1 + Math.floor(r() * (F - 1))] },
+    { name: 'FIRST DAY', floors: 5, cars: 1, rate: .3, goal: 20, time: 120, tip: 'TAP FLOORS TO QUEUE STOPS; TAP ONE AGAIN TO CANCEL. HOLD A FLOOR TO PARK THE LIFT THERE WHEN IT IS IDLE. LIT FLOORS ARE WHERE RIDERS WANT TO GO; ▲▼ SHOW WHICH WAY THE WAITING ONES ARE GOING.', traffic: anywhere },
+    { name: 'MORNING RUSH', floors: 7, cars: 1, rate: .55, goal: 50, time: 135, tip: 'EVERYONE ARRIVES AT THE LOBBY AND GOES UP. HOLD L TO PARK THE LIFT THERE BETWEEN TRIPS.', traffic: (r, F) => [0, 1 + Math.floor(r() * (F - 1))] },
     { name: 'THE TOP FLOOR', floors: 9, cars: 1, rate: .9, goal: 75, time: 130, tip: "THE LOW FLOORS ARE BUSY. DON'T FORGET WHO IS WAITING AT THE TOP.",
       traffic: (r, F) => r() < .1 ? [F - 1, 0] : (() => { const a = Math.floor(r() * 4); let b = Math.floor(r() * 3); if (b >= a) b++; return [a, b]; })() },
     { name: 'LUNCH', floors: 10, cars: 2, rate: 1.0, goal: 90, time: 130, tip: 'TWO LIFTS NOW. TAP A LIFT TO PICK IT, THEN TAP A FLOOR.', traffic: (r, F) => r() < .5 ? anywhere(r, F) : r() < .5 ? [0, 1 + Math.floor(r() * (F - 1))] : [1 + Math.floor(r() * (F - 1)), 0] },
@@ -25,7 +25,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', lt: 0, clock: 0, waiting: [], delivered: 0, hearts: 3, sel: 0, auto: null, rng: mkRng(500 + i * 13), nextP: 1, pops: [], maxWait: 0, waits: [], endT: 0, usedAuto: false,
-      cars: Array.from({ length: L.cars }, (_, k) => ({ y: k ? L.floors - 1 : 0, target: null, stops: [], door: 0, riders: [], dir: 1, id: k })) });
+      cars: Array.from({ length: L.cars }, (_, k) => ({ y: k ? L.floors - 1 : 0, target: null, stops: [], park: null, door: 0, riders: [], dir: 1, id: k })) });
     pause();
   }
   function pause() { S.lockUntil = S.t + .6; }
@@ -43,6 +43,8 @@
     if (car.target === null) car.target = f; else car.stops.push(f);
     Snd.beep(f);
   }
+  // hold a floor to park: an idle lift (no stops, manual) goes and waits there; hold it again to unpark
+  function park(car, f) { if (S.state !== 'play') return; car.park = car.park === f ? null : f; Snd.park(); }
   function goNow(car, f) { if (S.state !== 'play') return; car.target = f; car.stops = car.stops.filter(x => x !== f); Snd.beep(f); }
   function setAuto(rule) { S.auto = rule; if (rule) S.cars.forEach(c => { c.stops = []; }); }
   function arrive(car, f) {
@@ -62,6 +64,7 @@
         c.target = pick(c, S.auto);
       }
       if (!S.auto && c.target === null && c.stops.length) c.target = c.stops.shift();
+      if (!S.auto && c.target === null && c.park !== null && Math.abs(c.y - c.park) > .01) c.target = c.park;
       if (c.target === null) continue;
       // a queued floor on the way gets served on the way, like a real car call
       if (!S.auto) { const on = c.stops.filter(f => (f - c.y) * Math.sign(c.target - c.y) > .02 && Math.abs(f - c.y) < Math.abs(c.target - c.y)).sort((a, b) => Math.abs(a - c.y) - Math.abs(b - c.y))[0];
@@ -107,6 +110,7 @@
     ding() { Audio.tone(1568, .5, 'sine', .1); Audio.tone(1319, .6, 'sine', .08, null, .12); },
     beep(f) { Audio.tone(700 + f * 40, .05, 'square', .05); },
     cancel() { Audio.tone(300, .06, 'square', .04); },
+    park() { Audio.tone(520, .08, 'sine', .07); Audio.tone(390, .12, 'sine', .07, null, .08); },
     call() { Audio.tone(1200, .03, 'sine', .04); },
     huff() { Audio.noise(.3, .15); Audio.tone(200, .3, 'sawtooth', .06, 120); },
   };
@@ -141,6 +145,7 @@
     S.cars.forEach((c, k) => {
       const x = shaftX(k);
       ctx.fillStyle = '#5a5a6a'; ctx.fillRect(x - SHAFTW / 2, TOP - 10, SHAFTW, BOT - TOP + 20);
+      if (c.park !== null) { ctx.fillStyle = '#3a7ad0'; Draw.rr(ctx, x - SHAFTW / 2 - 26, floorY(c.park) - 11, 22, 22, 6); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '800 13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('P', x - SHAFTW / 2 - 15, floorY(c.park) + 5); }
       c.stops.forEach((f, i) => { ctx.fillStyle = '#ffd23a'; Draw.circ(ctx, x + SHAFTW / 2 + 12, floorY(f), 10); ctx.fillStyle = '#1a2a4a'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(i + 2, x + SHAFTW / 2 + 12, floorY(f) + 4); });
       if (c.target !== null && !S.auto) { ctx.fillStyle = '#ff9a2a'; Draw.circ(ctx, x + SHAFTW / 2 + 12, floorY(c.target), 10); ctx.fillStyle = '#fff'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(1, x + SHAFTW / 2 + 12, floorY(c.target) + 4); }
       if (c.target !== null) { ctx.strokeStyle = '#ffd23a'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, floorY(c.y)); ctx.lineTo(x, floorY(c.target)); ctx.stroke(); ctx.setLineDash([]); }
@@ -187,7 +192,10 @@
   // ---------- input: tap a lift to pick it, tap a floor to send it; AUTO switches ----------
   const hit = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
   function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; pause(); } }
+  let press = null;
   function onPointer(type, x, y) {
+    if (type === 'up' && press) { const p = press; press = null; if (S.state !== 'play') return; setAuto(null); (S.t - p.t >= HOLD ? park : send)(S.cars[S.sel], p.f); return; }
+    if (type === 'cancel') press = null;
     if (type !== 'down' || paused()) return;
     if (S.state === 'done') { Engine.exit(); return; }
     if (S.state === 'intro') { start(); return; }
@@ -195,7 +203,7 @@
     if (S.state === 'win') { if (S.endT > 1) next(); return; }
     for (const b of AUTO) if (hit(b, x, y)) { setAuto(b.rule); Audio.sfx('select'); return; }
     for (const c of S.cars) { const sx = shaftX(c.id); if (Math.abs(x - sx) < SHAFTW / 2 && Math.abs(y - floorY(c.y)) < FH() / 2) { S.sel = c.id; Audio.sfx('select'); return; } }
-    if (y > TOP - 10 && y < BOT + 10) { const f = clamp(Math.floor((BOT - y) / FH()), 0, S.L.floors - 1); setAuto(null); send(S.cars[S.sel], f); }
+    if (y > TOP - 10 && y < BOT + 10) press = { f: clamp(Math.floor((BOT - y) / FH()), 0, S.L.floors - 1), t: S.t };
   }
   function onKey(key, down) {
     if (!down || paused()) return;
@@ -208,10 +216,11 @@
     if (key === 'n' || key === 'N') setAuto('nearest');
     if (key === 's' || key === 'S') setAuto('sweep');
     if (key === 'm' || key === 'M') setAuto(null);
+    if (key === 'p' || key === 'P') park(c, Math.round(c.y));
   }
   window.addEventListener('keydown', e => { if (e.key === 'Tab') e.preventDefault(); });
 
-  const API = { LEVELS, S, load, start, send, goNow, setAuto, pick, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, load, start, send, goNow, setAuto, park, pick, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   window.__game = API;

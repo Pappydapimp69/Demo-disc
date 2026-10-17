@@ -117,6 +117,9 @@
     // what each button would do next: the goal cards' new positions, or how many cards would be home
     const preview = k => !gs ? `→ ${(k === 'in' ? inFaro(S.deck) : outFaro(S.deck)).filter((c, i) => c === i).length} IN PLACE` : gs.map(([c]) => `${gs.length > 1 ? name(c) : 'ACE'} → ${where(at(c), n, k) + 1}`).join('  ');
     ctx.font = '700 15px system-ui'; ctx.fillStyle = '#9ac8a8'; ctx.fillText(`SHUFFLES ${S.moves} · PAR ${S.par}`, W / 2, 138);
+    // the number that matters is how many cards sit above each goal card; written in binary it is the IN/OUT recipe from the top
+    if (gs) { ctx.font = '800 14px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#ffe9a0';
+      ctx.fillText(gs.map(([c, p]) => `${gs.length > 1 ? name(c) + ' ' : ''}ABOVE ${at(c)}=${at(c).toString(2)} · GOAL ${p}=${p.toString(2)}`).join('   '), W / 2, 160); }
     wrapText(S.L.tip, W / 2, 190, 460, 22, '700 16px system-ui', '#cfe8d0');
     const b = (r, label, sub, col) => { ctx.fillStyle = col; Draw.rr(ctx, r.x, r.y, r.w, r.h, 20); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); Draw.bigText(ctx, label, r.x + r.w / 2, r.y + (sub ? r.h / 2 - 8 : r.h / 2 + 2), sub ? 36 : 22, '#fff', '#0a2a1a'); if (sub) { ctx.font = '700 13px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(sub, r.x + r.w / 2, r.y + r.h - 16); } };
     b(BTN.out, 'OUT', preview('out'), '#2a7a4a'); b(BTN.in, 'IN', preview('in'), '#a0602a'); b(BTN.undo, 'UNDO', null, '#3a4a3a'); b(BTN.reset, 'RESET', null, '#3a4a3a');

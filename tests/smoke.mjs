@@ -386,6 +386,8 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const r = [g.shoo(far), g.shoo(near)]; g.S.voice = 0; const near2 = { a: g.S.look, d: .6, v: 0, flee: 0, snapT: 9, id: 4 }; r.push(g.shoo(near2));
     g.S.debt = 9; const eye = { a: g.S.look, d: .5, v: 0, flee: 0, snapT: 9, id: 5 }; g.S.beasts = [eye]; return [...r, g.eyesOnly(eye)].join(); });
   check(sr === 'false,true,false,true', `embers: a shout at the treeline is wasted, a close one works, no voice no shout, and eyes show before the body (${sr})`);
+  const told = await page.evaluate(() => { const g = window.__game; g.autopilot = null; g.load(0); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3; g.shoo({ a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 7 }); return g.S.callout && g.S.callout.text; });
+  check(/TOO FAR/.test(told || ''), `embers: the first wasted shout explains itself (${told})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'embers: an accidental tap as the night opens is ignored');
   check(errors.length === 0, `embers runs without errors ${errors.join(' | ')}`);
@@ -492,6 +494,8 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   // manual: tapping a floor sends the lift there
   const man = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.send(g.S.cars[0], 3); g.step(150); return Math.round(g.S.cars[0].y); });
   check(man === 3, 'goingup: a tapped floor gets the lift');
+  const pk = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(40); const c = g.S.cars[0]; g.S.waiting = []; c.y = 4; c.target = null; c.stops = []; g.park(c, 0); g.step(200); return Math.round(c.y); });
+  check(pk === 0, `goingup: an idle lift goes to its parking floor (${pk})`);
   const q = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); const c = g.S.cars[0]; c.y = 0;
     g.send(c, 4); g.send(c, 2); g.send(c, 3); g.send(c, 3); const queued = [c.target, ...c.stops].join();
     let first = null; for (let k = 0; k < 400 && first === null; k++) { g.step(1); if (c.door > 0) first = Math.round(c.y); }
@@ -537,6 +541,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(v.join() === '1,3,0,4,0', `lobby rules: the window widens with waiting and mixed regions please nobody (${v.join()})`);
   const party = await page.evaluate(() => { const g = window.__game; g.load(3); g.start(); g.step(60); g.step(1500); const p = g.S.queue.find(q => q.party); if (!p) return 'none'; g.toggle(p); return g.S.sel.size; });
   check(party === 2, `lobby: tapping one party member selects the whole party (${party})`);
+  const fit = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(60); g.S.clock = 0; const P = (id, skill) => ({ id, name: 'p' + id, skill, reg: 'EU', at: 0, pat: 99, party: null });
+    g.S.queue = [P(1, 5), P(2, 5), P(3, 9)]; g.S.sel = new Set([1]); return [g.fits(g.S.queue[1]), g.fits(g.S.queue[2]), g.fits(g.S.queue[0])].join(); });
+  check(fit === 'true,false,', `lobby: rows show whether adding them keeps the lobby fair (${fit})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'lobby: an accidental tap as the shift opens is ignored');
   check(errors.length === 0, `lobby runs without errors ${errors.join(' | ')}`);

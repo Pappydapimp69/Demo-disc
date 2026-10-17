@@ -65,7 +65,7 @@
   const S = { li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
     happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, sort: 'arrival' };
   const API = { S, LEVELS, tol, verdict, lobbies, arrivals, autopilot: null, step: n => game.step(n),
-    get state() { return S.state; }, visible: () => visible(), resort, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
+    get state() { return S.state; }, visible: () => visible(), resort, fits, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
     result: () => ({ happy: S.happy, matched: S.matched, quits: S.quits, unhappy: S.unhappy, pass: passed(), stars: stars() }) };
   function load(i) {
     const L = LEVELS[i];
@@ -82,6 +82,14 @@
   // the queue as shown: by arrival, or by skill (ties: whoever has waited longest first) so close skills sit together
   const visible = () => (S.sort === 'skill' ? S.queue.slice().sort((a, b) => a.skill - b.skill || a.at - b.at) : S.queue).slice(0, ROWS);
   function resort() { S.sort = S.sort === 'skill' ? 'arrival' : 'skill'; Snd.key(); }
+  // would adding p (and their party) keep every selected player happy right now? null when it doesn't apply
+  function fits(p) {
+    if (!S.sel.size || S.sel.has(p.id)) return null;
+    const mates = p.party ? S.queue.filter(q => q.party === p.party && q.at === p.at) : [p];
+    const g = S.queue.filter(q => S.sel.has(q.id)).concat(mates);
+    if (g.length > S.L.n) return null;
+    const v = verdict(g, S.clock, S.L); return v.happy === g.length;
+  }
   function toggle(p) {
     if (S.state !== 'play' || paused()) return;
     const mates = p.party ? S.queue.filter(q => q.party === p.party && q.at === p.at) : [p];
@@ -202,6 +210,8 @@
       const bar = '#'.repeat(p.skill) + '.'.repeat(9 - p.skill);
       const row = `${sel ? '>' : ' '} ${pad(p.name, 14)} ${p.skill}  ${bar} ${mmss(w).padStart(4)} ${tol(w)}` + (L.regions ? ' ' + p.reg : '') + (L.party ? ' ' + (p.party || ' ') : '');
       T(c, row, 18, y, late ? RED : sel ? '#c8ffdc' : GREEN);
+      // with a lobby started, mark who would keep everyone in it happy if added now
+      const f = fits(p); if (f !== null) T(c, f ? '✓' : '·', W - 30, y, f ? '#c8ffdc' : DIM);
     });
     if (S.queue.length > ROWS) T(c, `  ... +${S.queue.length - ROWS} MORE IN QUEUE`, 18, ROW0 + ROWS * RH + 8, AMBER);
     // the lobby being built
