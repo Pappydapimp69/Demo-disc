@@ -645,7 +645,8 @@
   const CARD_BTNS = [{ o: 'PLAY AGAIN', b: [92, 236, 84, 36] }, { o: 'WATCH IT', b: [4, 236, 84, 36] }, { o: 'FULL GAME', b: [4, 278, 172, 30] }];
   function cardPress(o) { if (o === 'PLAY AGAIN') startDemo(false); else if (o === 'WATCH IT') startDemo(true); else { S.demo = null; API.autopilot = null; newGame(); } }
   // title: hold both thumbs to begin (the first thing the pitch asks for is the thing it is about)
-  const HOLD = { L: [44, 270], R: [136, 270] };
+  const HOLD = { L: [44, 274], R: [136, 274] };
+  const COARSE = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (_) { return true; } })();   // no touch screen: the keyboard (or one click) starts it
   function drawDemoTitle(t) {
     ['n0', 'n0', 'n1', 'n1', 'n2', 'n3'].forEach((c, i) => rect(0, i * 54, W, 55, c));
     for (let i = 0; i < 50; i++) px(hash(i) * W, hash(i + 5) * 200, Math.floor(t * 3 + i) % 6 ? 'n7' : 'c3');
@@ -658,8 +659,8 @@
     rect(0, 236, W, 84, 'k');
     const hl = S.titleHold || {}, k = clamp((S.holdT || 0) / .7);
     for (const h of ['L', 'R']) { const [x, y] = HOLD[h], on = !!hl[h], c = h === 'L' ? 'au' : 'c2'; ring(x, y, 20, on ? c : 's2'); ring(x, y, 19, on ? c : 's1'); if (on) disc(x, y, Math.round(4 + 13 * k), c); text(S.scheme === 'keys' ? (h === 'L' ? 'X' : 'Z') : h === 'L' ? 'LEFT' : 'RIGHT', x, y - 4, on ? 'k' : 'wt', 'center', null); }
-    text(S.scheme === 'keys' ? 'HOLD X AND Z' : 'HOLD BOTH THUMBS', 90, 244, Math.floor(t * 2) % 2 ? 'wt' : 's4', 'center');
-    text('TO BEGIN', 90, 300, 's4', 'center');
+    text(S.scheme === 'keys' ? 'HOLD X AND Z' : 'HOLD BOTH THUMBS', 90, 240, Math.floor(t * 2) % 2 ? 'wt' : 's4', 'center');
+    text(S.scheme === 'keys' ? 'OR CLICK HERE' : 'TO BEGIN', 90, 303, 's4', 'center');
     button(TITLE_BTNS[0].b, 'WATCH IT', false); button(TITLE_BTNS[1].b, 'FULL GAME', false);
     if (S.t - (S.idleT || 0) > 11 && Math.floor(t * 2) % 2) text('OR WAIT: IT PLAYS ITSELF', 90, 222, 's3', 'center', null);
   }
@@ -1024,13 +1025,14 @@
     if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; return; }
     if ((type === 'up' || type === 'cancel') && S.titleHold) { for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; }
     if (type !== 'down') return;
-    Audio.unlock(); S.scheme = 'touch'; S.idleT = S.t;
+    Audio.unlock(); S.scheme = COARSE ? 'touch' : 'keys'; S.idleT = S.t;
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; S.lockUntil = S.t + .4; return; }
     if (S.battle) S.battle.stats.taps++;
     if (S.lockUntil && S.t < S.lockUntil) return;   // after a stage change, ignore presses for a beat (Brain demo-disc#E5)
     if (S.mode === 'title') {
       if (inBox(x, y, TITLE_BTNS[0].b)) return startDemo(true);
       if (inBox(x, y, TITLE_BTNS[1].b)) { S.demo = null; return newGame(); }
+      if (y >= 236 && !COARSE) return startDemo(false);
       if (y >= 236) { (S.titleHold = S.titleHold || {})[x < 90 ? 'L' : 'R'] = id; Audio.tone(x < 90 ? 330 : 440, .05, 'square', .04); }
       return;
     }
@@ -1141,7 +1143,7 @@
     setLevel(lv) { for (const p of G.party) { while (p.lv < lv) { p.lv++; p.maxhp += 8; p.maxmp += 3; p.atk += 2; p.mag += 2; p.def += 1; } p.hp = p.maxhp; p.mp = p.maxmp; } },
     finish() { while (S.dialog) { S.dialog.t = -999; advanceDialog(); } },
   };
-  G.endings = loadEndings();
+  G.endings = loadEndings(); S.scheme = COARSE ? 'touch' : 'keys';
   const game = createGame({ canvas: document.getElementById('c'), width: LW, height: LH, update, render, onPointer, onKey });
   window.__game = API;
 })();
