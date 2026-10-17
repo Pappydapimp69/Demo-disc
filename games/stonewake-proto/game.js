@@ -301,7 +301,7 @@
     Audio.noise(.3, .15); [523, 659, 784, 1047].forEach((f, i) => Audio.tone(f, .08, 'square', .05, null, i * .05));
   }
   const aliveParty = () => G.party.filter(p => p.hp > 0), aliveFoes = () => S.battle.foes.filter(f => f.hp > 0);
-  function gainWake(B, n, x, y) { const was = B.wake; B.wake = Math.min(WAKE_MAX, B.wake + n); if (B.wake > was && x !== undefined) pop(B, `+${B.wake - was} WAKE`, x, y, 'c2'); }
+  function gainWake(B, n, x, y) { const was = B.wake; B.wake = Math.min(WAKE_MAX, B.wake + n); if (B.wake > was && x !== undefined) { pop(B, `+${B.wake - was} WAKE`, x, y, 'c2'); FXS.wake(); } }
   function addBreak(B, f, n) {
     if (f.hp <= 0 || f.stun > 0) return;
     f.brk = Math.min(f.brkMax, f.brk + n);
@@ -309,7 +309,7 @@
       // it loses its next action (both, for a boss that acts twice); its queued turns come round as STUNNED skips
       f.stun = f.boss && f.id !== 'lhand' && f.id !== 'rhand' ? 2 : 1; f.shell = false; f.burrowed = false; f.phased = false; f.intent = null;
       B.stats.breaks++; B.breakT = S.t; burst(foeX(f.i), aimY(f.i), ['c2', 'c3', 'au', 's4'], 30, 70, .7); shock(foeX(f.i), aimY(f.i), 'au', 4, 30, .35); S.fieldFlash = .08; shake(.8); S.hitstop = .12; buzz(30); gainWake(B, 1);
-      Audio.tone(220, .25, 'square', .07, 110); Audio.noise(.25, .2);
+      FXS.breakIt();
     }
   }
   function nextTurn() {
@@ -434,9 +434,9 @@
     const d = B.t - h.at, win = hand === 'L' ? BLOCK_WIN + (G.gear.mirror ? .07 : 0) : h.kind === 'h' ? BLOCK_WIN : PARRY_WIN + (G.gear.mirror ? .03 : 0);
     if (Math.abs(d) <= win) {
       h.res = hand === 'L' ? 'block' : h.kind === 'h' ? 'crushed' : 'parry';
-      if (h.res === 'parry') { pop(B, 'PARRY!', 66, 58, 'c2', true); S.fieldFlash = .07; Audio.tone(1760, .06, 'square', .07); Audio.tone(2637, .08, 'square', .05, null, .04); S.hitstop = .09; buzz(20); }
-      else if (h.res === 'block') { pop(B, 'BLOCK', 66, 58, 'c3', true); Audio.tone(1500, .05, 'square', .06); S.hitstop = .05; buzz(15); }
-      else { pop(B, 'CRUSHED!', 66, 58, 'r2', true); Audio.tone(140, .2, 'square', .07); }
+      if (h.res === 'parry') { pop(B, 'PARRY!', 66, 58, 'c2', true); S.fieldFlash = .07; FXS.parry(); S.hitstop = .09; buzz(20); }
+      else if (h.res === 'block') { pop(B, 'BLOCK', 66, 58, 'c3', true); FXS.block(); S.hitstop = .05; buzz(15); }
+      else { pop(B, 'CRUSHED!', 66, 58, 'r2', true); FXS.crushed(); }
     } else if (d < -win) { B.lock[hand] = h.at + .06; pop(B, 'EARLY', hand === 'L' ? 20 : 70, 90, 's3'); Audio.tone(200, .05, 'square', .03); }
   }
   function resolveAction(target, grade) {
@@ -458,7 +458,7 @@
       if (brk) addBreak(B, f, brk);
       return d; };
     if (grade > 1.4) gainWake(B, 1, 45, 44);
-    if (c.kind === 'fight') { const f = B.foes[target]; dmg((a.atk + (a.id === 'hero' && G.gear.sun ? 4 : 0)) * 1.4, f, a.id === 'archer' ? 'pierce' : 'phys'); Audio.noise(.08, .2); }
+    if (c.kind === 'fight') { const f = B.foes[target]; dmg((a.atk + (a.id === 'hero' && G.gear.sun ? 4 : 0)) * 1.4, f, a.id === 'archer' ? 'pierce' : 'phys'); FXS.strike(grade); }
     else if (c.kind === 'skill') {
       const sk = SKILL[c.name]; B.wake -= sk.w; B.stats.skills++;
       if (c.name === 'SHARD STRIKE') { const f = B.foes[target]; dmg((a.atk + (G.gear.sun ? 4 : 0)) * (1.3 + G.shards * .4), f, 'shard'); Audio.tone(1800, .3, 'square', .06, 400); B.fx = { kind: 'shard', t: S.t, i: target }; }
@@ -497,7 +497,7 @@
       if (!f.burrowed && !f.phased) { f.hp = Math.max(0, f.hp - cd); f.hurtT = S.t; pop(B, String(cd), foeX(f.i), aimY(f.i) - 6, 'c2'); const v0 = B.aoe ? aliveParty()[0] : B.victim, vi = G.party.indexOf(v0); slash(memberX(vi) + 2, memberY(vi) + 6, foeX(f.i) + 4, aimY(f.i), 'c2'); burst(foeX(f.i), aimY(f.i), ['c3', 'wt'], 8, 35); }
       gainWake(B, 1, 66, 52); addBreak(B, f, 1);
       Audio.noise(.06, .12); shake(.3);
-    } else { Audio.noise(.1, h.res === 'block' ? .08 : .2); S.flash = h.res === 'block' ? 0 : .06; shake(h.res === 'block' ? .25 : B.big ? .8 : .45); if (B.big && h.res !== 'block') { S.hitstop = .1; buzz(40); } }
+    } else { if (h.res !== 'block') FXS.hurt(B.big || h.kind === 'h'); S.flash = h.res === 'block' ? 0 : .06; shake(h.res === 'block' ? .25 : B.big ? .8 : .45); if (B.big && h.res !== 'block') { S.hitstop = .1; buzz(40); } }
   }
   function winBattle() {
     const B = S.battle; B.phase = 'win'; B.t = 0;
@@ -551,6 +551,113 @@
     Audio.sfx('win');
   }
 
+  // ---------- sound ----------
+  // One tune, one bar grid, layered stems faded by game state (vertical, never cut: turns do not land on the bar grid,
+  // Brain sandbox horizontal-vs-vertical). A minor, i-VI-III-VII, 128 bpm, square/triangle chiptune with the fifth
+  // dropped from the arpeggio (the root's 3rd harmonic already sounds it). Hits get a countdown of ticks on the audio
+  // clock: heavy low and left, swift high and right, the last tick exactly on the impact, so the timing can be heard.
+  const SND = { on: true, bus: null, music: null, stems: {}, noiseBuf: null, next: 0, step: 0, timer: null, want: {} };
+  try { SND.on = localStorage.getItem('stonewake-sound') !== 'off'; } catch (_) {}
+  Audio.muted = !SND.on;
+  const BPM = 128, S16 = 60 / BPM / 4;
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  const PROG = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];   // Am F C G (roots in octave 3)
+  // the Stonewake motif, 4 bars of 16ths: [step, midi, length in 16ths]
+  const MOTIF = [[0, 69, 4], [4, 72, 2], [6, 76, 2], [8, 74, 4], [12, 72, 2], [14, 71, 2], [16, 69, 6], [22, 64, 2], [24, 65, 4], [28, 67, 4],
+    [32, 72, 4], [36, 76, 2], [38, 79, 2], [40, 77, 4], [44, 76, 2], [46, 74, 2], [48, 71, 6], [54, 67, 2], [56, 69, 8]];
+  function sndInit() {
+    const c = Audio.ctx; if (!c || SND.bus) return !!SND.bus;
+    try {
+      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(c.destination);
+      SND.bus = c.createGain(); SND.bus.gain.value = SND.on ? .9 : 0; SND.bus.connect(comp);
+      SND.music = c.createGain(); SND.music.gain.value = .55; SND.music.connect(SND.bus);
+      for (const k of ['bass', 'arp', 'drums', 'lead', 'danger']) { const g = c.createGain(); g.gain.value = 0; g.connect(SND.music); SND.stems[k] = g; }
+      const n = c.sampleRate * 1, buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0); let r = 7; for (let i = 0; i < n; i++) { r = (r * 1103515245 + 12345) >>> 0; d[i] = (r / 4294967296) * 2 - 1; } SND.noiseBuf = buf;
+      SND.next = c.currentTime + .1; SND.timer = setInterval(schedule, 25);
+      return true;
+    } catch (_) { return false; }
+  }
+  function voice(dest, type, f, t0, dur, g, slideTo, pan) {
+    const c = Audio.ctx, o = c.createOscillator(), a = c.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    a.gain.setValueAtTime(0, t0); a.gain.linearRampToValueAtTime(g, t0 + .004); a.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    let out = a; if (pan && c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = pan; a.connect(p); out = p; }
+    o.connect(a); out.connect(dest); o.start(t0); o.stop(t0 + dur + .02);
+  }
+  function hiss(dest, t0, dur, g, freq, q = 1, type = 'highpass', pan) {
+    const c = Audio.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), a = c.createGain(); s.buffer = SND.noiseBuf;
+    f.type = type; f.frequency.value = freq; f.Q.value = q; a.gain.setValueAtTime(g, t0); a.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    let out = a; if (pan && c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = pan; a.connect(p); out = p; }
+    s.connect(f).connect(a); out.connect(dest); s.start(t0, Math.random() * .5); s.stop(t0 + dur + .02);
+  }
+  function schedule() {   // lookahead scheduler on the audio clock
+    const c = Audio.ctx; if (!c || !SND.bus) return;
+    try {
+      mixTo(musicState());
+      while (SND.next < c.currentTime + .12) {
+        const t = SND.next, st = SND.step, bar = Math.floor(st / 16), s16 = st % 16, ch = PROG[bar % 4], fin = SND.want.fast;
+        if (s16 % 2 === 0) voice(SND.stems.bass, 'triangle', mtof(ch[0] - 12), t, S16 * 1.8, .5);
+        if (s16 % 8 === 6) voice(SND.stems.bass, 'triangle', mtof(ch[0]), t, S16 * .9, .3);
+        const arpN = [ch[0], ch[1], ch[0] + 12, ch[1] + 12][s16 % 4]; voice(SND.stems.arp, 'square', mtof(arpN + 12), t, S16 * .7, .07);
+        if (s16 % 8 === 0 || (fin && s16 % 8 === 4 && s16 !== 4)) voice(SND.stems.drums, 'sine', 130, t, .18, .7, 42);
+        if (s16 % 8 === 4) hiss(SND.stems.drums, t, .14, .32, 1800, .7, 'bandpass');
+        hiss(SND.stems.drums, t, s16 % 4 === 2 ? .06 : .025, s16 % 4 === 2 ? .13 : .07, 7000);
+        if (s16 % 4 === 0) voice(SND.stems.danger, 'sawtooth', mtof(45), t, S16 * 3.6, .16);
+        if (s16 % 8 === 0) voice(SND.stems.danger, 'square', mtof(57 + (bar % 2 ? 1 : 0)), t, S16 * 2, .05);   // a semitone rub: menace
+        const ms = st % 64; for (const [at, m, len] of MOTIF) if (at === ms) { voice(SND.stems.lead, 'square', mtof(m), t, S16 * len * .95, .12); voice(SND.stems.lead, 'triangle', mtof(m - 12), t, S16 * len * .9, .1); }
+        SND.next += S16; SND.step++;
+      }
+    } catch (_) {}
+  }
+  function musicState() {   // stem levels for what is on screen now
+    const m = S.mode, B = S.battle, fin = S.demo && S.demo.finale;
+    let w = { bass: 0, arp: 0, drums: 0, lead: 0, danger: 0, fast: false };
+    if (m === 'title') w = { bass: .5, arp: .35, drums: 0, lead: .9, danger: 0 };
+    else if (m === 'map' || m === 'cut') w = { bass: .6, arp: .5, drums: 0, lead: .5, danger: 0 };
+    else if (m === 'inter') w = { bass: .3, arp: 0, drums: 0, lead: 0, danger: 1 };
+    else if (m === 'card' || m === 'ending') w = { bass: .6, arp: .6, drums: .25, lead: 1, danger: 0 };
+    else if (m === 'battle' && B) {
+      const theirs = B.phase === 'foeWind';
+      w = { bass: 1, arp: theirs ? .35 : .8, drums: theirs ? 1 : .55, lead: theirs ? .15 : .55, danger: theirs ? .9 : 0, fast: fin };
+      if (fin) { w.drums = Math.max(w.drums, .8); w.lead = theirs ? .25 : .8; }
+      if (B.phase === 'win') w = { bass: .6, arp: .8, drums: .3, lead: 1, danger: 0 };
+      if (B.phase === 'lose') w = { bass: .2, arp: 0, drums: 0, lead: 0, danger: .6 };
+    }
+    return w;
+  }
+  function mixTo(w) {
+    SND.want = w; const c = Audio.ctx;
+    for (const k in SND.stems) { const v = w[k] || 0, g = SND.stems[k].gain; if (Math.abs(g.value - v) > .001 || g._to !== v) { g.setTargetAtTime(v, c.currentTime, .09); g._to = v; } }   // ~0.25 s glide
+  }
+  // effects (all on the same bus as the music, so the compressor keeps them together)
+  const FXS = {
+    ok() { return SND.on && sndInit(); },
+    tick(heavy, last, at) { if (!this.ok()) return; const t = Audio.ctx.currentTime + Math.max(0, at || 0), pan = heavy ? -.55 : .55;
+      if (heavy) { voice(SND.bus, 'square', last ? 196 : 98, t, last ? .12 : .07, last ? .2 : .12, null, pan); if (last) voice(SND.bus, 'sine', 90, t, .2, .4, 45, pan); }
+      else { voice(SND.bus, 'square', last ? 1760 : 1175, t, last ? .07 : .04, last ? .11 : .07, null, pan); } },
+    parry() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'triangle', 1400, t, .25, .25, 3200, .4); voice(SND.bus, 'triangle', 1413, t, .25, .2, 3300, .4); hiss(SND.bus, t, .18, .3, 5000, 1, 'highpass', .4); voice(SND.bus, 'square', 2637, t + .05, .18, .08); },
+    block() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'square', 523, t, .09, .18, 300, -.4); voice(SND.bus, 'square', 784, t, .12, .1, 500, -.4); hiss(SND.bus, t, .1, .35, 2500, 4, 'bandpass', -.4); },
+    crushed() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sawtooth', 110, t, .35, .35, 40); hiss(SND.bus, t, .3, .5, 400, 1, 'lowpass'); },
+    hurt(big) { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sine', big ? 120 : 160, t, .2, .45, 50); hiss(SND.bus, t, .12, big ? .45 : .3, 900, 1, 'lowpass'); },
+    strike(grade) { if (!this.ok()) return; const t = Audio.ctx.currentTime; hiss(SND.bus, t, .08, .35, 3000, 1, 'bandpass'); voice(SND.bus, 'square', grade > 1.4 ? 880 : 440, t, .08, .1, grade > 1.4 ? 1760 : 220);
+      if (grade > 1.4) [69, 72, 76, 81].forEach((m, i) => voice(SND.bus, 'square', mtof(m + 12), t + .03 + i * .035, .12, .07)); },
+    breakIt() { if (!this.ok()) return; const t = Audio.ctx.currentTime; for (let i = 0; i < 7; i++) { hiss(SND.bus, t + i * .045, .12, .35, 3000 + i * 900, 3, 'bandpass', (i % 2 ? .5 : -.5)); voice(SND.bus, 'triangle', mtof(96 - i * 3), t + i * .045, .14, .1); } voice(SND.bus, 'sine', 70, t, .5, .5, 35); },
+    wake() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sine', 1320, t, .12, .1, 1980); },
+    lesson() { if (!this.ok()) return; const t = Audio.ctx.currentTime; [76, 79, 84].forEach((m, i) => voice(SND.bus, 'square', mtof(m), t + i * .07, .14, .09)); },
+    tap() { if (!this.ok()) return; voice(SND.bus, 'square', 990, Audio.ctx.currentTime, .03, .05); },
+    rumble() { if (!this.ok()) return; const t = Audio.ctx.currentTime; voice(SND.bus, 'sawtooth', 55, t, 2.4, .35, 35); hiss(SND.bus, t, 2.4, .4, 300, 1, 'lowpass'); },
+  };
+  function setSound(on) { SND.on = on; try { localStorage.setItem('stonewake-sound', on ? 'on' : 'off'); } catch (_) {} if (SND.bus) SND.bus.gain.setTargetAtTime(on ? .9 : 0, Audio.ctx.currentTime, .05); Audio.muted = !on; if (on) { Audio.unlock(); sndInit(); } }
+  const SPK = [156, 0, 24, 22];   // the sound toggle: a rarely used control, so it lives in the top corner
+  function drawSpeaker() { const [x, y] = SPK; rect(x + 8, y + 7, 3, 6, 'wt'); rect(x + 11, y + 5, 2, 10, 'wt'); if (SND.on) { px(x + 15, y + 8, 'wt'); px(x + 15, y + 11, 'wt'); px(x + 16, y + 9, 'wt'); px(x + 16, y + 10, 'wt'); px(x + 18, y + 6, 's4'); px(x + 18, y + 13, 's4'); rect(x + 19, y + 7, 1, 6, 's4'); } else { for (let i = 0; i < 5; i++) { px(x + 15 + i, y + 7 + i, 'r2'); px(x + 19 - i, y + 7 + i, 'r2'); } } }
+  // hit countdown: three ticks a fixed game time apart, the last on the impact; each scheduled on the audio clock when it is
+  // under 60 ms of game time away, so hit-stop and slow motion cannot push it off the hit
+  const TICKS = [-.5, -.25, 0];
+  function cueHits(B) {
+    if (B.phase !== 'foeWind' || !SND.on) return;
+    B.hits.forEach((h, j) => { const tk = j ? [-.2, 0] : TICKS; h.cued = h.cued || 0; while (h.cued < tk.length && B.t >= h.at + tk[h.cued] - .06) { const ahead = (h.at + tk[h.cued] - B.t) / (B.slow || 1); FXS.tick(h.kind === 'h', h.cued === tk.length - 1, ahead); h.cued++; } });   // later hits in a string get a short count, so ticks never overlap
+  }
+
   // ---------- the playable pitch ----------
   // Opens on a two-thumb hold, then teaches by doing inside one real fight (a stone hand of the titan), one verb at a
   // time, then throws everything at once (the titan's eye and both hands), then shows the player's own numbers and the
@@ -576,7 +683,7 @@
   function lesson() { const d = S.demo; return d && !d.finale ? LESSONS[d.i] : null; }
   function demoTurn(B) {   // returns true when the lesson chose this turn
     const d = S.demo, L = lesson(); if (!L) return false;
-    if (d.base && L.ok(B.stats, d.base)) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; Audio.tone(1047, .08, 'square', .05); Audio.tone(1568, .14, 'square', .05, null, .08); }
+    if (d.base && L.ok(B.stats, d.base)) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; FXS.lesson(); }
     else if (d.base && L.who === 'foe') { d.fails++; d.shown = S.t; }
     const N = lesson(); if (!N) return false;
     if (!d.base) { d.base = { ...B.stats }; if (N.pre) N.pre(B); }
@@ -587,7 +694,7 @@
   }
   function demoAfterBattle(B) {
     const d = S.demo; for (const k in d.tot) d.tot[k] += B.stats[k] || 0;
-    if (B.kind === 'demo1') { S.mode = 'inter'; S.inter = { t: 0 }; }
+    if (B.kind === 'demo1') { S.mode = 'inter'; S.inter = { t: 0 }; FXS.rumble(); }
     else { S.mode = 'card'; S.card = { t: 0 }; API.autopilot = null; }
   }
   function startFinale() {
@@ -733,6 +840,7 @@
     if (S.mode !== 'battle') return;
     const B = S.battle; B.t += dt * (B.phase === 'foeWind' ? B.slow || 1 : 1);
     if (B.phase === 'lose' && S.demo && S.demo.watch && B.t > 1.5) return startFinale();
+    cueHits(B);
     const auto = API.autopilot;
     if (B.phase === 'intro' && B.t > .7) nextTurn();
     else if (B.phase === 'menu' && auto && B.t > (API.botThink || 0)) botPlan(B);
@@ -1007,6 +1115,7 @@
     else if (S.mode === 'over') { text('THE PARTY FELL', 90, 140, 'r2', 'center'); text('TAP TO TRY AGAIN', 90, 160, 's4', 'center'); }
     if (S.mode === 'map') { drawControls(t); drawDialog(t); drawChoice(); }
     if (S.flash > 0) rect(0, 0, W, H, 'wt');
+    if (['title', 'battle', 'card', 'inter'].includes(S.mode)) drawSpeaker();
     lockPalette();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(low, 0, 0, W, H, 0, 0, LW, LH);
@@ -1025,7 +1134,8 @@
     if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; return; }
     if ((type === 'up' || type === 'cancel') && S.titleHold) { for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; }
     if (type !== 'down') return;
-    Audio.unlock(); S.scheme = COARSE ? 'touch' : 'keys'; S.idleT = S.t;
+    Audio.unlock(); if (SND.on) sndInit(); S.scheme = COARSE ? 'touch' : 'keys'; S.idleT = S.t;
+    if (['title', 'battle', 'card', 'inter'].includes(S.mode) && inBox(x, y, SPK)) { setSound(!SND.on); return; }
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; S.lockUntil = S.t + .4; return; }
     if (S.battle) S.battle.stats.taps++;
     if (S.lockUntil && S.t < S.lockUntil) return;   // after a stage change, ignore presses for a beat (Brain demo-disc#E5)
@@ -1097,7 +1207,8 @@
   // keys: arrows move / aim, Z = right thumb (STRIKE, PARRY, ACT), X = left thumb (BLOCK); 1-2 skills, I items, R run
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
-    S.scheme = 'keys'; S.idleT = S.t;
+    S.scheme = 'keys'; S.idleT = S.t; if (SND.on) sndInit();
+    if (key === 'm' || key === 'M') return setSound(!SND.on);
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; return; }
     if (S.mode === 'title') { if (key === 'w' || key === 'W') startDemo(true); if (key === 'f' || key === 'F') { S.demo = null; newGame(); } return; }
     if (S.mode === 'card') { if (S.card.t > 2) { if (key === 'Enter' || key === ' ') cardPress('PLAY AGAIN'); if (key === 'w' || key === 'W') cardPress('WATCH IT'); if (key === 'f' || key === 'F') cardPress('FULL GAME'); } return; }
@@ -1138,6 +1249,7 @@
     get state() { return S.mode; },
     decide: () => botDecide(S.battle), ui: () => S.battle ? { right: S.battle.actor && G.party.includes(S.battle.actor) ? rightButtons() : [], chips: foeChips(), L: LPAD, R: RPAD, act: ACT } : { act: ACT },
     seed(n) { botSeed = n >>> 0 || 1; },
+    snd: SND,
     // give the party a region's companion without playing it (tests jump straight to later fights)
     recruit(id) { if (!G.party.some(p => p.id === id)) G.party.push(newMember(id)); },
     setLevel(lv) { for (const p of G.party) { while (p.lv < lv) { p.lv++; p.maxhp += 8; p.maxmp += 3; p.atk += 2; p.mag += 2; p.def += 1; } p.hp = p.maxhp; p.mp = p.maxmp; } },
