@@ -585,6 +585,11 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     return out; });
   check(ph.grass < ph.road * .6 && ph.boost >= 1 && ph.boostSpeed > ph.road * 1.25 && ph.inWall === 0,
     `trolleydash physics: road ${ph.road}, grass ${ph.grass}; a long drift fires a mini-turbo to ${ph.boostSpeed}; driving into the wall never ends up inside it`);
+  const ros = await page.evaluate(() => { const g = window.__game, blank = [], sums = [];
+    for (let c = 0; c < g.CHARS.length; c++) for (let v = 0; v < g.VEHS.length; v++) { const cv = g.kartSprite(c, v), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let px = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) px++; if (px < 60) blank.push(c + ':' + v); }
+    for (const x of [...g.CHARS, ...g.VEHS]) sums.push(Object.values(x.pts).reduce((a, b) => a + b, 0));
+    return { blank, sums, traits: new Set(g.CHARS.map(c => c.trait)).size }; });
+  check(!ros.blank.length && ros.sums.every(x => x === 0) && ros.traits === 8, `trolleydash roster: all 24 shopper+vehicle sprites drawn, every stat line adds to zero, 8 different traits (${ros.blank.join() || 'ok'})`);
   const race = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.auto = true; for (let i = 0; i < 300 && g.S.state !== 'results'; i++) g.step(120);
     return { state: g.S.state, done: g.S.order.filter(k => k.done).length, laps: g.S.karts.map(k => k.lap), rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT }; });
   check(race.state === 'results' && race.done === 8 && race.rescues <= 4, `trolleydash: 8 karts finish 3 laps on the real track (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues)`);

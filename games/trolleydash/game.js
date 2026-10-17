@@ -127,6 +127,29 @@
     for (const { o, p } of vis) { const h = Math.max(1, Math.round(o.size * p.s)), w = Math.max(1, Math.round(h * o.img.width / o.img.height)); if (p.x + w < 0 || p.x - w > LW) continue; lctx.drawImage(o.img, Math.round(p.x - w / 2), Math.round(p.y - h - (o.lift || 0) * p.s), w, h); }
   }
 
+  // ---------- the roster: 8 shoppers x 3 vehicles. Stats are trade-offs (points add to zero), plus one trait each ----------
+  const PT = { top: .04, accel: .10, turn: .07, grip: .10, weight: .15 };   // what one point is worth, as a fraction of the base
+  const CHARS = [
+    { name: 'GLORIA', who: 'GRANDMA', body: '#c88aff', skin: '#f0c8a0', hair: '#f4f4fa', hat: 'curls', pts: { top: 2, accel: -1, weight: 2, turn: -1, grip: -2 }, trait: 'anchor', desc: 'BUMPS BARELY MOVE HER' },
+    { name: 'TODD', who: 'STOCK BOY', body: '#3a8aff', skin: '#f0c8a0', hair: '#6a3a1a', hat: 'cap', pts: { accel: 2, top: -1, weight: -1 }, trait: 'rocket', desc: 'ROCKET START ON GO' },
+    { name: 'MARGE', who: 'MANAGER', body: '#e83a5a', skin: '#c89070', hair: '#2a1a10', hat: 'bun', pts: { turn: 1, grip: 1, top: -1, accel: -1 }, trait: 'spark', desc: 'DRIFT TURBOS CHARGE FASTER' },
+    { name: 'BEN', who: 'BAGGER', body: '#4ad05a', skin: '#f0d0b0', hair: '#e8b030', hat: 'mop', pts: { accel: 1, weight: -1 }, trait: 'offroad', desc: 'GRASS AND SAND SLOW HIM LESS' },
+    { name: 'CHEN', who: 'DELI CHEF', body: '#f4f4f4', skin: '#f0c890', hair: '#1a1a1a', hat: 'chef', pts: {}, trait: 'pads', desc: 'BOOST PADS LAST LONGER' },
+    { name: 'SAL', who: 'SECURITY', body: '#2a3a5a', skin: '#8a5a3a', hair: '#1a1a1a', hat: 'guard', pts: { weight: 2, top: 1, accel: -1, turn: -1, grip: -1 }, trait: 'draft', desc: 'FASTER IN SOMEONE\'S SLIPSTREAM' },
+    { name: 'TWINS', who: 'KIDS', body: '#ffd23a', skin: '#f0c8a0', hair: '#a04a1a', hat: 'twins', pts: { turn: 2, accel: 1, top: -2, weight: -1 }, trait: 'nimble', desc: 'TIGHTER DRIFTS' },
+    { name: 'PIDGE', who: 'STORE PIGEON', body: '#8a90a0', skin: '#8a90a0', hair: '#5a6070', hat: 'beak', pts: { top: 1, grip: -1 }, trait: 'slick', desc: 'KEEPS GRIP ON ICE AND SAND' },
+  ];
+  const VEHS = [
+    { name: 'TROLLEY', pts: { turn: 2, grip: 1, top: -2, weight: -1 }, desc: 'NIMBLE, GRIPPY, SLOWER' },
+    { name: 'GO-KART', pts: { top: 1, accel: 1, grip: -1, weight: -1 }, desc: 'QUICK ALL ROUND' },
+    { name: 'SCOOTER', pts: { top: 2, weight: 1, accel: -1, turn: -1, grip: -1 }, desc: 'HEAVY AND FAST, SLOW OFF THE LINE' },
+  ];
+  function statsFor(ci, vi) {
+    const out = { trait: CHARS[ci].trait };
+    for (const k of Object.keys(PT)) out[k] = BASE[k] * (1 + PT[k] * ((CHARS[ci].pts[k] || 0) + (VEHS[vi].pts[k] || 0)));
+    return out;
+  }
+
   // ---------- driving: one pure step for every kart, player and AI alike ----------
   // terrain: how fast you can go on it, and how much sideways grip it gives
   const SURF = { [T.ROAD]: [1, 1], [T.START]: [1, 1], [T.CURB]: [.95, 1], [T.BOOST]: [1, 1], [T.GRASS]: [.5, .7], [T.SAND]: [.45, .6], [T.ICE]: [1, .12] };
@@ -138,8 +161,11 @@
   function stepKart(k, inp, trk, dt) {
     const st = k.st, fx = Math.cos(k.a), fy = Math.sin(k.a), rx = -fy, ry = fx;
     let vf = k.vx * fx + k.vy * fy, vl = k.vx * rx + k.vy * ry;
-    const ter = k.ter = terrainAt(trk, k.x, k.y), [sm, gm] = SURF[ter] || [1, 1];
-    if (ter === T.BOOST) k.boost = Math.max(k.boost, .7);
+    const ter = k.ter = terrainAt(trk, k.x, k.y); let [sm, gm] = SURF[ter] || [1, 1];
+    if (st.trait === 'offroad' && sm < 1) sm = Math.max(sm, .7);
+    if (st.trait === 'slick' && gm < 1) gm = Math.min(1, gm * 2.5);
+    if (ter === T.BOOST) k.boost = Math.max(k.boost, st.trait === 'pads' ? 1.05 : .7);
+    if (st.trait === 'draft' && S.karts.some(o => o !== k && (() => { const dx = o.x - k.x, dy = o.y - k.y, d = Math.hypot(dx, dy); return d > 8 && d < 45 && (dx * fx + dy * fy) / d > .93; })())) sm *= 1.07;
     const top = st.top * sm * (k.boost > 0 ? 1.35 : 1);
     k.boost = Math.max(0, k.boost - dt); k.bump = Math.max(0, k.bump - dt);
     if (k.spin > 0) { k.spin -= dt; k.a = wrapA(k.a + 9 * dt); vf *= Math.exp(-2.5 * dt); inp = { steer: 0, gas: 0, brake: 0, drift: false }; }
@@ -158,7 +184,7 @@
       k.mt = k.charge >= 2 ? 2 : k.charge >= 1 ? 1 : 0; k.drift = 0; k.charge = 0;
     }
     let turn;
-    if (k.drift) { const lean = inp.steer * k.drift; turn = k.drift * st.turn * (1.05 + .5 * lean); k.charge += dt * (.7 + .6 * Math.max(0, lean)); }
+    if (k.drift) { const lean = inp.steer * k.drift; turn = k.drift * st.turn * (1.05 + .5 * lean); k.charge += dt * (.7 + .6 * Math.max(0, lean)) * (st.trait === 'spark' ? 1.3 : 1); if (st.trait === 'nimble') turn *= 1.12; }
     else turn = inp.steer * st.turn * sp * (1 - .25 * Math.min(1, vf / st.top));
     k.a = wrapA(k.a + turn * dt * Math.sign(vf || 1));
     k.hop = Math.max(0, (k.hop || 0) - dt);
@@ -212,7 +238,7 @@
   }
   // AI: steer at a point ahead on the centreline, shifted to its own lane; drift into tight corners
   function aiInput(k, trk) {
-    const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.round((24 + v * .32) / 2);
+    const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.round((14 + v * .2) / 2);
     const p = L[(k.li + ahead) % n], q = L[(k.li + ahead * 2) % n], lane = (k.ai ? k.ai.lane : 0) * trk.def.width * .45;
     const tx = p.x - p.dy * lane, ty = p.y + p.dx * lane, want = Math.atan2(ty - k.y, tx - k.x), err = wrapA(want - k.a);
     const bend = Math.abs(wrapA(Math.atan2(q.dy, q.dx) - Math.atan2(p.dy, p.dx)));
@@ -234,33 +260,70 @@
     for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
       const a = ks[i], b = ks[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
       if (d >= KR * 2 || d === 0) continue;
-      const nx = dx / d, ny = dy / d, wa = a.st.weight, wb = b.st.weight, over = KR * 2 - d;
+      const nx = dx / d, ny = dy / d, wa = a.st.weight * (a.st.trait === 'anchor' ? 1.6 : 1), wb = b.st.weight * (b.st.trait === 'anchor' ? 1.6 : 1), over = KR * 2 - d;
       a.x -= nx * over * wb / (wa + wb); a.y -= ny * over * wb / (wa + wb); b.x += nx * over * wa / (wa + wb); b.y += ny * over * wa / (wa + wb);
       const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny; if (rv >= 0) continue;
       const imp = -1.3 * rv / (1 / wa + 1 / wb);
       a.vx -= imp * nx / wa; a.vy -= imp * ny / wa; b.vx += imp * nx / wb; b.vy += imp * ny / wb; a.bump = b.bump = .2;
     }
   }
-  const S = { t: 0, clock: 0, state: 'count', trk: null, player: null, karts: [], order: [], inp: { steer: 0, gas: 1, brake: 0, drift: false }, seed: 1 };
-  function load(ti, seed = 1) {
+  const S = { pick: { c: 4, v: 1 }, t: 0, clock: 0, state: 'count', trk: null, player: null, karts: [], order: [], inp: { steer: 0, gas: 1, brake: 0, drift: false }, seed: 1 };
+  function load(ti, seed = 1, pick = S.pick) {
     S.trk = buildTrack(TRACKS[ti]); S.scenery = scenery(S.trk); S.seed = seed;
     const L = S.trk.line, n = L.length, r = mkRng(seed * 97 + ti);
-    S.karts = [];
+    S.karts = []; const others = CHARS.map((_, i) => i).filter(i => i !== pick.c);
     for (let g = 0; g < NK; g++) {   // grid: two columns behind the line, the player starts at the back
       const back = 8 + Math.floor(g / 2) * 9, p = L[(n - back) % n], side = (g % 2 ? 1 : -1) * 14;
-      const k = newKart(p.x - p.dy * side, p.y + p.dx * side, Math.atan2(p.dy, p.dx), g === NK - 1 ? {} : { top: BASE.top * (.9 + r() * .08) });
-      Object.assign(k, { id: g, li: (n - back) % n, s: p.s, lap: -1, cp: [true, true], prog: p.s - S.trk.L, done: false, col: COLORS[g], spr: kartSprite(COLORS[g]),
+      // the player at the back of the grid; the other seven shoppers fill the rest, on seeded vehicles
+      const ci = g === NK - 1 ? pick.c : others[g], vi = g === NK - 1 ? pick.v : Math.floor(r() * 3);
+      const k = newKart(p.x - p.dy * side, p.y + p.dx * side, Math.atan2(p.dy, p.dx), statsFor(ci, vi));
+      if (g !== NK - 1) k.st.top *= .93 + r() * .05;   // CPU pace: a touch below a clean player line
+      Object.assign(k, { id: g, ci, vi, li: (n - back) % n, s: p.s, lap: -1, cp: [true, true], prog: p.s - S.trk.L, done: false, col: CHARS[ci].body, spr: kartSprite(ci, vi),
         ai: g === NK - 1 ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
       k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
     }
     S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
   }
-  const COLORS = ['#3a8aff', '#ffd23a', '#4ad05a', '#a77aff', '#ff9a3a', '#3ad0c8', '#ff6ad0', '#e83a5a'];
-  function kartSprite(col) { return spr(24, 18, g => { g.fillStyle = '#222'; g.fillRect(0, 10, 6, 8); g.fillRect(18, 10, 6, 8); g.fillStyle = col; g.fillRect(3, 6, 18, 9); g.fillStyle = '#ffd8b0'; g.fillRect(9, 0, 6, 6); g.fillStyle = '#333'; g.fillRect(8, 0, 8, 2); }); }
+  // a shopper seen from behind: body, head, and a hat that says who it is
+  function shopper(g, c, x, y) {
+    g.fillStyle = c.body; g.fillRect(x - 4, y, 8, 6);
+    if (c.hat === 'beak') { g.fillStyle = c.skin; g.fillRect(x - 3, y - 6, 6, 6); g.fillStyle = '#ffb030'; g.fillRect(x + 3, y - 4, 2, 2); g.fillStyle = '#5a6070'; g.fillRect(x - 4, y + 1, 2, 4); g.fillRect(x + 2, y + 1, 2, 4); return; }
+    g.fillStyle = c.hair; g.fillRect(x - 3, y - 6, 6, 6);
+    if (c.hat === 'cap') { g.fillStyle = '#e83a3a'; g.fillRect(x - 3, y - 7, 6, 3); }
+    if (c.hat === 'guard') { g.fillStyle = '#1a2a4a'; g.fillRect(x - 4, y - 7, 8, 3); g.fillStyle = '#ffd23a'; g.fillRect(x - 1, y - 7, 2, 1); }
+    if (c.hat === 'chef') { g.fillStyle = '#fff'; g.fillRect(x - 3, y - 11, 6, 6); }
+    if (c.hat === 'bun') { g.fillStyle = c.hair; g.fillRect(x - 2, y - 9, 4, 3); }
+    if (c.hat === 'curls') { g.fillStyle = c.hair; g.fillRect(x - 4, y - 7, 8, 5); }
+    if (c.hat === 'mop') { g.fillStyle = c.hair; g.fillRect(x - 4, y - 7, 8, 4); }
+  }
+  const SPRC = {};
+  function kartSprite(ci, vi) {
+    const key = ci + ':' + vi; if (SPRC[key]) return SPRC[key];
+    const c = CHARS[ci];
+    return SPRC[key] = spr(26, 22, g => {
+      if (vi === 0) {   // trolley: a wire basket on four small wheels, shopper riding inside
+        g.fillStyle = '#333'; g.fillRect(3, 19, 3, 3); g.fillRect(20, 19, 3, 3);
+        shopper(g, c, 13, 8);
+        g.fillStyle = '#c8d0dc'; g.fillRect(2, 11, 22, 8); g.fillStyle = '#8a96a8'; for (let x = 4; x < 24; x += 3) g.fillRect(x, 11, 1, 8); g.fillRect(2, 14, 22, 1);
+        g.fillStyle = '#ff6a7a'; g.fillRect(1, 9, 24, 2);
+        if (c.hat === 'twins') { shopper(g, { ...c, hat: 'mop' }, 8, 7); shopper(g, { ...c, hat: 'mop', body: '#3ad0c8' }, 18, 7); }
+      } else if (vi === 1) {   // go-kart: low body, fat rear tyres
+        g.fillStyle = '#222'; g.fillRect(0, 14, 6, 8); g.fillRect(20, 14, 6, 8);
+        if (c.hat === 'twins') { shopper(g, { ...c, hat: 'mop' }, 10, 9); shopper(g, { ...c, hat: 'mop', body: '#3ad0c8' }, 16, 9); } else shopper(g, c, 13, 9);
+        g.fillStyle = c.body === '#f4f4f4' ? '#e8a030' : c.body; g.fillRect(4, 14, 18, 6); g.fillStyle = '#0003'; g.fillRect(4, 18, 18, 2); g.fillStyle = '#ddd'; g.fillRect(9, 20, 8, 1);
+      } else {   // mobility scooter: tall seat, rear basket, little wheels, an orange safety flag
+        g.fillStyle = '#333'; g.fillRect(5, 19, 4, 3); g.fillRect(17, 19, 4, 3);
+        g.fillStyle = '#ff8a2a'; g.fillRect(22, 0, 3, 3); g.fillStyle = '#aaa'; g.fillRect(23, 3, 1, 9);
+        if (c.hat === 'twins') { shopper(g, { ...c, hat: 'mop' }, 10, 7); shopper(g, { ...c, hat: 'mop', body: '#3ad0c8' }, 16, 7); } else shopper(g, c, 13, 7);
+        g.fillStyle = '#3a6ad0'; g.fillRect(4, 13, 18, 7); g.fillStyle = '#c8d0dc'; g.fillRect(7, 14, 12, 4); g.fillStyle = '#8a96a8'; for (let x = 8; x < 19; x += 3) g.fillRect(x, 14, 1, 4);
+      }
+    });
+  }
   const place = k => S.karts.slice().sort((a, b) => (a.done && b.done) ? a.finishT - b.finishT : a.done ? -1 : b.done ? 1 : b.prog - a.prog).indexOf(k) + 1;
   function update(dt) {
     S.t += dt;
-    if (S.state === 'count') { if (S.t - S.t0 > 3) { S.state = 'race'; } return; }
+    if (S.state === 'select') return;
+    if (S.state === 'count') { if (S.t - S.t0 > 3) { S.state = 'race'; for (const k of S.karts) if (k.st.trait === 'rocket') k.boost = .9; } return; }
     if (S.state === 'results') return;
     S.clock += dt;
     for (const k of S.karts) {
@@ -270,9 +333,27 @@
     bumps(S.karts);
     for (const k of S.karts) { track(k, S.trk); unstick(k, S.trk); }
     if (S.player.done && !S.finishedAt) S.finishedAt = S.clock;
-    if (S.player.done && S.clock - S.finishedAt > 3 || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
+    if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 20) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
+  }
+  // ---------- select: pick a shopper and a vehicle ----------
+  const CARD = (i) => ({ x: 22 + (i % 4) * 126, y: 200 + Math.floor(i / 4) * 160, w: 118, h: 150 });
+  const VCARD = (i) => ({ x: 22 + i * 168, y: 560, w: 160, h: 120 }), GOB = { x: 120, y: 850, w: 300, h: 80 };
+  function bar(ctx, label, v, y) { ctx.font = '800 16px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#c8d0e0'; ctx.fillText(label, 130, y + 13); ctx.fillStyle = '#ffffff22'; Draw.rr(ctx, 140, y, 300, 16, 8); ctx.fill(); ctx.fillStyle = '#ffd23a'; Draw.rr(ctx, 140, y, 300 * clamp(v), 16, 8); ctx.fill(); }
+  function drawSelect(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2a1a5a'); g.addColorStop(1, '#5a2a6a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    Draw.bigText(ctx, 'TROLLEY DASH', W / 2, 90, 54, '#ffe14a', '#3a1a00'); ctx.font = '800 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText('CHOOSE YOUR SHOPPER', W / 2, 170);
+    ctx.imageSmoothingEnabled = false;
+    CHARS.forEach((c, i) => { const b = CARD(i), on = S.pick.c === i; ctx.fillStyle = on ? '#ffe14a' : '#ffffff18'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 16); ctx.fill();
+      ctx.drawImage(kartSprite(i, S.pick.v), b.x + 7, b.y + 10, 104, 88); ctx.font = '900 18px system-ui'; ctx.fillStyle = on ? '#2a1a00' : '#fff'; ctx.fillText(c.name, b.x + b.w / 2, b.y + 120); ctx.font = '700 11px system-ui'; ctx.fillText(c.who, b.x + b.w / 2, b.y + 138); });
+    VEHS.forEach((v, i) => { const b = VCARD(i), on = S.pick.v === i; ctx.fillStyle = on ? '#4ab8ff' : '#ffffff18'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 16); ctx.fill();
+      ctx.drawImage(kartSprite(S.pick.c, i), b.x + 40, b.y + 8, 78, 66); ctx.font = '900 18px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(v.name, b.x + b.w / 2, b.y + 96); });
+    const st = statsFor(S.pick.c, S.pick.v), rel = (k, lo, hi) => (st[k] / BASE[k] - lo) / (hi - lo);
+    bar(ctx, 'SPEED', rel('top', .8, 1.2), 700); bar(ctx, 'ACCEL', rel('accel', .5, 1.5), 726); bar(ctx, 'HANDLING', rel('turn', .6, 1.4), 752); bar(ctx, 'WEIGHT', rel('weight', .4, 1.6), 778);
+    ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14a'; ctx.fillText(`${CHARS[S.pick.c].name}: ${CHARS[S.pick.c].desc} · ${VEHS[S.pick.v].desc}`, W / 2, 826);
+    ctx.fillStyle = '#4ad05a'; Draw.rr(ctx, GOB.x, GOB.y, GOB.w, GOB.h, 40); ctx.fill(); Draw.bigText(ctx, 'RACE!', W / 2, GOB.y + 42, 40, '#fff', '#0a4a1a');
   }
   function render(ctx) {
+    if (S.state === 'select') { drawSelect(ctx); return; }
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     sky(cam, theme); ground(S.trk, cam, theme);
     billboards(cam, [...S.scenery, ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
@@ -295,6 +376,7 @@
   const inB = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
   let padDown = false;
   function onPointer(type, x, y) {
+    if (S.state === 'select') { if (type !== 'down') return; CHARS.forEach((_, i) => { if (inB(CARD(i), x, y)) { S.pick.c = i; Audio.sfx('select'); } }); VEHS.forEach((_, i) => { if (inB(VCARD(i), x, y)) { S.pick.v = i; Audio.sfx('select'); } }); if (inB(GOB, x, y)) startRace(); return; }
     if (type === 'down' && inB(DRIFTB, x, y)) { S.inp.drift = true; return; }
     if (type === 'down' && inB(PAD, x, y)) padDown = true;
     if (padDown && (type === 'down' || type === 'move')) S.inp.steer = clamp((x - (PAD.x + PAD.w / 2)) / (PAD.w * .4), -1, 1);
@@ -303,12 +385,14 @@
   const keys = {};
   function onKey(key, down) {
     keys[key] = down;
+    if (S.state === 'select') { if (!down) return; if (key === 'ArrowRight') S.pick.c = (S.pick.c + 1) % 8; if (key === 'ArrowLeft') S.pick.c = (S.pick.c + 7) % 8; if (key === 'ArrowDown') S.pick.v = (S.pick.v + 1) % 3; if (key === 'ArrowUp') S.pick.v = (S.pick.v + 2) % 3; if (key === 'Enter' || key === ' ') startRace(); return; }
     S.inp.steer = (keys.ArrowRight || keys.d ? 1 : 0) - (keys.ArrowLeft || keys.a ? 1 : 0);
     S.inp.brake = keys.ArrowDown || keys.s ? 1 : 0;
     S.inp.drift = !!(keys[' '] || keys.Shift);
   }
 
-  load(0);
+  function startRace() { Audio.unlock(); Audio.sfx('start'); load(S.track || 0, S.seed || 1, S.pick); }
+  load(0); S.state = 'select';
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { S, TRACKS, T, SURF, BASE, LAPS, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();
