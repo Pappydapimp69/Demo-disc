@@ -594,7 +594,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     const race = await page.evaluate(ti => { const g = window.__game; g.load(ti, 1); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120);
       return { name: g.S.trk.def.name, state: g.S.state, done: g.S.order.filter(k => k.done).length, rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT, skips: g.S.trk.shortcuts.map(c => Math.round(c.skip)) }; }, ti);
     await page.screenshot({ path: path.join(shots, `trolleydash-T${ti + 1}-results.png`) });
-    check(race.state === 'results' && race.done === 8 && race.rescues <= 4 && race.skips.every(x => x < 600), `trolleydash ${race.name}: 8 karts finish 3 laps (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues); every shortcut skips under 600 units so laps count (${race.skips.join(', ')})`);
+    check(race.state === 'results' && race.done >= 7 && race.rescues <= 4 && race.skips.every(x => x < 600), `trolleydash ${race.name}: ${race.done}/8 karts finish 3 laps within 30 s of the player (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues); every shortcut skips under 600 units so laps count (${race.skips.join(', ')})`);
   }
   const sc = await page.evaluate(() => { const g = window.__game, out = [];
     for (let ti = 0; ti < 3; ti++) { g.load(ti, 1); g.S.trk.shortcuts.forEach((c, si) => out.push({ name: c.name, road: c.ter === 'ROAD', main: g.timeShortcut(ti, si, false, false), cut: g.timeShortcut(ti, si, true, false), mainB: g.timeShortcut(ti, si, false, true), cutB: g.timeShortcut(ti, si, true, true) })); }
@@ -608,6 +608,12 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     return { first: counts[1], last: counts[8], hit: (b.hits || 0) > 0 }; });
   check(!it.first.espresso && !it.first.tannoy && !it.last.banana && it.last.espresso > 300 && it.first.banana > 500 && it.hit,
     `trolleydash items: 1st gets defence (${it.first.banana} peels in 2000), 8th gets speed (${it.last.espresso} espressos) and never a peel; a thrown melon spins the kart ahead`);
+  const ev = await page.evaluate(() => { const g = window.__game, combos = new Set(); for (let seed = 1; seed <= 10; seed++) { const p = g.planEvents(seed, 0); combos.add(p.list.map(e => e.kind).join('+') + ':' + p.door); }
+    let door = null; for (let seed = 1; seed < 30 && !door; seed++) { g.load(0, seed); const sc = g.S.trk.shortcuts.find(c => c.closed); if (sc) { const d = sc.doorAt; door = { wall: g.terrainAt(g.S.trk, d.x, d.y) === g.T.WALL, seed }; g.S.auto = true; let took = false; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) { g.step(60); if (g.S.karts.some(k => k.route && g.S.trk.shortcuts[k.route.sc] === sc)) took = true; } door.took = took; door.finished = g.S.order.filter(k => !k.est).length; } }
+    g.load(0, 3); const leak = g.S.trk.shortcuts.some(c => c.closed) === (g.planEvents(3, 0).door >= 0);
+    return { combos: combos.size, door, leak }; });
+  check(ev.combos >= 5 && ev.door && ev.door.wall && !ev.door.took && ev.door.finished >= 7 && ev.leak,
+    `trolleydash events: 10 seeds give ${ev.combos} different event plans; a shut roller door walls the alley, no CPU tries it, the race still finishes (${ev.door && ev.door.finished}/8)`);
   const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
     for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
     const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints

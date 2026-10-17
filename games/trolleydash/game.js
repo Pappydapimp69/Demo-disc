@@ -121,7 +121,7 @@
   function ground(trk, cam, theme) {
     const N = trk.N, col = trk.col, [fr, fg, fb] = theme.fog;
     for (let k = 0; k < LH - HOR; k++) {
-      const z = ROWZ[k], fog = Math.min(1, z / FOG), lat0 = -(LW / 2) * z / FOCAL, dl = z / FOCAL;
+      const z = ROWZ[k], fog = Math.min(1, z / (S.fogNow || FOG)), lat0 = -(LW / 2) * z / FOCAL, dl = z / FOCAL;
       let wx = cam.x + cam.fx * z + cam.rx * lat0, wy = cam.y + cam.fy * z + cam.ry * lat0;
       const sx = cam.rx * dl, sy = cam.ry * dl, row = k * LW;
       for (let x = 0; x < LW; x++) {
@@ -149,6 +149,8 @@
     banana: spr(10, 6, g => { g.fillStyle = '#ffe14a'; g.fillRect(0, 2, 10, 3); g.fillStyle = '#c8a020'; g.fillRect(0, 2, 2, 2); g.fillRect(8, 2, 2, 2); }),
     melon: spr(10, 10, g => { g.fillStyle = '#3a9a3a'; g.beginPath(); g.arc(5, 5, 5, 0, 7); g.fill(); g.fillStyle = '#8ad08a'; g.fillRect(2, 2, 1, 6); g.fillRect(5, 1, 1, 8); g.fillRect(8, 2, 1, 6); }),
     trolley: spr(14, 10, g => { g.fillStyle = '#333'; g.fillRect(1, 8, 2, 2); g.fillRect(11, 8, 2, 2); g.fillStyle = '#c8d0dc'; g.fillRect(0, 2, 14, 6); g.fillStyle = '#e83a3a'; g.fillRect(0, 0, 14, 2); }),
+    forklift: spr(24, 22, g => { g.fillStyle = '#222'; g.fillRect(1, 17, 6, 5); g.fillRect(17, 17, 6, 5); g.fillStyle = '#ffc20a'; g.fillRect(2, 8, 20, 10); g.fillStyle = '#333'; g.fillRect(4, 0, 2, 9); g.fillRect(18, 0, 2, 9); g.fillRect(4, 0, 16, 2); g.fillStyle = '#ff6a2a'; g.fillRect(10, 3, 4, 3); }),
+    door: spr(30, 20, g => { g.fillStyle = '#8a8a96'; g.fillRect(0, 0, 30, 20); g.fillStyle = '#6a6a76'; for (let y = 2; y < 20; y += 3) g.fillRect(0, y, 30, 1); g.fillStyle = '#ffd23a'; g.fillRect(0, 17, 30, 3); g.fillStyle = '#222'; for (let x = 0; x < 30; x += 6) g.fillRect(x, 17, 3, 3); }),
     sign: spr(10, 14, g => { g.fillStyle = '#ffd23a'; g.beginPath(); g.moveTo(5, 0); g.lineTo(10, 14); g.lineTo(0, 14); g.fill(); g.fillStyle = '#222'; g.fillRect(4, 5, 2, 5); }),
     lamp: spr(6, 40, g => { g.fillStyle = '#5a6070'; g.fillRect(2, 4, 2, 36); g.fillStyle = '#fff6c0'; g.fillRect(0, 0, 6, 5); }),
     cone: spr(10, 12, g => { g.fillStyle = '#ff8a2a'; g.beginPath(); g.moveTo(5, 0); g.lineTo(9, 11); g.lineTo(1, 11); g.fill(); g.fillStyle = '#fff'; g.fillRect(3, 5, 4, 2); g.fillStyle = '#333'; g.fillRect(0, 11, 10, 1); }),
@@ -325,6 +327,36 @@
     else if (S.clock - (k.heldSince || (k.heldSince = S.clock)) > 12) { useItem(k); k.heldSince = 0; }
   }
 
+  // ---------- store events: seeded per race, so every race goes a little differently ----------
+  const EVENTS = {
+    spill: { name: '🧽 SPILL! WET FLOOR AHEAD', dur: 20 }, herd: { name: '🛒 RUNAWAY TROLLEYS!', dur: 16 }, sale: { name: '🏷️ FLASH SALE! BAGS RESTOCK FAST', dur: 15 },
+    power: { name: '💡 POWER CUT!', dur: 12 }, forklift: { name: '🚜 FORKLIFT ON THE TRACK!', dur: 25 },
+  };
+  function planEvents(seed, ti) {
+    const r = mkRng(seed * 7919 + ti * 31), kinds = Object.keys(EVENTS), out = [];
+    const first = kinds[Math.floor(r() * kinds.length)]; let second = kinds[Math.floor(r() * kinds.length)]; if (second === first) second = kinds[(kinds.indexOf(first) + 1) % kinds.length];
+    out.push({ kind: first, at: 14 + r() * 16, r: r() }, { kind: second, at: 40 + r() * 20, r: r() });
+    const door = r() < .4 ? 0 : -1;   // sometimes the store has shut a road alley's roller door for the day
+    return { list: out, door };
+  }
+  function startEvent(e) {
+    const L = S.trk.line, n = L.length, p = L[Math.floor(e.r * n)], ev = EVENTS[e.kind]; e.until = S.clock + ev.dur; S.flashMsg = { text: ev.name, t: S.t }; S.eventLog.push(e.kind);
+    if (e.kind === 'spill') { const q = L[Math.floor((S.player.li + n / 3 + e.r * n / 3) % n)]; S.puddles.push({ x: q.x, y: q.y, r: 30, until: e.until }); }
+    if (e.kind === 'herd') { const q = L[Math.floor((S.player.li + 60 + e.r * 80) % n)]; e.movers = []; for (let i = 0; i < 3; i++) e.movers.push({ x: q.x - q.dy * (90 + i * 40), y: q.y + q.dx * (90 + i * 40), vx: q.dy * 55, vy: -q.dx * 55, cx: q.x, cy: q.y, nx: -q.dy, ny: q.dx, img: 'trolley' }); }
+    if (e.kind === 'forklift') { const lead = S.karts.slice().sort((a, b) => b.prog - a.prog)[0]; e.li = (lead.li + 80) % n; e.movers = [{ x: L[e.li].x, y: L[e.li].y, img: 'forklift', big: true }]; }
+  }
+  function events(dt) {
+    for (const e of S.events) { if (!e.until && S.clock >= e.at) startEvent(e); }
+    for (const e of S.events) {
+      if (!e.until || S.clock > e.until) { if (e.movers) e.movers = null; continue; }
+      if (e.kind === 'sale') for (const b of S.trk.boxes) b.back = Math.min(b.back, S.clock + .5);
+      if (e.kind === 'herd') for (const m of e.movers) { m.x += m.vx * dt; m.y += m.vy * dt; const d = (m.x - m.cx) * m.nx + (m.y - m.cy) * m.ny; if (Math.abs(d) > 120) { m.x = m.cx + m.nx * -Math.sign(d) * 110; m.y = m.cy + m.ny * -Math.sign(d) * 110; } }
+      if (e.kind === 'forklift') { const L = S.trk.line, n = L.length; e.acc = (e.acc || 0) + 55 * dt; while (e.acc >= 2) { e.acc -= 2; e.li = (e.li + 1) % n; } const m = e.movers[0], q = L[e.li]; m.x = q.x - q.dy * 12; m.y = q.y + q.dx * 12; }
+      for (const m of e.movers || []) for (const k of S.karts) { const dx = k.x - m.x, dy = k.y - m.y, d = Math.hypot(dx, dy), R = m.big ? 16 : 9; if (d < R + KR && d > 0) { const nx = dx / d, ny = dy / d; k.x = m.x + nx * (R + KR); k.y = m.y + ny * (R + KR); const vn = k.vx * nx + k.vy * ny; if (vn < 0) { k.vx -= 1.6 * vn * nx; k.vy -= 1.6 * vn * ny; } k.vx *= .7; k.vy *= .7; k.bump = .3; } }
+    }
+  }
+  const dark = () => S.events && S.events.some(e => e.kind === 'power' && e.until && S.clock <= e.until);
+
   // ---------- race: progress along the centreline, laps through checkpoints, AI, bumps ----------
   const LAPS = 3, NK = 8, KR = 6;   // laps, karts, kart radius
   // nearest centreline sample: search near the last one, fall back to a full search when far off the line
@@ -413,6 +445,11 @@
       k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
     }
     for (const c of S.trk.cones) c.down = 0;
+    // everything a race can change is rebuilt here, so no event leaks into the next race
+    const plan = planEvents(seed, ti); S.events = S.noEvents ? [] : plan.list; S.eventLog = []; S.dark = false;
+    S.trk.shortcuts.forEach(sc => { sc.closed = false; });
+    if (!S.noEvents && plan.door >= 0) { const roads = S.trk.shortcuts.filter(sc => sc.ter === 'ROAD'); if (roads.length) { const sc = roads[0]; sc.closed = true; const [x, y] = sc.pts[0], [x2, y2] = sc.pts[1], d = Math.hypot(x2 - x, y2 - y), ux = (x2 - x) / d, uy = (y2 - y) / d;
+      sc.doorAt = { x: x + ux * 22, y: y + uy * 22 }; for (let a = -sc.width - 6; a <= sc.width + 6; a++) for (let b = 18; b <= 26; b++) { const px = Math.round(x + ux * b - uy * a), py = Math.round(y + uy * b + ux * a); if (S.trk.ter[py * S.trk.N + px] !== T.WALL) S.trk.ter[py * S.trk.N + px] = T.WALL; } S.eventLog.push('door'); } }
     S.shots = []; S.drops = []; S.puddles = []; S.flashMsg = null; for (const b of S.trk.boxes) b.back = 0;
     S.rng = mkRng(seed * 131 + ti * 7); S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
   }
@@ -459,6 +496,7 @@
     if (S.state === 'results') return;
     S.clock += dt;
     for (const k of S.karts) if (k.ai && !k.route) S.trk.shortcuts.forEach((sc, i) => {
+      if (sc.closed) return;
       const d = (sc.ia - k.li + S.trk.line.length) % S.trk.line.length, key = k.lap + ':' + i;
       if (d > 4 && d < 22 && k.scKey !== key) { k.scKey = key; const r = S.rng(); if (r < (sc.ter === 'ROAD' ? sc.ai : (k.boost > .3 || k.st.trait === 'offroad' ? .7 : 0))) k.route = { sc: i, i: 0 }; }
     });
@@ -466,7 +504,7 @@
       const inp = k.ai ? aiInput(k, S.trk) : (S.auto ? aiInput(k, S.trk) : k.done ? { steer: 0, gas: 0, brake: 1, drift: false } : S.inp);
       stepKart(k, k.done && k.ai ? { ...inp, gas: 1 } : inp, S.trk, dt);
     }
-    items(dt); for (const k of S.karts) if (k.ai || S.auto) aiItem(k);
+    events(dt); items(dt); for (const k of S.karts) if (k.ai || S.auto) aiItem(k);
     bumps(S.karts);
     // cones get knocked flat (and stood back up a few seconds later); hitting one costs some speed
     for (const k of S.karts) for (const c of S.trk.cones) if (!(c.down > S.clock) && Math.hypot(k.x - c.x, k.y - c.y) < KR + 3) { c.down = S.clock + 6; k.vx *= .75; k.vy *= .75; k.bump = .2; }
@@ -494,10 +532,11 @@
   function render(ctx) {
     if (S.state === 'select') { drawSelect(ctx); return; }
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
-    sky(cam, theme); ground(S.trk, cam, theme);
+    const th = dark() ? { ...theme, fog: [8, 8, 16], sky: ['#05050a', '#14142a'] } : theme; S.fogNow = dark() ? 260 : FOG;
+    sky(cam, th); ground(S.trk, cam, th);
     for (const p of S.puddles) { const q = project(cam, p.x, p.y); if (q) { lctx.fillStyle = '#7ac8ff99'; lctx.beginPath(); lctx.ellipse(q.x, q.y, p.r * q.s, p.r * q.s * .35, 0, 0, 7); lctx.fill(); } }
     billboards(cam, [...S.scenery, ...S.trk.cones.filter(c => !(c.down > S.clock)).map(c => ({ x: c.x, y: c.y, img: SPR.cone, size: 8 })), ...S.trk.boxes.filter(b => b.back <= S.clock).map(b => ({ x: b.x, y: b.y, img: SPR.bag, size: 9, lift: 2 + Math.sin(S.t * 4 + b.x) })),
-      ...S.drops.map(d => ({ x: d.x, y: d.y, img: SPR.banana, size: 3 })), ...S.shots.map(sh => ({ x: sh.x, y: sh.y, img: SPR[sh.kind], size: sh.kind === 'melon' ? 6 : 7 })), ...S.puddles.map(p => ({ x: p.x, y: p.y, img: SPR.sign, size: 9 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
+      ...S.drops.map(d => ({ x: d.x, y: d.y, img: SPR.banana, size: 3 })), ...S.events.flatMap(e => (e.until && S.clock <= e.until && e.movers) ? e.movers.map(m => ({ x: m.x, y: m.y, img: SPR[m.img], size: m.big ? 18 : 8 })) : []), ...S.trk.shortcuts.filter(sc => sc.closed).map(sc => ({ x: sc.doorAt.x, y: sc.doorAt.y, img: SPR.door, size: 20 })), ...S.shots.map(sh => ({ x: sh.x, y: sh.y, img: SPR[sh.kind], size: sh.kind === 'melon' ? 6 : 7 })), ...S.puddles.map(p => ({ x: p.x, y: p.y, img: SPR.sign, size: 9 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
     const pk = S.player, pp = project(cam, pk.x, pk.y);
     if (pp && pk.drift) { const c = pk.charge >= 2 ? '#ff9a2a' : pk.charge >= 1 ? '#4ab8ff' : '#ffffff'; lctx.fillStyle = c; for (let i = 0; i < 4; i++) lctx.fillRect(Math.round(pp.x - 14 * pk.drift - 2 + (S.t * 60 + i * 7) % 6), Math.round(pp.y - 2 - i), 2, 2); }
     if (pp && pk.boost > 0) { lctx.fillStyle = (S.t * 20 | 0) % 2 ? '#ffd23a' : '#ff6a2a'; lctx.fillRect(Math.round(pp.x - 3), Math.round(pp.y), 6, 3); }
@@ -553,5 +592,5 @@
   function startRace() { Audio.unlock(); Audio.sfx('start'); load(S.track || 0, S.seed || 1, S.pick); }
   load(0); S.state = 'select';
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { timeShortcut, hitKart: (k, w) => hit(k, w), ITEMS, ODDS, rollItem, useItem, mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { EVENTS, planEvents, timeShortcut, hitKart: (k, w) => hit(k, w), ITEMS, ODDS, rollItem, useItem, mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();
