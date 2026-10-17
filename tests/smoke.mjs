@@ -577,6 +577,14 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const tr = await page.evaluate(() => { const g = window.__game, out = [];
     for (let i = 0; i < g.TRACKS.length; i++) { g.load(i); const t = g.S.trk, p = t.line[0]; out.push({ L: Math.round(t.L), start: t.ter[(p.y | 0) * t.N + (p.x | 0)] }); } return out; });
   check(tr.every(t => t.L > 1500 && t.start === 7), `trolleydash: every track builds a closed road with the start line on it (${tr.map(t => t.L).join(', ')} units)`);
+  const ph = await page.evaluate(() => { const g = window.__game, t = g.S.trk, dt = 1 / 60, out = {}, G = { steer: 0, gas: 1, brake: 0, drift: false };
+    const flat = code => ({ N: t.N, ter: new Uint8Array(t.N * t.N).fill(code) }), run = (k, tr, inp, n) => { for (let i = 0; i < n; i++) { g.stepKart(k, inp, tr, dt); k.x = 500; k.y = 500; } };
+    for (const [name, code] of [['road', g.T.ROAD], ['grass', g.T.GRASS]]) { const k = g.newKart(500, 500, 0, {}); run(k, flat(code), G, 600); out[name] = Math.round(g.speedOf(k)); }
+    { const tr = flat(g.T.ROAD), k = g.newKart(500, 500, 0, {}); run(k, tr, G, 300); run(k, tr, { ...G, steer: 1, drift: true }, 150); run(k, tr, G, 1); out.boost = k.boost; let mx = 0; for (let i = 0; i < 60; i++) { run(k, tr, G, 1); mx = Math.max(mx, g.speedOf(k)); } out.boostSpeed = Math.round(mx); }
+    { const k = g.newKart(t.line[0].x, t.line[0].y, Math.atan2(t.line[0].dy, t.line[0].dx) - 1.4, {}); out.inWall = 0; for (let i = 0; i < 600; i++) { g.stepKart(k, { ...G, steer: -.5 }, t, dt); if (g.terrainAt(t, k.x, k.y) === g.T.WALL) out.inWall++; } }
+    return out; });
+  check(ph.grass < ph.road * .6 && ph.boost >= 1 && ph.boostSpeed > ph.road * 1.25 && ph.inWall === 0,
+    `trolleydash physics: road ${ph.road}, grass ${ph.grass}; a long drift fires a mini-turbo to ${ph.boostSpeed}; driving into the wall never ends up inside it`);
   check(errors.length === 0, `trolleydash runs without errors ${errors.join(' | ')}`);
   await page.close();
 }
