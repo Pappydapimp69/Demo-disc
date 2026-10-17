@@ -8,7 +8,7 @@
   const { createGame, Audio, Draw, clamp } = Engine;
   const W = 540, H = 960, LW = 180, LH = 200, SCALE = 3, HOR = 52;   // low-res view, its scale, horizon row
   const FOCAL = 120, CAMH = 22, CAMD = 26, FOG = 900;                // camera: focal length (px), height, distance behind the kart, fog distance
-  const T = { WALL: 0, GRASS: 1, ROAD: 2, CURB: 3, BOOST: 4, SAND: 5, ICE: 6, START: 7 };
+  const T = { WALL: 0, GRASS: 1, ROAD: 2, CURB: 3, BOOST: 4, SAND: 5, ICE: 6, START: 7, PEAS: 8 };
 
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   const wrapA = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -22,19 +22,19 @@
       pts: [[200, 820], [200, 300], [300, 180], [520, 170], [640, 280], [600, 440], [760, 520], [860, 420], [900, 640], [820, 860], [560, 900], [420, 760], [300, 880]],
       // the loading-bay alley under the notch, and a gravel cut inside the top-right bend
       shortcuts: [{ name: 'LOADING BAY', pts: [[560, 888], [480, 910], [380, 910], [300, 880]], width: 16, ter: 'ROAD', ai: .5 }, { name: 'GRAVEL', pts: [[440, 168], [520, 270], [600, 420]], width: 20, ter: 'SAND', ai: 0 }],
-      boosts: [[250, 0], [1700, -14], [2050, 14]], cones: [[1950, -20], [2010, 18], [2070, -20]] },
+      boxes: [600, 1550, 2300], boosts: [[250, 0], [1700, -14], [2050, 14]], cones: [[1950, -20], [2010, 18], [2070, -20]] },
     { name: 'FROZEN FOODS', size: 1024, width: 44, verge: 26, theme: 'frozen',
       pts: [[160, 860], [160, 200], [290, 130], [420, 220], [420, 700], [540, 810], [660, 700], [660, 220], [780, 130], [880, 220], [880, 840], [760, 930], [300, 930]],
       // the freezer door between aisles 2 and 3 (skips the iced bend), and spilled peas inside the top-right bend
-      shortcuts: [{ name: 'FREEZER DOOR', pts: [[420, 600], [450, 660], [540, 680], [630, 660], [660, 600]], width: 16, ter: 'ROAD', ai: .5 }, { name: 'SPILLED PEAS', pts: [[660, 285], [715, 238], [770, 276], [825, 238], [880, 285]], width: 22, ter: 'SAND', ai: 0 }],
+      shortcuts: [{ name: 'FREEZER DOOR', pts: [[420, 600], [450, 660], [540, 680], [630, 660], [660, 600]], width: 16, ter: 'ROAD', ai: .5 }, { name: 'SPILLED PEAS', pts: [[660, 340], [700, 268], [840, 268], [880, 340]], width: 22, ter: 'PEAS', ai: 0 }],
       patches: [[0, 0, 0, 'ICE', [290, 140]], [0, 0, 0, 'ICE', [540, 800]], [0, 0, 0, 'ICE', [780, 140]], [0, 0, 0, 'ICE', [520, 930]]],
-      boosts: [[300, 0], [1500, 10], [2700, -10], [3700, 0]], cones: [[3350, -18], [3410, 18], [3470, -18]] },
+      boxes: [600, 1900, 3000], boosts: [[300, 0], [1500, 10], [2700, -10], [3700, 0]], cones: [[3350, -18], [3410, 18], [3470, -18]] },
     { name: 'GARDEN CENTRE', size: 1024, width: 46, verge: 34, theme: 'garden',
       pts: [[220, 800], [180, 520], [260, 260], [480, 160], [700, 220], [860, 180], [920, 420], [760, 560], [870, 770], [700, 910], [480, 860], [380, 700]],
       // a path through the greenhouse inside the big right-hand bulge, and a potting-soil cut at the bottom-right
       shortcuts: [{ name: 'GREENHOUSE', pts: [[800, 210], [826, 300], [800, 380], [826, 460], [790, 540]], width: 15, ter: 'ROAD', ai: .5 }, { name: 'POTTING SOIL', pts: [[862, 600], [760, 760], [660, 912]], width: 22, ter: 'SAND', ai: 0 }],
       patches: [[0, 0, 0, 'SAND', [300, 260]], [0, 0, 0, 'SAND', [620, 900]]],
-      boosts: [[150, 0], [700, 12], [1900, -12]], cones: [[500, -20], [560, 18], [620, -20]] },
+      boxes: [400, 1300, 2150], boosts: [[150, 0], [700, 12], [1900, -12]], cones: [[500, -20], [560, 18], [620, -20]] },
   ];
   function spline(pts, step) {   // closed Catmull-Rom, resampled every `step` units: [{x, y, dx, dy, s}]
     const raw = [], n = pts.length;
@@ -72,7 +72,7 @@
     const seg = (pts, f) => { for (let i = 0; i + 1 < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[i + 1], d = Math.hypot(bx - ax, by - ay); for (let t = 0; t <= d; t += 1.5) f(ax + (bx - ax) * t / d, ay + (by - ay) * t / d); } };
     for (const sc of def.shortcuts || []) {
       if (sc.ter === 'ROAD') { seg(sc.pts, (x, y) => stamp(x, y, sc.width + 4, T.CURB, T.CURB, Math.hypot(x, y))); seg(sc.pts, (x, y) => stamp(x, y, sc.width, T.ROAD)); }
-      else seg(sc.pts, (x, y) => stamp(x, y, sc.width, T.SAND, T.CURB));
+      else seg(sc.pts, (x, y) => stamp(x, y, sc.width, T[sc.ter], T.CURB));
     }
     for (const [, , , kind, [px, py]] of def.patches || []) stamp(px, py, 40, T[kind], undefined);
     for (const [s0, off] of def.boosts || []) { const p = at(s0); for (let a = -12; a <= 12; a += 1) stamp(p.x + p.dx * a - p.dy * off, p.y + p.dy * a + p.dx * off, 9, T.BOOST); }
@@ -86,6 +86,7 @@
       else if (t === T.START) c = ((x >> 3) + (y >> 3)) & 1 ? rgb(250, 250, 250) : rgb(30, 30, 40);
       else if (t === T.GRASS) c = (r() < .5) ? theme.grass : theme.grass2;
       else if (t === T.SAND) c = r() < .5 ? rgb(214, 180, 120) : rgb(200, 166, 108);
+      else if (t === T.PEAS) c = r() < .35 ? rgb(90, 190, 70) : r() < .5 ? rgb(70, 160, 56) : rgb(200, 220, 230);
       else if (t === T.ICE) c = ((x + y) >> 3) & 1 ? rgb(214, 240, 255) : rgb(190, 228, 250);
       else if (t === T.BOOST) c = ((x + y) >> 2) & 1 ? rgb(255, 210, 40) : rgb(255, 120, 30);
       else c = ((x >> 5) + (y >> 5)) & 1 ? theme.wall : theme.wall2;
@@ -96,7 +97,11 @@
       const a = near(sc.pts[0]), b = near(sc.pts[sc.pts.length - 1]), path = []; seg(sc.pts, (x, y) => { const q = path[path.length - 1]; if (!q || Math.hypot(q.x - x, q.y - y) >= 2) path.push({ x, y }); });
       for (let i = 0; i < path.length; i++) { const q = path[Math.min(path.length - 1, i + 1)], o = path[Math.max(0, i - 1)], d = Math.hypot(q.x - o.x, q.y - o.y) || 1; path[i].dx = (q.x - o.x) / d; path[i].dy = (q.y - o.y) / d; }
       return { ...sc, ia: a, ib: b, path, skip: ((line[b].s - line[a].s) % line.L + line.L) % line.L }; });
-    return { def, N, ter, sAt, col, line, L: line.L, cones, shortcuts };
+    const boxes = []; for (const s0 of def.boxes || []) { const p = at(s0); for (const off of [-24, -8, 8, 24]) boxes.push({ x: p.x - p.dy * off, y: p.y + p.dx * off, back: 0 }); }
+    // lap checkpoints near a third and two thirds of the way, moved out of any stretch a shortcut skips
+    const inSkip = x => shortcuts.some(sc => { const a = line[sc.ia].s, d = ((x - a) % line.L + line.L) % line.L; return d < sc.skip + 20; });
+    const cps = [1 / 3, 2 / 3].map(f => { for (let d = 0; d < line.L / 4; d += 10) for (const x of [line.L * f + d, line.L * f - d]) if (!inSkip(x)) return x; return line.L * f; });
+    return { def, N, ter, sAt, col, line, L: line.L, cones, shortcuts, boxes, cps };
   }
   const THEMES = {
     carpark: { road: rgb(92, 96, 108), road2: rgb(86, 90, 102), curbA: rgb(230, 70, 80), curbB: rgb(245, 245, 245), grass: rgb(96, 170, 90), grass2: rgb(88, 160, 84), wall: rgb(60, 66, 90), wall2: rgb(54, 60, 84),
@@ -140,6 +145,11 @@
   // ---------- sprites: small procedural pixel canvases, drawn as billboards ----------
   function spr(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); draw(g); return c; }
   const SPR = {
+    bag: spr(14, 14, g => { g.fillStyle = '#ffd23a'; g.fillRect(1, 3, 12, 11); g.fillStyle = '#e8a020'; g.fillRect(1, 12, 12, 2); g.strokeStyle = '#a06a10'; g.strokeRect(4.5, .5, 5, 4); g.fillStyle = '#3a2a6a'; g.font = 'bold 10px monospace'; g.fillText('?', 4, 12); }),
+    banana: spr(10, 6, g => { g.fillStyle = '#ffe14a'; g.fillRect(0, 2, 10, 3); g.fillStyle = '#c8a020'; g.fillRect(0, 2, 2, 2); g.fillRect(8, 2, 2, 2); }),
+    melon: spr(10, 10, g => { g.fillStyle = '#3a9a3a'; g.beginPath(); g.arc(5, 5, 5, 0, 7); g.fill(); g.fillStyle = '#8ad08a'; g.fillRect(2, 2, 1, 6); g.fillRect(5, 1, 1, 8); g.fillRect(8, 2, 1, 6); }),
+    trolley: spr(14, 10, g => { g.fillStyle = '#333'; g.fillRect(1, 8, 2, 2); g.fillRect(11, 8, 2, 2); g.fillStyle = '#c8d0dc'; g.fillRect(0, 2, 14, 6); g.fillStyle = '#e83a3a'; g.fillRect(0, 0, 14, 2); }),
+    sign: spr(10, 14, g => { g.fillStyle = '#ffd23a'; g.beginPath(); g.moveTo(5, 0); g.lineTo(10, 14); g.lineTo(0, 14); g.fill(); g.fillStyle = '#222'; g.fillRect(4, 5, 2, 5); }),
     lamp: spr(6, 40, g => { g.fillStyle = '#5a6070'; g.fillRect(2, 4, 2, 36); g.fillStyle = '#fff6c0'; g.fillRect(0, 0, 6, 5); }),
     cone: spr(10, 12, g => { g.fillStyle = '#ff8a2a'; g.beginPath(); g.moveTo(5, 0); g.lineTo(9, 11); g.lineTo(1, 11); g.fill(); g.fillStyle = '#fff'; g.fillRect(3, 5, 4, 2); g.fillStyle = '#333'; g.fillRect(0, 11, 10, 1); }),
     tree: spr(20, 30, g => { g.fillStyle = '#6a4a2a'; g.fillRect(8, 18, 4, 12); g.fillStyle = '#3a9a4a'; g.beginPath(); g.arc(10, 11, 10, 0, 7); g.fill(); g.fillStyle = '#5ab85a'; g.beginPath(); g.arc(7, 8, 5, 0, 7); g.fill(); }),
@@ -188,7 +198,7 @@
 
   // ---------- driving: one pure step for every kart, player and AI alike ----------
   // terrain: how fast you can go on it, and how much sideways grip it gives
-  const SURF = { [T.ROAD]: [1, 1], [T.START]: [1, 1], [T.CURB]: [.95, 1], [T.BOOST]: [1, 1], [T.GRASS]: [.5, .7], [T.SAND]: [.45, .6], [T.ICE]: [1, .12] };
+  const SURF = { [T.ROAD]: [1, 1], [T.START]: [1, 1], [T.CURB]: [.95, 1], [T.BOOST]: [1, 1], [T.GRASS]: [.5, .7], [T.SAND]: [.45, .6], [T.PEAS]: [.36, .65], [T.ICE]: [1, .12] };
   const BASE = { top: 150, accel: 95, turn: 2.8, grip: 7, weight: 1 };
   const terrainAt = (trk, x, y) => { const ix = x | 0, iy = y | 0; return ix < 0 || iy < 0 || ix >= trk.N || iy >= trk.N ? T.WALL : trk.ter[iy * trk.N + ix]; };
   function newKart(x, y, a, stats) { return { x, y, a, vx: 0, vy: 0, st: { ...BASE, ...stats }, drift: 0, charge: 0, boost: 0, bump: 0, ter: T.ROAD, spin: 0 }; }
@@ -200,6 +210,8 @@
     const ter = k.ter = terrainAt(trk, k.x, k.y); let [sm, gm] = SURF[ter] || [1, 1];
     if (st.trait === 'offroad' && sm < 1) sm = Math.max(sm, .7);
     if (k.boost > 0) sm = Math.max(sm, 1);   // a boost carries you over the rough stuff
+    if (k.slow > 0) sm *= .7;
+    if (S.puddles && S.puddles.some(p => Math.hypot(k.x - p.x, k.y - p.y) < p.r)) gm = Math.min(gm, .1);
     if (st.trait === 'slick' && gm < 1) gm = Math.min(1, gm * 2.5);
     if (ter === T.BOOST) k.boost = Math.max(k.boost, st.trait === 'pads' ? 1.05 : .7);
     if (st.trait === 'draft' && S.karts.some(o => o !== k && (() => { const dx = o.x - k.x, dy = o.y - k.y, d = Math.hypot(dx, dy); return d > 8 && d < 45 && (dx * fx + dy * fy) / d > .93; })())) sm *= 1.07;
@@ -250,6 +262,69 @@
   }
 
   // ---------- state ----------
+  // ---------- items: mystery bags give one item; the odds lean on where you are in the race ----------
+  const ITEMS = {
+    coffee: { name: 'TURBO COFFEE', icon: '☕' }, espresso: { name: 'TRIPLE ESPRESSO', icon: '☕☕☕' }, banana: { name: 'BANANA PEEL', icon: '🍌' },
+    melon: { name: 'ROLLING MELON', icon: '🍉' }, trolley: { name: 'RUNAWAY TROLLEY', icon: '🛒' }, sign: { name: 'WET FLOOR', icon: '⚠️' }, tannoy: { name: 'CLEAN-UP ON AISLE 5', icon: '📢' },
+  };
+  // weights per item for 1st..8th place: leaders get defence, the back gets speed and the announcement
+  const ODDS = {
+    banana: [40, 25, 18, 12, 8, 5, 2, 0], sign: [25, 20, 14, 10, 6, 4, 2, 0], melon: [30, 30, 28, 24, 18, 12, 8, 6], coffee: [5, 15, 22, 26, 28, 28, 26, 22],
+    trolley: [0, 10, 18, 22, 24, 24, 22, 20], espresso: [0, 0, 0, 6, 12, 18, 24, 28], tannoy: [0, 0, 0, 0, 4, 9, 16, 24],
+  };
+  function rollItem(place, r) { const ks = Object.keys(ODDS), tot = ks.reduce((a, k) => a + ODDS[k][place - 1], 0); let x = r() * tot; for (const k of ks) { x -= ODDS[k][place - 1]; if (x <= 0) return k; } return 'coffee'; }
+  // use an item: boosts on you, things dropped behind you, things thrown ahead
+  function useItem(k) {
+    const it = k.item; if (!it || k.roll > 0) return; const fx = Math.cos(k.a), fy = Math.sin(k.a);
+    if (it === 'coffee') { k.boost = Math.max(k.boost, 1.5); k.item = null; }
+    else if (it === 'espresso') { k.boost = Math.max(k.boost, 1.5); k.uses = (k.uses || 3) - 1; if (k.uses <= 0) { k.item = null; k.uses = 0; } }
+    else if (it === 'banana') { S.drops.push({ kind: 'banana', x: k.x - fx * 12, y: k.y - fy * 12, owner: k, t: S.clock }); k.item = null; }
+    else if (it === 'sign') { S.puddles.push({ x: k.x - fx * 18, y: k.y - fy * 18, r: 16, until: S.clock + 12 }); k.item = null; }
+    else if (it === 'melon') { S.shots.push({ kind: 'melon', x: k.x + fx * 12, y: k.y + fy * 12, vx: fx * 240 + k.vx * .3, vy: fy * 240 + k.vy * .3, owner: k, life: 6, bounces: 3 }); k.item = null; }
+    else if (it === 'trolley') { const ahead = S.karts.filter(o => o !== k && !o.done && place(o) === place(k) - 1)[0]; S.shots.push({ kind: 'trolley', x: k.x + fx * 12, y: k.y + fy * 12, vx: fx * 230, vy: fy * 230, owner: k, target: ahead || null, li: k.li, life: 10, bounces: 0 }); k.item = null; }
+    else if (it === 'tannoy') { for (const o of S.karts) if (o !== k && place(o) < place(k)) { o.slow = 2.5; o.spin = Math.max(o.spin, .35); } S.flashMsg = { text: '📢 CLEAN-UP ON AISLE 5!', t: S.t }; k.item = null; }
+    k.used = (k.used || 0) + 1;
+  }
+  function hit(k, why) { if (k.boost > 0 && why !== 'tannoy') { k.boost = 0; } k.spin = Math.max(k.spin, 1.1); k.drift = 0; k.charge = 0; k.hits = (k.hits || 0) + 1; if (k === S.player) S.flashMsg = { text: why, t: S.t }; }
+  function items(dt) {
+    for (const k of S.karts) { if (k.roll > 0) { k.roll -= dt; if (k.roll <= 0) k.item = k.pending; } k.slow = Math.max(0, (k.slow || 0) - dt); }
+    for (const b of S.trk.boxes) { if (b.back > S.clock) continue; for (const k of S.karts) if (Math.hypot(k.x - b.x, k.y - b.y) < KR + 5) { b.back = S.clock + 3; if (!k.item && !(k.roll > 0)) { k.pending = rollItem(place(k), S.rng); k.roll = 1; } break; } }
+    // projectiles move in short substeps (no tunnelling), bounce or die on walls, and spin whoever they touch
+    for (const sh of S.shots) {
+      sh.life -= dt; const steps = Math.max(1, Math.ceil(Math.hypot(sh.vx, sh.vy) * dt / 2));
+      if (sh.kind === 'trolley') {   // follow the track, then home in on the target once close
+        const L = S.trk.line, n = L.length; let bi = sh.li, bd = 1e9; for (let j = -10; j <= 20; j++) { const q = L[(sh.li + j + n) % n], d = (q.x - sh.x) ** 2 + (q.y - sh.y) ** 2; if (d < bd) { bd = d; bi = (sh.li + j + n) % n; } } sh.li = bi;
+        const tg = sh.target && !sh.target.done && Math.hypot(sh.target.x - sh.x, sh.target.y - sh.y) < 110 ? sh.target : null, q = tg || L[(sh.li + 12) % n];
+        const want = Math.atan2(q.y - sh.y, q.x - sh.x), cur = Math.atan2(sh.vy, sh.vx), na = cur + clamp(wrapA(want - cur), -5 * dt, 5 * dt);
+        sh.vx = Math.cos(na) * 230; sh.vy = Math.sin(na) * 230;
+      }
+      for (let i = 0; i < steps && sh.life > 0; i++) {
+        const nx = sh.x + sh.vx * dt / steps, ny = sh.y + sh.vy * dt / steps;
+        if (terrainAt(S.trk, nx, ny) === T.WALL) { if (sh.bounces-- > 0) { if (terrainAt(S.trk, nx, sh.y) === T.WALL) sh.vx = -sh.vx; if (terrainAt(S.trk, sh.x, ny) === T.WALL) sh.vy = -sh.vy; } else sh.life = 0; continue; }
+        sh.x = nx; sh.y = ny;
+        for (const k of S.karts) if ((k !== sh.owner || sh.age > .4) && Math.hypot(k.x - sh.x, k.y - sh.y) < KR + 4) { hit(k, sh.kind === 'melon' ? '🍉 MELON!' : '🛒 RUNAWAY TROLLEY!'); sh.life = 0; break; }
+      }
+      sh.age = (sh.age || 0) + dt;
+    }
+    S.shots = S.shots.filter(sh => sh.life > 0);
+    for (const d of S.drops) for (const k of S.karts) if (!d.gone && (k !== d.owner || S.clock - d.t > .8) && Math.hypot(k.x - d.x, k.y - d.y) < KR + 3) { hit(k, '🍌 BANANA!'); d.gone = true; }
+    S.drops = S.drops.filter(d => !d.gone);
+    S.puddles = S.puddles.filter(p => p.until > S.clock);
+  }
+  // AI item use: simple, readable rules
+  function aiItem(k) {
+    if (!k.item || k.roll > 0) return; const fx = Math.cos(k.a), fy = Math.sin(k.a), pl = place(k);
+    const behind = S.karts.some(o => o !== k && Math.hypot(o.x - k.x, o.y - k.y) < 60 && ((o.x - k.x) * fx + (o.y - k.y) * fy) < 0);
+    const aheadIn = S.karts.some(o => { const dx = o.x - k.x, dy = o.y - k.y, d = Math.hypot(dx, dy); return o !== k && d < 150 && (dx * fx + dy * fy) / d > .97; });
+    const it = k.item;
+    if ((it === 'coffee' || it === 'espresso') && (k.route || Math.abs(aiInput(k, S.trk).steer) < .25)) useItem(k);
+    else if ((it === 'banana' || it === 'sign') && behind) useItem(k);
+    else if (it === 'melon' && aheadIn) useItem(k);
+    else if (it === 'trolley' && pl > 1) useItem(k);
+    else if (it === 'tannoy') useItem(k);
+    else if (S.clock - (k.heldSince || (k.heldSince = S.clock)) > 12) { useItem(k); k.heldSince = 0; }
+  }
+
   // ---------- race: progress along the centreline, laps through checkpoints, AI, bumps ----------
   const LAPS = 3, NK = 8, KR = 6;   // laps, karts, kart radius
   // nearest centreline sample: search near the last one, fall back to a full search when far off the line
@@ -265,13 +340,19 @@
   function track(k, trk) {
     const L = trk.L, i = nearest(trk, k), s = trk.line[i].s;
     let ds = s - k.s; if (ds < -L / 2) ds += L; if (ds > L / 2) ds -= L;
-    if (ds > 600 || ds < -300) return;   // too far to be one move: ignore (the kart is off in the weeds)
+    if (ds > 800 || ds < -300) return;   // too far to be one move: ignore (the kart is off in the weeds); shortcuts skip under 600
     k.li = i;
     const prev = k.s; k.s = s;
-    for (const [c, frac] of [[0, 1 / 3], [1, 2 / 3]]) { const cs = L * frac; if (!k.cp[c] && ds > 0 && ((prev < cs && s >= cs) || (prev > s && (prev < cs || s >= cs)))) k.cp[c] = true; }
+    for (const [c, cs] of trk.cps.map((x, i) => [i, x])) { if (!k.cp[c] && ds > 0 && ((prev < cs && s >= cs) || (prev > s && (prev < cs || s >= cs)))) k.cp[c] = true; }
     if (ds > 0 && prev > s) { if (k.cp[0] && k.cp[1]) { k.lap++; k.cp = [false, false]; if (k.lap >= LAPS && !k.done) { k.done = true; k.finishT = S.clock; S.order.push(k); } } else k.lap += 0; }
-    if (ds < 0 && prev < s) { /* backed over the line: nothing counts until you come forward again */ }
+    if (ds < 0 && prev < s && !k.done) { k.lap--; k.cp = [true, true]; }   // backed over the line: un-count the lap; driving forward over it counts it again
     k.prog = k.lap * L + k.s;
+  }
+  // AI: swerve round cones and dropped peels in the next stretch (closer and more central = harder swerve)
+  function avoid(k, trk) {
+    const fx = Math.cos(k.a), fy = Math.sin(k.a); let bias = 0;
+    for (const o of [...trk.cones.filter(c => !(c.down > S.clock)), ...(S.drops || [])]) { const dx = o.x - k.x, dy = o.y - k.y, fz = dx * fx + dy * fy, lat = -dx * fy + dy * fx; if (fz > 0 && fz < 70 && Math.abs(lat) < 14) bias += -Math.sign(lat || 1) * 1.2 * (1 - fz / 70) * (1 - Math.abs(lat) / 14); }
+    return bias;
   }
   // AI: steer at a point ahead on the centreline, shifted to its own lane; drift into tight corners
   function aiInput(k, trk) {
@@ -281,13 +362,13 @@
       k.route.i = j;
       if (j >= P.length - 4) { k.li = trk.shortcuts[k.route.sc].ib; k.route = null; }
       else {
-        const q = P[Math.min(P.length - 1, j + Math.round((10 + v * .16) / 2))], err = wrapA(Math.atan2(q.y - k.y, q.x - k.x) - k.a);
+        const q = P[Math.min(P.length - 1, j + Math.max(2, Math.round((10 + v * .16) / 2)))], err = wrapA(Math.atan2(q.y - k.y, q.x - k.x) - k.a);
         let vmax = 1e9; const h0 = Math.atan2(P[j].dy, P[j].dx);
         for (let m = 5; m <= 60 && j + m < P.length; m += 5) { const ang = Math.abs(wrapA(Math.atan2(P[j + m].dy, P[j + m].dx) - h0)); if (ang > .05) vmax = Math.min(vmax, (m * 2 / ang) * k.st.turn * .8 + m * 1.2); }
         return { steer: clamp(err * 3, -1, 1), gas: v < vmax ? 1 : 0, brake: v > vmax + 30 && k.boost <= 0 ? 1 : 0, drift: false };
       }
     }
-    const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.round((14 + v * .2) / 2);
+    const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.max(3, Math.round((14 + v * .2) / 2));
     const p = L[(k.li + ahead) % n], q = L[(k.li + ahead * 2) % n], lane = (k.ai ? k.ai.lane : 0) * trk.def.width * .45;
     const tx = p.x - p.dy * lane, ty = p.y + p.dx * lane, want = Math.atan2(ty - k.y, tx - k.x), err = wrapA(want - k.a);
     const bend = Math.abs(wrapA(Math.atan2(q.dy, q.dx) - Math.atan2(p.dy, p.dx)));
@@ -296,12 +377,12 @@
     for (let j = 5; j <= 70; j += 5) { const pj = L[(k.li + j) % n], ang = Math.abs(wrapA(Math.atan2(pj.dy, pj.dx) - h0)); if (ang > .05) vmax = Math.min(vmax, (j * 2 / ang) * k.st.turn * .8 * (k.ai ? k.ai.brave : 1) + j * 1.2); }
     const turnDir = Math.sign(wrapA(Math.atan2(q.dy, q.dx) - Math.atan2(L[k.li].dy, L[k.li].dx)));
     // drift only into the corner (same side as the bend and the steering), and let go once it straightens
-    const steer = clamp(err * 3, -1, 1), drift = k.drift ? (k.drift === turnDir && bend > .2) : (bend > .9 && v > k.st.top * .6 && Math.sign(steer) === turnDir && Math.abs(steer) > .4);
+    const steer = clamp(err * 3 + avoid(k, trk), -1, 1), drift = k.drift ? (k.drift === turnDir && bend > .2 && Math.sign(steer) === k.drift) : (bend > .9 && v > k.st.top * .6 && Math.sign(steer) === turnDir && Math.abs(steer) > .4);
     return { steer, gas: v < vmax ? 1 : 0, brake: v > vmax + 30 ? 1 : 0, drift };
   }
   // stuck: no progress for 3 s puts the kart back on the line where it was (progress kept, placement fixed)
   function unstick(k, trk) {
-    if (S.clock - (k.lastProgT || 0) > 3) { const p = trk.line[k.li || 0]; Object.assign(k, { x: p.x, y: p.y, a: Math.atan2(p.dy, p.dx), vx: 0, vy: 0, drift: 0, lastProgT: S.clock }); k.rescues = (k.rescues || 0) + 1; }
+    if (S.clock - (k.lastProgT || 0) > 3) { const p = trk.line[k.li || 0]; Object.assign(k, { x: p.x, y: p.y, a: Math.atan2(p.dy, p.dx), vx: 0, vy: 0, drift: 0, route: null, lastProgT: S.clock }); k.rescues = (k.rescues || 0) + 1; }
     if (k.prog > (k.bestProg || -1e9) + 5) { k.bestProg = k.prog; k.lastProgT = S.clock; }
   }
   // kart-kart bumps: push apart, the lighter one moves more, and swap some speed along the contact line
@@ -331,6 +412,8 @@
         ai: g === NK - 1 ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
       k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
     }
+    for (const c of S.trk.cones) c.down = 0;
+    S.shots = []; S.drops = []; S.puddles = []; S.flashMsg = null; for (const b of S.trk.boxes) b.back = 0;
     S.rng = mkRng(seed * 131 + ti * 7); S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
   }
   // a shopper seen from behind: body, head, and a hat that says who it is
@@ -383,11 +466,13 @@
       const inp = k.ai ? aiInput(k, S.trk) : (S.auto ? aiInput(k, S.trk) : k.done ? { steer: 0, gas: 0, brake: 1, drift: false } : S.inp);
       stepKart(k, k.done && k.ai ? { ...inp, gas: 1 } : inp, S.trk, dt);
     }
+    items(dt); for (const k of S.karts) if (k.ai || S.auto) aiItem(k);
     bumps(S.karts);
-    for (const k of S.karts) for (const c of S.trk.cones) { const dx = k.x - c.x, dy = k.y - c.y, d = Math.hypot(dx, dy); if (d < KR + 3 && d > 0) { const nx = dx / d, ny = dy / d, vn = k.vx * nx + k.vy * ny; k.x = c.x + nx * (KR + 3); k.y = c.y + ny * (KR + 3); if (vn < 0) { k.vx -= 1.5 * vn * nx; k.vy -= 1.5 * vn * ny; k.vx *= .7; k.vy *= .7; k.bump = .3; } } }
+    // cones get knocked flat (and stood back up a few seconds later); hitting one costs some speed
+    for (const k of S.karts) for (const c of S.trk.cones) if (!(c.down > S.clock) && Math.hypot(k.x - c.x, k.y - c.y) < KR + 3) { c.down = S.clock + 6; k.vx *= .75; k.vy *= .75; k.bump = .2; }
     for (const k of S.karts) { track(k, S.trk); unstick(k, S.trk); }
     if (S.player.done && !S.finishedAt) S.finishedAt = S.clock;
-    if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 30) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
+    if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 30) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => { k.est = true; k.finishT = S.clock + Math.max(0, LAPS * S.trk.L - k.prog) / 120; S.order.push(k); }); }
   }
   // ---------- select: pick a shopper and a vehicle ----------
   const CARD = (i) => ({ x: 22 + (i % 4) * 126, y: 200 + Math.floor(i / 4) * 160, w: 118, h: 150 });
@@ -410,7 +495,9 @@
     if (S.state === 'select') { drawSelect(ctx); return; }
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     sky(cam, theme); ground(S.trk, cam, theme);
-    billboards(cam, [...S.scenery, ...S.trk.cones.map(c => ({ x: c.x, y: c.y, img: SPR.cone, size: 8 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
+    for (const p of S.puddles) { const q = project(cam, p.x, p.y); if (q) { lctx.fillStyle = '#7ac8ff99'; lctx.beginPath(); lctx.ellipse(q.x, q.y, p.r * q.s, p.r * q.s * .35, 0, 0, 7); lctx.fill(); } }
+    billboards(cam, [...S.scenery, ...S.trk.cones.filter(c => !(c.down > S.clock)).map(c => ({ x: c.x, y: c.y, img: SPR.cone, size: 8 })), ...S.trk.boxes.filter(b => b.back <= S.clock).map(b => ({ x: b.x, y: b.y, img: SPR.bag, size: 9, lift: 2 + Math.sin(S.t * 4 + b.x) })),
+      ...S.drops.map(d => ({ x: d.x, y: d.y, img: SPR.banana, size: 3 })), ...S.shots.map(sh => ({ x: sh.x, y: sh.y, img: SPR[sh.kind], size: sh.kind === 'melon' ? 6 : 7 })), ...S.puddles.map(p => ({ x: p.x, y: p.y, img: SPR.sign, size: 9 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
     const pk = S.player, pp = project(cam, pk.x, pk.y);
     if (pp && pk.drift) { const c = pk.charge >= 2 ? '#ff9a2a' : pk.charge >= 1 ? '#4ab8ff' : '#ffffff'; lctx.fillStyle = c; for (let i = 0; i < 4; i++) lctx.fillRect(Math.round(pp.x - 14 * pk.drift - 2 + (S.t * 60 + i * 7) % 6), Math.round(pp.y - 2 - i), 2, 2); }
     if (pp && pk.boost > 0) { lctx.fillStyle = (S.t * 20 | 0) % 2 ? '#ffd23a' : '#ff6a2a'; lctx.fillRect(Math.round(pp.x - 3), Math.round(pp.y), 6, 3); }
@@ -420,17 +507,21 @@
     ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff88'; ctx.fillText('◀ STEER ▶', PAD.x + PAD.w / 2, PAD.y + PAD.h - 16);
     ctx.fillStyle = S.inp.drift ? '#ff9a2a' : '#ffffff14'; Draw.rr(ctx, DRIFTB.x, DRIFTB.y, DRIFTB.w, DRIFTB.h, 24); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '900 26px system-ui'; ctx.fillText('DRIFT', DRIFTB.x + DRIFTB.w / 2, DRIFTB.y + DRIFTB.h / 2 + 8);
     ctx.font = '800 22px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.fillText(`${Math.round(Math.max(0, speedOf(S.player)) * .6)} km/h`, 24, LH * SCALE + 50);
+    { const k = S.player, show = k.roll > 0 ? Object.keys(ITEMS)[Math.floor(S.t * 14) % 7] : k.item; ctx.fillStyle = k.item ? '#4a8aff' : '#ffffff14'; Draw.rr(ctx, ITEMB.x, ITEMB.y, ITEMB.w, ITEMB.h, 20); ctx.fill();
+      ctx.textAlign = 'center'; ctx.font = "44px 'Noto Color Emoji', sans-serif"; if (show) ctx.fillText(ITEMS[show].icon.slice(0, 2), ITEMB.x + ITEMB.w / 2, ITEMB.y + 62); ctx.font = '800 12px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(show ? ITEMS[show].name + (show === 'espresso' && k.item ? ` x${k.uses || 3}` : '') : 'ITEM', ITEMB.x + ITEMB.w / 2, ITEMB.y + 98); }
+    if (S.flashMsg && S.t - S.flashMsg.t < 1.5) Draw.bigText(ctx, S.flashMsg.text, W / 2, 200, 30, '#fff', '#000');
     const pl = place(S.player); Draw.bigText(ctx, `${pl}${['ST', 'ND', 'RD'][pl - 1] || 'TH'}`, W - 80, 90, 54, '#ffe14a', '#000');
     Draw.bigText(ctx, `LAP ${clamp(S.player.lap + 1, 1, LAPS)}/${LAPS}`, 90, 90, 30, '#fff', '#000');
     if (S.state === 'count') { const n = 3 - Math.floor(S.t - S.t0); Draw.bigText(ctx, n > 0 ? String(n) : 'GO!', W / 2, 300, 120, n > 0 ? '#fff' : '#4ad05a', '#000'); }
-    if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${k === S.player ? 'YOU' : 'CPU ' + (k.id + 1)}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.done ? k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
+    if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${k === S.player ? 'YOU' : 'CPU ' + (k.id + 1)}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.finishT ? (k.est ? '~' : '') + k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
   }
   // touch: the bottom panel. Drag left/right on the steering pad; hold DRIFT. (One pointer each side.)
-  const PAD = { x: 20, y: LH * SCALE + 150, w: 300, h: 190 }, DRIFTB = { x: 340, y: LH * SCALE + 150, w: 180, h: 190 };
+  const PAD = { x: 20, y: LH * SCALE + 150, w: 300, h: 190 }, DRIFTB = { x: 340, y: LH * SCALE + 150, w: 180, h: 190 }, ITEMB = { x: 340, y: LH * SCALE + 30, w: 180, h: 110 };
   const inB = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
   let padDown = false;
   function onPointer(type, x, y) {
     if (S.state === 'select') { if (type !== 'down') return; CHARS.forEach((_, i) => { if (inB(CARD(i), x, y)) { S.pick.c = i; Audio.sfx('select'); } }); VEHS.forEach((_, i) => { if (inB(VCARD(i), x, y)) { S.pick.v = i; Audio.sfx('select'); } }); if (inB(GOB, x, y)) startRace(); return; }
+    if (type === 'down' && inB(ITEMB, x, y)) { useItem(S.player); return; }
     if (type === 'down' && inB(DRIFTB, x, y)) { S.inp.drift = true; return; }
     if (type === 'down' && inB(PAD, x, y)) padDown = true;
     if (padDown && (type === 'down' || type === 'move')) S.inp.steer = clamp((x - (PAD.x + PAD.w / 2)) / (PAD.w * .4), -1, 1);
@@ -443,10 +534,24 @@
     S.inp.steer = (keys.ArrowRight || keys.d ? 1 : 0) - (keys.ArrowLeft || keys.a ? 1 : 0);
     S.inp.brake = keys.ArrowDown || keys.s ? 1 : 0;
     S.inp.drift = !!(keys[' '] || keys.Shift);
+    if (down && (key === 'x' || key === 'X' || key === 'e' || key === 'Enter') && S.state === 'race') useItem(S.player);
   }
 
+  // test hook: time a solo kart from 40 samples before a shortcut to just past its exit, on the main line or through the cut
+  function timeShortcut(ti, si, cut, boost, lane = 0) {
+    load(ti, 1, { c: 4, v: 1 }); const t = S.trk, sc = t.shortcuts[si], n = t.line.length, k = S.player; S.karts = [k]; S.state = 'race';
+    const i0 = (sc.ia - 40 + n) % n, p0 = t.line[i0], off = lane * t.def.width * .45;
+    Object.assign(k, { x: p0.x - p0.dy * off, y: p0.y + p0.dx * off, a: Math.atan2(p0.dy, p0.dx), vx: p0.dx * 130, vy: p0.dy * 130, li: i0, ai: { lane, brave: 1 }, route: null });
+    const exitS = t.line[(sc.ib + 20) % n].s; let entered = false;
+    for (let st = 1; st < 1200; st++) {
+      if (!entered && ((sc.ia - k.li + n) % n) <= 2) { entered = true; if (cut) k.route = { sc: si, i: 0 }; if (boost) k.boost = 1.5; }
+      stepKart(k, aiInput(k, t), t, 1 / 60);
+      if (!k.route) { let b = k.li, bd = 1e9; for (let j = -30; j <= 30; j++) { const q = t.line[(k.li + j + n) % n], d = (q.x - k.x) ** 2 + (q.y - k.y) ** 2; if (d < bd) { bd = d; b = (k.li + j + n) % n; } } k.li = b; if (Math.abs(t.line[k.li].s - exitS) < 6) return st / 60; }
+    }
+    return 99;
+  }
   function startRace() { Audio.unlock(); Audio.sfx('start'); load(S.track || 0, S.seed || 1, S.pick); }
   load(0); S.state = 'select';
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { timeShortcut, hitKart: (k, w) => hit(k, w), ITEMS, ODDS, rollItem, useItem, mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();

@@ -596,6 +596,18 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `trolleydash-T${ti + 1}-results.png`) });
     check(race.state === 'results' && race.done === 8 && race.rescues <= 4 && race.skips.every(x => x < 600), `trolleydash ${race.name}: 8 karts finish 3 laps (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues); every shortcut skips under 600 units so laps count (${race.skips.join(', ')})`);
   }
+  const sc = await page.evaluate(() => { const g = window.__game, out = [];
+    for (let ti = 0; ti < 3; ti++) { g.load(ti, 1); g.S.trk.shortcuts.forEach((c, si) => out.push({ name: c.name, road: c.ter === 'ROAD', main: g.timeShortcut(ti, si, false, false), cut: g.timeShortcut(ti, si, true, false), mainB: g.timeShortcut(ti, si, false, true), cutB: g.timeShortcut(ti, si, true, true) })); }
+    return out; });
+  for (const c of sc) {
+    if (c.road) check(c.cut < c.main - .5, `trolleydash ${c.name} (alley): saves ${(c.main - c.cut).toFixed(2)} s on the main line`);
+    else check(c.cut > c.main - .1 && c.cutB < c.mainB - .2, `trolleydash ${c.name} (off-road): ${(c.cut - c.main).toFixed(2)} s slower without a boost, ${(c.mainB - c.cutB).toFixed(2)} s faster with a coffee`);
+  }
+  const it = await page.evaluate(() => { const g = window.__game, r = g.mkRng(5), counts = {}; for (const pl of [1, 8]) { counts[pl] = {}; for (let i = 0; i < 2000; i++) { const x = g.rollItem(pl, r); counts[pl][x] = (counts[pl][x] || 0) + 1; } }
+    g.load(0, 1); g.S.state = 'race'; const a = g.S.karts[0], b = g.S.karts[1]; b.x = a.x + Math.cos(a.a) * 40; b.y = a.y + Math.sin(a.a) * 40; b.vx = b.vy = 0; a.item = 'melon'; g.useItem(a); for (let i = 0; i < 40; i++) g.step(1);
+    return { first: counts[1], last: counts[8], hit: (b.hits || 0) > 0 }; });
+  check(!it.first.espresso && !it.first.tannoy && !it.last.banana && it.last.espresso > 300 && it.first.banana > 500 && it.hit,
+    `trolleydash items: 1st gets defence (${it.first.banana} peels in 2000), 8th gets speed (${it.last.espresso} espressos) and never a peel; a thrown melon spins the kart ahead`);
   const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
     for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
     const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints
