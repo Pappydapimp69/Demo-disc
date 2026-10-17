@@ -19,7 +19,22 @@
   // Features are placed by distance along the centreline (s) so they stay put when the shape is edited.
   const TRACKS = [
     { name: 'CAR PARK CIRCUIT', size: 1024, width: 44, verge: 30, theme: 'carpark',
-      pts: [[200, 820], [200, 300], [300, 180], [520, 170], [640, 280], [600, 440], [760, 520], [860, 420], [900, 640], [820, 860], [560, 900], [420, 760], [300, 880]] },
+      pts: [[200, 820], [200, 300], [300, 180], [520, 170], [640, 280], [600, 440], [760, 520], [860, 420], [900, 640], [820, 860], [560, 900], [420, 760], [300, 880]],
+      // the loading-bay alley under the notch, and a gravel cut inside the top-right bend
+      shortcuts: [{ name: 'LOADING BAY', pts: [[560, 888], [480, 910], [380, 910], [300, 880]], width: 16, ter: 'ROAD', ai: .5 }, { name: 'GRAVEL', pts: [[440, 168], [520, 270], [600, 420]], width: 20, ter: 'SAND', ai: 0 }],
+      boosts: [[250, 0], [1700, -14], [2050, 14]], cones: [[1950, -20], [2010, 18], [2070, -20]] },
+    { name: 'FROZEN FOODS', size: 1024, width: 44, verge: 26, theme: 'frozen',
+      pts: [[160, 860], [160, 200], [290, 130], [420, 220], [420, 700], [540, 810], [660, 700], [660, 220], [780, 130], [880, 220], [880, 840], [760, 930], [300, 930]],
+      // the freezer door between aisles 2 and 3 (skips the iced bend), and spilled peas inside the top-right bend
+      shortcuts: [{ name: 'FREEZER DOOR', pts: [[420, 600], [450, 660], [540, 680], [630, 660], [660, 600]], width: 16, ter: 'ROAD', ai: .5 }, { name: 'SPILLED PEAS', pts: [[660, 285], [715, 238], [770, 276], [825, 238], [880, 285]], width: 22, ter: 'SAND', ai: 0 }],
+      patches: [[0, 0, 0, 'ICE', [290, 140]], [0, 0, 0, 'ICE', [540, 800]], [0, 0, 0, 'ICE', [780, 140]], [0, 0, 0, 'ICE', [520, 930]]],
+      boosts: [[300, 0], [1500, 10], [2700, -10], [3700, 0]], cones: [[3350, -18], [3410, 18], [3470, -18]] },
+    { name: 'GARDEN CENTRE', size: 1024, width: 46, verge: 34, theme: 'garden',
+      pts: [[220, 800], [180, 520], [260, 260], [480, 160], [700, 220], [860, 180], [920, 420], [760, 560], [870, 770], [700, 910], [480, 860], [380, 700]],
+      // a path through the greenhouse inside the big right-hand bulge, and a potting-soil cut at the bottom-right
+      shortcuts: [{ name: 'GREENHOUSE', pts: [[800, 210], [826, 300], [800, 380], [826, 460], [790, 540]], width: 15, ter: 'ROAD', ai: .5 }, { name: 'POTTING SOIL', pts: [[862, 600], [760, 760], [660, 912]], width: 22, ter: 'SAND', ai: 0 }],
+      patches: [[0, 0, 0, 'SAND', [300, 260]], [0, 0, 0, 'SAND', [620, 900]]],
+      boosts: [[150, 0], [700, 12], [1900, -12]], cones: [[500, -20], [560, 18], [620, -20]] },
   ];
   function spline(pts, step) {   // closed Catmull-Rom, resampled every `step` units: [{x, y, dx, dy, s}]
     const raw = [], n = pts.length;
@@ -51,7 +66,16 @@
     for (const p of line) stamp(p.x, p.y, def.width, T.CURB, T.CURB, p.s);
     for (const p of line) stamp(p.x, p.y, def.width - 6, T.ROAD, undefined, p.s);
     // the start line: a checkered band across the road at s = 0
-    for (const p of line.slice(0, 6)) stamp(p.x, p.y, def.width - 6, T.START, undefined, p.s);
+    { const p = line[0]; for (let a = -4; a <= 4; a++) for (let o = -(def.width - 6); o <= def.width - 6; o++) { const x = Math.round(p.x + p.dx * a - p.dy * o), y = Math.round(p.y + p.dy * a + p.dx * o); if (x >= 0 && y >= 0 && x < N && y < N) ter[y * N + x] = T.START; } }
+    // shortcuts: a curb-edged alley or an off-road strip cut through whatever is there; they skip part of the lap
+    const at = s0 => line[Math.floor(((s0 % line.L) + line.L) % line.L / line.L * line.length) % line.length];
+    const seg = (pts, f) => { for (let i = 0; i + 1 < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[i + 1], d = Math.hypot(bx - ax, by - ay); for (let t = 0; t <= d; t += 1.5) f(ax + (bx - ax) * t / d, ay + (by - ay) * t / d); } };
+    for (const sc of def.shortcuts || []) {
+      if (sc.ter === 'ROAD') { seg(sc.pts, (x, y) => stamp(x, y, sc.width + 4, T.CURB, T.CURB, Math.hypot(x, y))); seg(sc.pts, (x, y) => stamp(x, y, sc.width, T.ROAD)); }
+      else seg(sc.pts, (x, y) => stamp(x, y, sc.width, T.SAND, T.CURB));
+    }
+    for (const [, , , kind, [px, py]] of def.patches || []) stamp(px, py, 40, T[kind], undefined);
+    for (const [s0, off] of def.boosts || []) { const p = at(s0); for (let a = -12; a <= 12; a += 1) stamp(p.x + p.dx * a - p.dy * off, p.y + p.dy * a + p.dx * off, 9, T.BOOST); }
     // colours
     const theme = THEMES[def.theme], r = mkRng(7);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -61,14 +85,26 @@
       else if (t === T.CURB) c = Math.floor(s / 10) & 1 ? theme.curbA : theme.curbB;
       else if (t === T.START) c = ((x >> 3) + (y >> 3)) & 1 ? rgb(250, 250, 250) : rgb(30, 30, 40);
       else if (t === T.GRASS) c = (r() < .5) ? theme.grass : theme.grass2;
+      else if (t === T.SAND) c = r() < .5 ? rgb(214, 180, 120) : rgb(200, 166, 108);
+      else if (t === T.ICE) c = ((x + y) >> 3) & 1 ? rgb(214, 240, 255) : rgb(190, 228, 250);
+      else if (t === T.BOOST) c = ((x + y) >> 2) & 1 ? rgb(255, 210, 40) : rgb(255, 120, 30);
       else c = ((x >> 5) + (y >> 5)) & 1 ? theme.wall : theme.wall2;
       col[i] = c;
     }
-    return { def, N, ter, sAt, col, line, L: line.L };
+    const cones = (def.cones || []).map(([s0, off]) => { const p = at(s0); return { x: p.x - p.dy * off, y: p.y + p.dx * off }; });
+    const shortcuts = (def.shortcuts || []).map(sc => { const near = ([x, y]) => line.reduce((b, p, i) => (p.x - x) ** 2 + (p.y - y) ** 2 < (line[b].x - x) ** 2 + (line[b].y - y) ** 2 ? i : b, 0);
+      const a = near(sc.pts[0]), b = near(sc.pts[sc.pts.length - 1]), path = []; seg(sc.pts, (x, y) => { const q = path[path.length - 1]; if (!q || Math.hypot(q.x - x, q.y - y) >= 2) path.push({ x, y }); });
+      for (let i = 0; i < path.length; i++) { const q = path[Math.min(path.length - 1, i + 1)], o = path[Math.max(0, i - 1)], d = Math.hypot(q.x - o.x, q.y - o.y) || 1; path[i].dx = (q.x - o.x) / d; path[i].dy = (q.y - o.y) / d; }
+      return { ...sc, ia: a, ib: b, path, skip: ((line[b].s - line[a].s) % line.L + line.L) % line.L }; });
+    return { def, N, ter, sAt, col, line, L: line.L, cones, shortcuts };
   }
   const THEMES = {
     carpark: { road: rgb(92, 96, 108), road2: rgb(86, 90, 102), curbA: rgb(230, 70, 80), curbB: rgb(245, 245, 245), grass: rgb(96, 170, 90), grass2: rgb(88, 160, 84), wall: rgb(60, 66, 90), wall2: rgb(54, 60, 84),
       sky: ['#9ad0ff', '#e8f4ff'], skyline: '#7a8ab8', fog: [214, 232, 250] },
+    frozen: { road: rgb(200, 214, 228), road2: rgb(188, 204, 220), curbA: rgb(70, 140, 230), curbB: rgb(245, 250, 255), grass: rgb(150, 210, 240), grass2: rgb(140, 200, 235), wall: rgb(230, 240, 250), wall2: rgb(210, 226, 244),
+      sky: ['#cfe6ff', '#ffffff'], skyline: '#a8c4e8', fog: [236, 244, 255] },
+    garden: { road: rgb(176, 150, 120), road2: rgb(166, 140, 112), curbA: rgb(250, 250, 240), curbB: rgb(120, 90, 60), grass: rgb(90, 160, 70), grass2: rgb(80, 150, 64), wall: rgb(40, 110, 50), wall2: rgb(34, 100, 44),
+      sky: ['#bfe8a8', '#fff8d0'], skyline: '#5a9a5a', fog: [240, 244, 214] },
   };
 
   // ---------- the view: Mode 7 ground + billboards into a low-res buffer ----------
@@ -163,6 +199,7 @@
     let vf = k.vx * fx + k.vy * fy, vl = k.vx * rx + k.vy * ry;
     const ter = k.ter = terrainAt(trk, k.x, k.y); let [sm, gm] = SURF[ter] || [1, 1];
     if (st.trait === 'offroad' && sm < 1) sm = Math.max(sm, .7);
+    if (k.boost > 0) sm = Math.max(sm, 1);   // a boost carries you over the rough stuff
     if (st.trait === 'slick' && gm < 1) gm = Math.min(1, gm * 2.5);
     if (ter === T.BOOST) k.boost = Math.max(k.boost, st.trait === 'pads' ? 1.05 : .7);
     if (st.trait === 'draft' && S.karts.some(o => o !== k && (() => { const dx = o.x - k.x, dy = o.y - k.y, d = Math.hypot(dx, dy); return d > 8 && d < 45 && (dx * fx + dy * fy) / d > .93; })())) sm *= 1.07;
@@ -238,6 +275,18 @@
   }
   // AI: steer at a point ahead on the centreline, shifted to its own lane; drift into tight corners
   function aiInput(k, trk) {
+    if (k.route) {   // following a shortcut's own path, with the same corner-speed planning as the main line
+      const P = trk.shortcuts[k.route.sc].path, v = speedOf(k);
+      let j = k.route.i, bd = 1e9; for (let i = k.route.i; i < Math.min(P.length, k.route.i + 25); i++) { const d = (P[i].x - k.x) ** 2 + (P[i].y - k.y) ** 2; if (d < bd) { bd = d; j = i; } }
+      k.route.i = j;
+      if (j >= P.length - 4) { k.li = trk.shortcuts[k.route.sc].ib; k.route = null; }
+      else {
+        const q = P[Math.min(P.length - 1, j + Math.round((10 + v * .16) / 2))], err = wrapA(Math.atan2(q.y - k.y, q.x - k.x) - k.a);
+        let vmax = 1e9; const h0 = Math.atan2(P[j].dy, P[j].dx);
+        for (let m = 5; m <= 60 && j + m < P.length; m += 5) { const ang = Math.abs(wrapA(Math.atan2(P[j + m].dy, P[j + m].dx) - h0)); if (ang > .05) vmax = Math.min(vmax, (m * 2 / ang) * k.st.turn * .8 + m * 1.2); }
+        return { steer: clamp(err * 3, -1, 1), gas: v < vmax ? 1 : 0, brake: v > vmax + 30 && k.boost <= 0 ? 1 : 0, drift: false };
+      }
+    }
     const L = trk.line, n = L.length, v = speedOf(k), ahead = Math.round((14 + v * .2) / 2);
     const p = L[(k.li + ahead) % n], q = L[(k.li + ahead * 2) % n], lane = (k.ai ? k.ai.lane : 0) * trk.def.width * .45;
     const tx = p.x - p.dy * lane, ty = p.y + p.dx * lane, want = Math.atan2(ty - k.y, tx - k.x), err = wrapA(want - k.a);
@@ -282,7 +331,7 @@
         ai: g === NK - 1 ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
       k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
     }
-    S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
+    S.rng = mkRng(seed * 131 + ti * 7); S.player = S.karts[NK - 1]; S.order = []; S.clock = 0; S.t0 = S.t; S.state = 'count';
   }
   // a shopper seen from behind: body, head, and a hat that says who it is
   function shopper(g, c, x, y) {
@@ -326,11 +375,16 @@
     if (S.state === 'count') { if (S.t - S.t0 > 3) { S.state = 'race'; for (const k of S.karts) if (k.st.trait === 'rocket') k.boost = .9; } return; }
     if (S.state === 'results') return;
     S.clock += dt;
+    for (const k of S.karts) if (k.ai && !k.route) S.trk.shortcuts.forEach((sc, i) => {
+      const d = (sc.ia - k.li + S.trk.line.length) % S.trk.line.length, key = k.lap + ':' + i;
+      if (d > 4 && d < 22 && k.scKey !== key) { k.scKey = key; const r = S.rng(); if (r < (sc.ter === 'ROAD' ? sc.ai : (k.boost > .3 || k.st.trait === 'offroad' ? .7 : 0))) k.route = { sc: i, i: 0 }; }
+    });
     for (const k of S.karts) {
       const inp = k.ai ? aiInput(k, S.trk) : (S.auto ? aiInput(k, S.trk) : k.done ? { steer: 0, gas: 0, brake: 1, drift: false } : S.inp);
       stepKart(k, k.done && k.ai ? { ...inp, gas: 1 } : inp, S.trk, dt);
     }
     bumps(S.karts);
+    for (const k of S.karts) for (const c of S.trk.cones) { const dx = k.x - c.x, dy = k.y - c.y, d = Math.hypot(dx, dy); if (d < KR + 3 && d > 0) { const nx = dx / d, ny = dy / d, vn = k.vx * nx + k.vy * ny; k.x = c.x + nx * (KR + 3); k.y = c.y + ny * (KR + 3); if (vn < 0) { k.vx -= 1.5 * vn * nx; k.vy -= 1.5 * vn * ny; k.vx *= .7; k.vy *= .7; k.bump = .3; } } }
     for (const k of S.karts) { track(k, S.trk); unstick(k, S.trk); }
     if (S.player.done && !S.finishedAt) S.finishedAt = S.clock;
     if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 20) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
@@ -356,7 +410,7 @@
     if (S.state === 'select') { drawSelect(ctx); return; }
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     sky(cam, theme); ground(S.trk, cam, theme);
-    billboards(cam, [...S.scenery, ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
+    billboards(cam, [...S.scenery, ...S.trk.cones.map(c => ({ x: c.x, y: c.y, img: SPR.cone, size: 8 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
     const pk = S.player, pp = project(cam, pk.x, pk.y);
     if (pp && pk.drift) { const c = pk.charge >= 2 ? '#ff9a2a' : pk.charge >= 1 ? '#4ab8ff' : '#ffffff'; lctx.fillStyle = c; for (let i = 0; i < 4; i++) lctx.fillRect(Math.round(pp.x - 14 * pk.drift - 2 + (S.t * 60 + i * 7) % 6), Math.round(pp.y - 2 - i), 2, 2); }
     if (pp && pk.boost > 0) { lctx.fillStyle = (S.t * 20 | 0) % 2 ? '#ffd23a' : '#ff6a2a'; lctx.fillRect(Math.round(pp.x - 3), Math.round(pp.y), 6, 3); }
@@ -394,5 +448,5 @@
   function startRace() { Audio.unlock(); Audio.sfx('start'); load(S.track || 0, S.seed || 1, S.pick); }
   load(0); S.state = 'select';
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();

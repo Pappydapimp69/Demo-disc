@@ -590,9 +590,12 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     for (const x of [...g.CHARS, ...g.VEHS]) sums.push(Object.values(x.pts).reduce((a, b) => a + b, 0));
     return { blank, sums, traits: new Set(g.CHARS.map(c => c.trait)).size }; });
   check(!ros.blank.length && ros.sums.every(x => x === 0) && ros.traits === 8, `trolleydash roster: all 24 shopper+vehicle sprites drawn, every stat line adds to zero, 8 different traits (${ros.blank.join() || 'ok'})`);
-  const race = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.auto = true; for (let i = 0; i < 300 && g.S.state !== 'results'; i++) g.step(120);
-    return { state: g.S.state, done: g.S.order.filter(k => k.done).length, laps: g.S.karts.map(k => k.lap), rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT }; });
-  check(race.state === 'results' && race.done === 8 && race.rescues <= 4, `trolleydash: 8 karts finish 3 laps on the real track (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues)`);
+  for (let ti = 0; ti < 3; ti++) {
+    const race = await page.evaluate(ti => { const g = window.__game; g.load(ti, 1); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120);
+      return { name: g.S.trk.def.name, state: g.S.state, done: g.S.order.filter(k => k.done).length, rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT, skips: g.S.trk.shortcuts.map(c => Math.round(c.skip)) }; }, ti);
+    await page.screenshot({ path: path.join(shots, `trolleydash-T${ti + 1}-results.png`) });
+    check(race.state === 'results' && race.done === 8 && race.rescues <= 4 && race.skips.every(x => x < 600), `trolleydash ${race.name}: 8 karts finish 3 laps (${race.first.toFixed(1)}-${(race.last || 0).toFixed(1)} s, ${race.rescues} rescues); every shortcut skips under 600 units so laps count (${race.skips.join(', ')})`);
+  }
   const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
     for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
     const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints
