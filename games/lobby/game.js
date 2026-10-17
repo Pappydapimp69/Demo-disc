@@ -25,6 +25,8 @@
       tip: 'SOMEONE QUITS MID-MATCH. TAP ONE PLAYER CLOSE TO THAT LOBBY\'S SKILL AND MATCH TO FILL THE SEAT, OR THE OTHER THREE GIVE UP.' },
     { name: 'LAUNCH DAY', n: 4, gap: .55, len: 60, servers: 3, dur: 12, regions: false, party: .2, need: 40, quits: 99,
       tip: 'THE AD SAID TEN MILLION PLAYERS. YOU HAVE THREE SERVERS. MAKE THE MATCHES YOU CAN.' },
+    { name: 'SEASON 2', n: 4, gap: .55, len: 60, servers: 0, rent: 3, dur: 12, regions: false, party: 0, need: 70, quits: 99,
+      tip: 'THE AD PROMISED 100,000,000. THIS TIME YOU RENT SERVERS: EACH COSTS 3 HAPPY PLAYERS. PICK HOW MANY BEFORE THE SHIFT.' },
   ];
   function rng(s) { return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   const PRE = ['xX_', '', 'lil', 'big', 'not', 'the', '', 'mr', 'its'], MID = ['d00m', 'sk8r', 'n00b', 'gamer', 'pro', 'tank', 'sweat', 'camper', 'yeet', 'bot', 'goblin', 'ghost', 'toast', 'noodle', 'clutch', 'lag', 'grandma', 'potato'], SUF = ['_Xx', '99', '2009', '_ttv', 'HD', '_YT', '7', '', '', '_irl'];
@@ -64,21 +66,25 @@
   }
 
   // ---------- state ----------
-  const S = { li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
+  const S = { rentN: 5, li: 0, L: null, state: 'intro', t: 0, clock: 0, lockUntil: 0, incoming: [], queue: [], sel: new Set(), servers: [], log: [],
     happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, sort: 'arrival' };
   const API = { S, LEVELS, tol, verdict, lobbies, arrivals, autopilot: null, step: n => game.step(n),
-    get state() { return S.state; }, visible: () => visible(), resort, fits, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
+    get state() { return S.state; }, rent, net, visible: () => visible(), resort, fits, load, start, tap: (x, y) => onPointer('down', x, y), match, toggle,
     result: () => ({ happy: S.happy, matched: S.matched, quits: S.quits, unhappy: S.unhappy, pass: passed(), stars: stars() }) };
   function load(i) {
     const L = LEVELS[i];
-    Object.assign(S, { li: i, L, state: 'intro', clock: 0, incoming: arrivals(i), queue: [], sel: new Set(), servers: Array(Math.min(L.servers, 9)).fill(0),
+    Object.assign(S, { li: i, L, state: 'intro', clock: 0, incoming: arrivals(i), queue: [], sel: new Set(), servers: Array(L.rent ? S.rentN : Math.min(L.servers, 9)).fill(0),
       log: [], happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, leaves: [], open: [], mm: rng(5000 + i * 31), filled: 0, abandoned: 0 });
     pause(); API.autopilot = null;
   }
   function pause() { S.lockUntil = S.t + .6; }
   const paused = () => S.t < S.lockUntil;
   function start() { if (S.state !== 'intro') return; S.state = 'play'; pause(); Snd.boot(); }
-  const passed = () => S.happy >= S.L.need && S.quits <= S.L.quits;
+  function rentCost() { return S.L.rent ? S.L.rent * S.servers.length : 0; }
+  function net() { return S.happy - rentCost(); }
+  const passed = () => net() >= S.L.need && S.quits <= S.L.quits;
+  // renting: choose the server count on the intro screen (1-9)
+  function rent(k) { if (S.state !== 'intro' || !S.L.rent) return; S.rentN = Math.max(1, Math.min(9, k)); S.servers = Array(S.rentN).fill(0); Snd.key(); }
   function stars() { if (!passed()) return 0; const f = S.happy / Math.max(1, S.matched + S.quits); return f >= .8 ? 3 : f >= .6 ? 2 : 1; }
   function say(s, col = GREEN) { S.log.push({ s, col }); if (S.log.length > 5) S.log.shift(); }
   // the queue as shown: by arrival, or by skill (ties: whoever has waited longest first) so close skills sit together
@@ -184,7 +190,7 @@
   // ---------- drawing: everything is monospace text on a phosphor screen ----------
   const FONT = "bold 19px 'Courier New', Courier, monospace", ROWS = 11, ROW0 = 168, RH = 38;
   let CW = 11.4;
-  const BTN = { match: [24, 660, 230, 56], clear: [286, 660, 230, 56], sort: [376, 86, 146, 36] };
+  const BTN = { less: [40, 630, 90, 50], more: [410, 630, 90, 50], match: [24, 660, 230, 56], clear: [286, 660, 230, 56], sort: [376, 86, 146, 36] };
   function T(c, s, x, y, col = GREEN) { c.fillStyle = col; c.fillText(s, x, y); }
   const pad = (s, n) => (s + ' '.repeat(n)).slice(0, n);
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -214,9 +220,13 @@
     let k = 0, y = 150;
     for (const s of [...lines, ...tip]) { const vis = s.slice(0, Math.max(0, shown - k)); k += s.length + 4; T(c, vis, 24, y, s.startsWith('> SHIFT') ? AMBER : GREEN); y += 34; }
     y += 20;
-    T(c, `GOAL: ${L.need} HAPPY PLAYERS`, 24, y); y += 34;
+    T(c, L.rent ? `GOAL: ${L.need} NET (HAPPY - RENT)` : `GOAL: ${L.need} HAPPY PLAYERS`, 24, y); y += 34;
     if (L.quits < 99) { T(c, `      ${L.quits} RAGE-QUITS MAX`, 24, y); y += 34; }
-    T(c, `SERVERS ${L.servers}   MATCH ${L.dur}s   LOBBY ${L.n}`, 24, y, DIM);
+    if (L.rent) {
+      T(c, `MATCH ${L.dur}s   LOBBY ${L.n}   GOAL IS NET`, 24, y, DIM);
+      box(c, BTN.less, '[ - ]', true); box(c, BTN.more, '[ + ]', true);
+      const s1 = `${S.rentN} SERVERS`, s2 = `RENT ${S.rentN * L.rent} HAPPY`; T(c, s1, W / 2 - s1.length * CW / 2, 652, AMBER); T(c, s2, W / 2 - s2.length * CW / 2, 690, DIM);
+    } else T(c, `SERVERS ${L.servers}   MATCH ${L.dur}s   LOBBY ${L.n}`, 24, y, DIM);
     if (!paused() && Math.floor(S.t * 2) % 2) T(c, '[ TAP TO START SHIFT ]_', W / 2 - 11.5 * CW, 820);
   }
   function wrap(s, n) { const out = []; let cur = ''; for (const w of s.split(' ')) { if ((cur + ' ' + w).trim().length > n) { out.push(cur.trim()); cur = w; } else cur += ' ' + w; } if (cur.trim()) out.push(cur.trim()); return out; }
@@ -257,10 +267,11 @@
   }
   function drawReport(c) {
     const L = S.L, ok = passed(), st = stars();
-    const lines = [`> SHIFT ${S.li + 1} REPORT: ${L.name}`, '', `  MATCHED      ${S.matched}`, `  HAPPY        ${S.happy}  (GOAL ${L.need})`, `  SALTY        ${S.unhappy}`,
+    const lines = [`> SHIFT ${S.li + 1} REPORT: ${L.name}`, '', `  MATCHED      ${S.matched}`, ...(L.rent ? [`  HAPPY        ${S.happy}`, `  RENT        -${rentCost()}  NET ${net()} (GOAL ${L.need})`] : [`  HAPPY        ${S.happy}  (GOAL ${L.need})`]), `  SALTY        ${S.unhappy}`,
       `  RAGE-QUITS   ${S.quits}${L.quits < 99 ? '  (MAX ' + L.quits + ')' : ''}`, `  STILL QUEUED ${S.queue.length + S.incoming.length}`, ...(L.leave ? [`  BACKFILLED   ${S.filled}   ABANDONED ${S.abandoned / (L.n - 1)}`] : []), '', ok ? `  RATING  ${'* '.repeat(st)}${'. '.repeat(3 - st)}` : '  RATING  ---'];
     let y = 160; for (const s of lines) { T(c, s, 24, y, s.startsWith('> ') ? AMBER : GREEN); y += 36; }
-    const verdictLine = ok ? (S.li === LEVELS.length - 1 ? '> TEN MILLION? WE SERVED ' + S.matched + '. SHIP IT.' : '> SHIFT PASSED. NEXT SHIFT LOADING.') : S.quits > L.quits ? '> TOO MANY RAGE-QUITS. AGAIN.' : '> NOT ENOUGH HAPPY PLAYERS. AGAIN.';
+    const load = L.dur / L.gap / L.n;   // servers busy on average: players per second / lobby size x match length
+    const verdictLine = ok ? (L.rent ? `> THE LOAD KEPT ~${load.toFixed(1)} SERVERS BUSY. RENT ABOUT THAT PLUS ONE: FEWER AND THE QUEUE EXPLODES, MORE IS RENT FOR NOTHING.` : L.name === 'LAUNCH DAY' ? '> TEN MILLION? WE SERVED ' + S.matched + '. SHIP IT.' : '> SHIFT PASSED. NEXT SHIFT LOADING.') : S.quits > L.quits ? '> TOO MANY RAGE-QUITS. AGAIN.' : '> NOT ENOUGH HAPPY PLAYERS. AGAIN.';
     wrap(verdictLine, 40).forEach((s, i) => T(c, s, 24, y + 20 + i * 34, ok ? GREEN : RED));
     if (!paused() && Math.floor(S.t * 2) % 2) { const s = ok ? (S.li === LEVELS.length - 1 ? '[ TAP TO START OVER ]_' : '[ TAP FOR NEXT SHIFT ]_') : '[ TAP TO RETRY ]_'; T(c, s, W / 2 - s.length * CW / 2, 820); }
   }
@@ -270,7 +281,7 @@
   function onPointer(type, x, y) {
     if (type !== 'down' || paused()) return;
     Audio.unlock();
-    if (S.state === 'intro') { start(); return; }
+    if (S.state === 'intro') { if (S.L.rent && inBox(BTN.less, x, y)) rent(S.rentN - 1); else if (S.L.rent && inBox(BTN.more, x, y)) rent(S.rentN + 1); else start(); return; }
     if (S.state === 'report') { load(passed() ? (S.li + 1) % LEVELS.length : S.li); return; }
     if (inBox(BTN.match, x, y)) { match(); return; }
     if (inBox(BTN.sort, x, y)) { resort(); return; }

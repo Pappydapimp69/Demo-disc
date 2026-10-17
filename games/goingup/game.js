@@ -18,13 +18,15 @@
       traffic: (r, F) => r() < .1 ? [F - 1, 0] : (() => { const a = Math.floor(r() * 4); let b = Math.floor(r() * 3); if (b >= a) b++; return [a, b]; })() },
     { name: 'LUNCH', floors: 10, cars: 2, rate: 1.0, goal: 90, time: 130, tip: 'TWO LIFTS NOW. TAP A LIFT TO PICK IT, THEN TAP A FLOOR.', traffic: (r, F) => r() < .5 ? anywhere(r, F) : r() < .5 ? [0, 1 + Math.floor(r() * (F - 1))] : [1 + Math.floor(r() * (F - 1)), 0] },
     { name: "FIVE O'CLOCK", floors: 12, cars: 2, rate: 1.2, goal: 110, time: 140, tip: 'EVERYONE WANTS TO GO HOME. ALL THE WAY DOWN. ZONES GIVE EACH LIFT HALF THE BUILDING: SLOWER ON AVERAGE, BUT NOBODY IS FORGOTTEN.', traffic: (r, F) => r() < .85 ? [1 + Math.floor(r() * (F - 1)), 0] : anywhere(r, F) },
+    { name: 'LUNCH BELL', floors: 10, cars: 2, rate: .35, goal: 70, time: 120, bell: { at: 45, len: 15, rate: 3 },
+      tip: 'AT THE BELL THE UPPER FLOORS ALL COME DOWN AT ONCE. WAITING IN POSITION DOES NOT HELP; CARRYING DOES. KEEP BOTH LIFTS MOVING, FULL ONES STRAIGHT DOWN.', traffic: anywhere },
   ];
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
   const S = { li: 0, L: null, state: 'intro', t: 0, lt: 0, lockUntil: 0, clock: 0, cars: [], waiting: [], delivered: 0, hearts: 3, sel: 0, auto: null, rng: null, nextP: 0, pops: [], maxWait: 0, waits: [], endT: 0 };
   function load(i) {
     const L = LEVELS[i];
-    Object.assign(S, { li: i, L, state: 'intro', lt: 0, clock: 0, waiting: [], delivered: 0, hearts: 3, sel: 0, auto: null, rng: mkRng(500 + i * 13), nextP: 1, pops: [], maxWait: 0, waits: [], endT: 0, usedAuto: false,
+    Object.assign(S, { li: i, L, state: 'intro', lt: 0, clock: 0, waiting: [], delivered: 0, hearts: 3, sel: 0, auto: null, rng: mkRng(500 + i * 13), nextP: 1, bellOn: false, pops: [], maxWait: 0, waits: [], endT: 0, usedAuto: false,
       cars: Array.from({ length: L.cars }, (_, k) => ({ y: k ? L.floors - 1 : 0, target: null, stops: [], park: null, door: 0, riders: [], dir: 1, id: k })) });
     pause();
   }
@@ -62,6 +64,7 @@
         const here = Math.round(c.y);   // people waiting right where the doors are: let them on first
         if (c.riders.length < CAP && S.waiting.some(p => p.from === here) && !S.cars.some(o => o !== c && Math.abs(o.y - here) < .01 && o.door > 0)) { arrive(c, here); continue; }
         c.target = pick(c, S.auto);
+        if (c.target === null && c.park !== null && Math.abs(c.y - c.park) > .01) c.target = c.park;   // idle under AUTO too: go park
       }
       if (!S.auto && c.target === null && c.stops.length) c.target = c.stops.shift();
       if (!S.auto && c.target === null && c.park !== null && Math.abs(c.y - c.park) > .01) c.target = c.park;
@@ -92,9 +95,14 @@
     if (ahead.length) return ahead[0];
     c.dir = -c.dir; return fs.sort((a, b) => Math.abs(a - c.y) - Math.abs(b - c.y))[0];
   }
+  // a known spike: in the bell window people pour from the upper floors to the lobby
+  const inBell = () => !!(S.L.bell && S.clock >= S.L.bell.at && S.clock < S.L.bell.at + S.L.bell.len);
+  const rateNow = () => inBell() ? S.L.bell.rate : S.L.rate;
   function people(dt) {
+    // a rate change redraws the next gap, or a long quiet-time gap would sail straight past the bell
+    if (inBell() !== !!S.bellOn) { S.bellOn = inBell(); S.nextP = -Math.log(1 - S.rng()) / rateNow(); }
     S.nextP -= dt;
-    while (S.nextP <= 0) { const [from, to] = S.L.traffic(S.rng, S.L.floors); S.waiting.push({ from, to, at: S.clock, id: Math.floor(S.rng() * 1e9) }); S.nextP += -Math.log(1 - S.rng()) / S.L.rate; Snd.call(); }
+    while (S.nextP <= 0) { const [from, to] = inBell() ? [3 + Math.floor(S.rng() * (S.L.floors - 3)), 0] : S.L.traffic(S.rng, S.L.floors); S.waiting.push({ from, to, at: S.clock, id: Math.floor(S.rng() * 1e9) }); S.nextP += -Math.log(1 - S.rng()) / rateNow(); Snd.call(); }
     for (const p of S.waiting) if (S.clock - p.at > PATIENCE) { p.gone = true; S.hearts--; S.maxWait = Math.max(S.maxWait, PATIENCE); S.pops.push({ t: S.t, f: p.from, stairs: true }); Snd.huff(); }
     S.waiting = S.waiting.filter(p => !p.gone);
   }
@@ -170,6 +178,7 @@
     ctx.font = '800 18px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = '#1a2a4a';
     ctx.fillText(`🕘 ${hh > 12 ? hh - 12 : hh}:${String(mm).padStart(2, '0')} ${hh >= 12 ? 'PM' : 'AM'}`, 24, 112);
     ctx.textAlign = 'center'; ctx.fillText(`DELIVERED ${S.delivered}/${S.L.goal}`, W / 2, 112);
+    if (S.L.bell) { const left = S.L.bell.at - S.clock, on = inBell(); if (left > 0 || on) { ctx.font = '800 16px system-ui'; ctx.fillStyle = on ? '#e02a2a' : '#c07a1a'; ctx.fillText(on ? '🔔 LUNCH! EVERYONE IS COMING DOWN' : `🔔 BELL IN ${Math.ceil(left)} s`, W / 2, 160); ctx.font = '800 18px system-ui'; } }
     ctx.textAlign = 'right'; ctx.fillStyle = '#e02a2a'; ctx.fillText('♥'.repeat(Math.max(0, S.hearts)) + '♡'.repeat(3 - Math.max(0, S.hearts)), W - 24, 112);
     ctx.font = '700 13px system-ui'; ctx.fillStyle = '#3a4a6a'; ctx.textAlign = 'center'; ctx.fillText(`LONGEST WAIT ${Math.round(S.maxWait)} s · PEOPLE GIVE UP AT ${PATIENCE} s`, W / 2, 140);
     for (const b of autoBtns()) { const on = S.auto === b.rule; ctx.fillStyle = on ? '#3a7ad0' : '#ffffffcc'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 18); ctx.fill(); ctx.strokeStyle = '#3a7ad0'; ctx.lineWidth = 3; ctx.stroke(); ctx.font = '800 15px system-ui'; ctx.fillStyle = on ? '#fff' : '#1a2a4a'; ctx.textAlign = 'center'; ctx.fillText(b.label, b.x + b.w / 2, b.y + 38); }

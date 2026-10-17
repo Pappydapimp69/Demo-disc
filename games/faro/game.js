@@ -47,7 +47,17 @@
     const c2 = 1 + Math.floor(r() * 14), far = reachable([0, c2], 16).filter(x => x.d >= 4), g = far[Math.floor(r() * far.length)];
     return { ...base, n: 16, start: [], goal: { cards: [[0, g.ps[0]], [c2, g.ps[1]]] }, tip: 'TWO CARDS, TWO SLOTS, ONE SEQUENCE.' };
   }
-  const goalsOf = L => L.goal.cards || (L.goal.order ? null : [[L.goal.card, L.goal.pos]]);
+  // target orders: search the whole deck (8 cards reach only 24 orders); null when no sequence gets there
+  function planOrder(d, target) {
+    const key = x => x.join(','), want = key(target), prev = new Map([[key(d), null]]), q = [d];
+    while (q.length) { const x = q.shift(), k = key(x); if (k === want) break; for (const m of ['out', 'in']) { const y = m === 'in' ? inFaro(x) : outFaro(x), yk = key(y); if (!prev.has(yk)) { prev.set(yk, [k, m]); q.push(y); } } }
+    if (!prev.has(want)) return null;
+    const path = []; let k = want; while (prev.get(k)) { const [pk, m] = prev.get(k); path.unshift(m); k = pk; } return path;
+  }
+  // a permutation's parity: count the swaps that sort it
+  const odd = t => { const p = t.slice(); let k = 0; for (let i = 0; i < p.length; i++) while (p[i] !== i) { const j = p[i]; [p[i], p[j]] = [p[j], p[i]]; k++; } return k % 2 === 1; };
+  const possible = L => !L.goal.target || planOrder(deal(L), L.goal.target) !== null;
+  const goalsOf = L => L.goal.cards || (L.goal.order || L.goal.target ? null : [[L.goal.card, L.goal.pos]]);
   const LEVELS = [
     { name: 'THE TOP CARD', n: 8, start: [], goal: { card: 0, pos: 3 }, tip: 'OUT KEEPS THE TOP CARD ON TOP. IN TUCKS IT TO SECOND. PUT THE ACE IN THE GOLD SLOT.' },
     { name: 'SIXTEEN', n: 16, start: [], goal: { card: 0, pos: 9 }, tip: 'SAME ACE, BIGGER DECK. EVERY SHUFFLE ROUGHLY DOUBLES ITS POSITION.' },
@@ -56,14 +66,19 @@
     { name: 'TWO CARDS', n: 16, start: [], goal: { cards: [[0, 9], [5, 3]] }, tip: 'BOTH AT ONCE: THE ACE AND THE 6 OF SPADES INTO THEIR SLOTS. EVERY SHUFFLE MOVES BOTH.' },
     { name: 'NEW DECK ORDER', n: 52, start: ['out', 'out', 'out'], goal: { order: true }, tip: 'SOMEONE DID THREE OUT FAROS. PUT EVERY CARD BACK IN ITS STARTING PLACE.' },
     { name: 'BRING IT HOME', n: 16, start: ['in', 'out', 'in', 'in'], goal: { card: 0, pos: 0 }, tip: 'NOW THE ACE IS BURIED. SHUFFLE IT BACK TO THE TOP.' },
+    { name: 'POSSIBLE?', n: 8, start: [], goal: { target: [2, 6, 3, 7, 0, 4, 1, 5] }, tip: 'MAKE THE DECK MATCH THE ROW ON TOP, OR CALL IT IMPOSSIBLE. A WRONG CALL COSTS 3 SHUFFLES.' },
+    { name: 'ONE SWAP', n: 8, start: [], goal: { target: [0, 1, 5, 3, 4, 2, 6, 7] }, tip: 'TWO CARDS TRADED PLACES. A FARO ONLY EVER MAKES AN EVEN NUMBER OF SWAPS.' },
+    { name: 'TWO SWAPS', n: 8, start: [], goal: { target: [1, 0, 2, 3, 4, 5, 7, 6] }, tip: 'EVEN NOW. BUT EIGHT CARDS HAVE 40,320 ORDERS AND FAROS REACH ONLY 24 OF THEM.' },
     { name: 'HOUSE DEAL', house: true, n: 16, start: [], goal: { card: 0, pos: 5 }, tip: 'THE HOUSE DEALS FOREVER.' },
   ];
   function deal(L) { let d = newDeck(L.n); for (const k of L.start) d = k === 'in' ? inFaro(d) : outFaro(d); return d; }
-  const solved = (L, d) => L.goal.order ? d.every((c, i) => c === i) : goalsOf(L).every(([c, p]) => d[p] === c);
-  function par(L) { const d = deal(L); if (L.goal.order) { let k = 0, e = d; while (!e.every((c, i) => c === i)) { e = outFaro(e); k++; } return k; } return planMulti(d, goalsOf(L), L.n).length; }
+  const solved = (L, d) => L.goal.target ? d.every((c, i) => c === L.goal.target[i]) : L.goal.order ? d.every((c, i) => c === i) : goalsOf(L).every(([c, p]) => d[p] === c);
+  function par(L) { const d = deal(L); if (L.goal.target) { const p = planOrder(d, L.goal.target); return p ? p.length : 0; } if (L.goal.order) { let k = 0, e = d; while (!e.every((c, i) => c === i)) { e = outFaro(e); k++; } return k; } return planMulti(d, goalsOf(L), L.n).length; }
 
   const S = { house: 0, li: 0, L: null, deck: [], prev: [], moves: 0, hist: [], state: 'intro', t: 0, lockUntil: 0, anim: null, endT: 0, par: 0, ap: null };
-  function load(i) { const L = LEVELS[i].house ? { ...houseDeal(S.house), name: `HOUSE DEAL #${S.house + 1}` } : LEVELS[i]; Object.assign(S, { li: i, L, deck: deal(L), prev: null, moves: 0, hist: [], state: 'intro', anim: null, endT: 0, par: par(L), ap: null }); pause(); API.autopilot = null; }
+  function load(i) { S.called = false; S.wrong = 0;
+    load2(i); }
+  function load2(i) { const L = LEVELS[i].house ? { ...houseDeal(S.house), name: `HOUSE DEAL #${S.house + 1}` } : LEVELS[i]; Object.assign(S, { li: i, L, deck: deal(L), prev: null, moves: 0, hist: [], state: 'intro', anim: null, endT: 0, par: par(L), ap: null }); pause(); API.autopilot = null; }
   function pause() { S.lockUntil = S.t + .6; }
   const paused = () => S.t < S.lockUntil;
   function start() { S.state = 'play'; pause(); }
@@ -71,6 +86,12 @@
     if (S.state !== 'play' || S.anim) return;
     S.hist.push(S.deck); S.prev = S.deck; S.deck = kind === 'in' ? inFaro(S.deck) : outFaro(S.deck); S.moves++;
     S.anim = { t: 0, kind }; Snd.riffle(S.L.n);
+  }
+  // call it impossible: right wins the hand; wrong costs three shuffles
+  function declare() {
+    if (S.state !== 'play' || S.anim || !S.L.goal.target) return;
+    if (!possible(S.L)) { S.state = 'win'; S.endT = 0; S.called = true; Snd.win(); pause(); return; }
+    S.moves += 3; S.wrong = S.t; Audio.sfx('bad');
   }
   function undo() { if (S.state !== 'play' || S.anim || !S.hist.length) return; S.deck = S.hist.pop(); S.moves++; Audio.sfx('select'); }
   function reset() { if (S.state !== 'play' || S.anim) return; S.deck = deal(S.L); S.hist = []; S.moves = 0; Audio.sfx('select'); }
@@ -81,7 +102,8 @@
     if (S.state !== 'play') return;
     if (S.anim) { S.anim.t += dt / .75; if (S.anim.t >= 1) { S.anim = null; if (solved(S.L, S.deck)) { S.state = 'win'; S.endT = 0; Snd.win(); pause(); } } return; }
     if (API.autopilot) {
-      if (!S.ap) S.ap = S.L.goal.order ? Array(S.par).fill('out') : planMulti(S.deck, goalsOf(S.L), S.L.n);
+      if (S.L.goal.target && !possible(S.L)) { declare(); return; }
+      if (!S.ap) S.ap = S.L.goal.target ? planOrder(S.deck, S.L.goal.target) : S.L.goal.order ? Array(S.par).fill('out') : planMulti(S.deck, goalsOf(S.L), S.L.n);
       const k = S.ap.shift(); if (k) shuffle(k);
     }
   }
@@ -114,6 +136,8 @@
     // goal slot
     const goals = goalsOf(S.L) || [];
     for (const [c, pos] of goals) { const g = L.at(pos); ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 4; ctx.setLineDash([6, 4]); Draw.rr(ctx, g.x - 6, g.y - 6, L.cw + 12, L.ch + 12, 8); ctx.stroke(); ctx.setLineDash([]); ctx.font = '800 12px system-ui'; ctx.fillStyle = '#ffd23a'; ctx.textAlign = 'center'; ctx.fillText(goals.length > 1 ? name(c) : 'GOAL', g.x + L.cw / 2, g.y - 10); }
+    if (S.L.goal.target) { const tw = 44, tx = (W - 8 * tw - 7 * 6) / 2; ctx.font = '800 12px system-ui'; ctx.fillStyle = '#ffd23a'; ctx.textAlign = 'center'; ctx.fillText('MAKE THIS', W / 2, 236);
+      S.L.goal.target.forEach((id, i) => cardFace(tx + i * (tw + 6), 244, tw, tw * 1.42, id, S.deck[i] === id)); }
     // row labels: the position of the first card in each row (counting from the top, the top card is 1)
     ctx.font = '700 12px system-ui'; ctx.fillStyle = '#9ac8a8'; ctx.textAlign = 'right';
     for (let r = 0; r < L.rows; r++) { const p = L.at(r * L.per); ctx.fillText(String(r * L.per + 1), p.x - 6, p.y + L.ch / 2 + 4); }
@@ -127,14 +151,15 @@
       cardFace(p.x, p.y, L.cw, L.ch, id, goals.some(([c]) => c === id));
     }
   }
-  const BTN = { out: { x: 40, y: 760, w: 210, h: 100 }, in: { x: 290, y: 760, w: 210, h: 100 }, undo: { x: 40, y: 880, w: 210, h: 54 }, reset: { x: 290, y: 880, w: 210, h: 54 } };
+  const BTN = { out: { x: 40, y: 760, w: 210, h: 100 }, in: { x: 290, y: 760, w: 210, h: 100 }, undo: { x: 40, y: 880, w: 210, h: 54 }, reset: { x: 290, y: 880, w: 210, h: 54 }, call: { x: 120, y: 690, w: 300, h: 54 } };
   function hud() {
     Draw.bigText(ctx, `${S.li + 1}/${LEVELS.length} · ${S.L.name}`, W / 2, 70, 28, '#ffe14a', '#0a2a1a');
     ctx.font = '800 18px system-ui'; ctx.fillStyle = '#e8f8e8'; ctx.textAlign = 'center';
     const gs = goalsOf(S.L), n = S.L.n, at = c => S.deck.indexOf(c);
-    ctx.fillText(!gs ? `CARDS IN PLACE: ${S.deck.filter((c, i) => c === i).length}/${n}` : gs.map(([c, p]) => `${gs.length > 1 ? name(c) : 'ACE'} AT ${at(c) + 1} · GOAL ${p + 1}`).join('   '), W / 2, 112);
+    const tg = S.L.goal.target, match = d => d.filter((c, i) => c === tg[i]).length;
+    ctx.fillText(tg ? `MATCHING THE ROW: ${match(S.deck)}/${n}` : !gs ? `CARDS IN PLACE: ${S.deck.filter((c, i) => c === i).length}/${n}` : gs.map(([c, p]) => `${gs.length > 1 ? name(c) : 'ACE'} AT ${at(c) + 1} · GOAL ${p + 1}`).join('   '), W / 2, 112);
     // what each button would do next: the goal cards' new positions, or how many cards would be home
-    const preview = k => !gs ? `→ ${(k === 'in' ? inFaro(S.deck) : outFaro(S.deck)).filter((c, i) => c === i).length} IN PLACE` : gs.map(([c]) => `${gs.length > 1 ? name(c) : 'ACE'} → ${where(at(c), n, k) + 1}`).join('  ');
+    const preview = k => tg ? `→ ${match(k === 'in' ? inFaro(S.deck) : outFaro(S.deck))}/${n} MATCH` : !gs ? `→ ${(k === 'in' ? inFaro(S.deck) : outFaro(S.deck)).filter((c, i) => c === i).length} IN PLACE` : gs.map(([c]) => `${gs.length > 1 ? name(c) : 'ACE'} → ${where(at(c), n, k) + 1}`).join('  ');
     ctx.font = '700 15px system-ui'; ctx.fillStyle = '#9ac8a8'; ctx.fillText(`SHUFFLES ${S.moves} · PAR ${S.par}`, W / 2, 138);
     // the number that matters is how many cards sit above each goal card; written in binary it is the IN/OUT recipe from the top
     if (gs) { ctx.font = '800 14px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#ffe9a0';
@@ -142,6 +167,7 @@
     wrapText(S.L.tip, W / 2, 190, 460, 22, '700 16px system-ui', '#cfe8d0');
     const b = (r, label, sub, col) => { ctx.fillStyle = col; Draw.rr(ctx, r.x, r.y, r.w, r.h, 20); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); Draw.bigText(ctx, label, r.x + r.w / 2, r.y + (sub ? r.h / 2 - 8 : r.h / 2 + 2), sub ? 36 : 22, '#fff', '#0a2a1a'); if (sub) { ctx.font = '700 13px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(sub, r.x + r.w / 2, r.y + r.h - 16); } };
     b(BTN.out, 'OUT', preview('out'), '#2a7a4a'); b(BTN.in, 'IN', preview('in'), '#a0602a'); b(BTN.undo, 'UNDO', null, '#3a4a3a'); b(BTN.reset, 'RESET', null, '#3a4a3a');
+    if (tg) { b(BTN.call, 'IMPOSSIBLE!', null, '#8a2a3a'); if (S.wrong && S.t - S.wrong < 1.4) Draw.bigText(ctx, 'IT IS POSSIBLE. +3', W / 2, 660, 28, '#ff8a8a', '#3a0a0a'); }
   }
   function wrapText(s, x, y, maxW, lh, font, col) { ctx.font = font; ctx.fillStyle = col; ctx.textAlign = 'center'; let line = '', yy = y; for (const w of s.split(' ')) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW) { ctx.fillText(line, x, yy); line = w; yy += lh; } else line = t; } ctx.fillText(line, x, yy); }
   function felt() { const g = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, 700); g.addColorStop(0, '#1a5a34'); g.addColorStop(1, '#0a2a1a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
@@ -157,7 +183,7 @@
     if (S.state === 'intro') card(`HAND ${S.li + 1}: ${S.L.name}`, '#ffe14a', [S.L.tip, `PAR: ${S.par} SHUFFLES`], 'TAP TO DEAL');
     if (S.state === 'win') {
       const stars = S.moves <= S.par ? 3 : S.moves <= S.par + 2 ? 2 : 1;
-      card('PERFECT!', '#7af08a', [`${S.moves} SHUFFLES · PAR ${S.par}`, S.L.goal.order ? 'EIGHT OUT FAROS BRING A 52-CARD DECK HOME.' : S.L.goal.cards ? 'ONE SEQUENCE, TWO CARDS. THE DECK HAS NO FREE MOVES.' : `${S.L.goal.pos} IN BINARY IS ${S.L.goal.pos.toString(2)}.`], S.L.house ? 'TAP FOR ANOTHER DEAL' : 'TAP FOR THE NEXT HAND');
+      card(S.called ? 'RIGHT CALL!' : 'PERFECT!', '#7af08a', [`${S.moves} SHUFFLES · PAR ${S.par}`, S.called ? (odd(S.L.goal.target) ? 'AN ODD NUMBER OF SWAPS. NO FARO SEQUENCE REACHES IT.' : 'EVEN, BUT NOT ONE OF THE 24. RIGHT CALL.') : S.L.goal.target ? 'ONE OF THE ONLY 24 ORDERS EIGHT CARDS CAN REACH.' : S.L.goal.order ? 'EIGHT OUT FAROS BRING A 52-CARD DECK HOME.' : S.L.goal.cards ? 'ONE SEQUENCE, TWO CARDS. THE DECK HAS NO FREE MOVES.' : `${S.L.goal.pos} IN BINARY IS ${S.L.goal.pos.toString(2)}.`], S.L.house ? 'TAP FOR ANOTHER DEAL' : 'TAP FOR THE NEXT HAND');
       for (let i = 0; i < 3; i++) { const kk = back(clamp((S.endT - .3 - i * .15) / .3)); if (kk > 0) { ctx.save(); ctx.translate(W / 2 + (i - 1) * 80, 600); ctx.scale(kk, kk); Draw.star(ctx, 0, 0, 30, i < stars ? '#ffd23a' : '#2a4a3a'); ctx.restore(); } }
     }
   }
@@ -170,7 +196,7 @@
     if (S.state === 'done') { Engine.exit(); return; }
     if (S.state === 'intro') { start(); return; }
     if (S.state === 'win') { if (S.endT > 1) next(); return; }
-    if (hit(BTN.out, x, y)) shuffle('out'); else if (hit(BTN.in, x, y)) shuffle('in'); else if (hit(BTN.undo, x, y)) undo(); else if (hit(BTN.reset, x, y)) reset();
+    if (S.L.goal.target && hit(BTN.call, x, y)) declare(); else if (hit(BTN.out, x, y)) shuffle('out'); else if (hit(BTN.in, x, y)) shuffle('in'); else if (hit(BTN.undo, x, y)) undo(); else if (hit(BTN.reset, x, y)) reset();
   }
   function onKey(key, down) {
     if (!down || paused()) return;
@@ -181,7 +207,7 @@
     else if (key === 'r' || key === 'R') reset();
   }
 
-  const API = { LEVELS, S, houseDeal, reachable, next, load, start, shuffle, outFaro, inFaro, binary, plan, planMulti, newDeck, par, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, houseDeal, planOrder, possible, declare, odd, reachable, next, load, start, shuffle, outFaro, inFaro, binary, plan, planMulti, newDeck, par, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   window.__game = API;

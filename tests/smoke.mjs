@@ -388,6 +388,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(sr === 'false,true,false,true', `embers: a shout at the treeline is wasted, a close one works, no voice no shout, and eyes show before the body (${sr})`);
   const told = await page.evaluate(() => { const g = window.__game; g.autopilot = null; g.load(0); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3; g.shoo({ a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 7 }); return g.S.callout && g.S.callout.text; });
   check(/TOO FAR/.test(told || ''), `embers: the first wasted shout explains itself (${told})`);
+  const moon = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.dark); g.load(i); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3;
+    const b = { a: g.S.look, d: .45, v: 0, flee: 0, snapT: 9, id: 9, pack: 1 }; g.S.beasts = [b]; return { eyes: g.eyesOnly(b), shooed: g.shoo(b) }; });
+  check(moon.eyes && moon.shooed, `embers NEW MOON: even rested eyes see only eyeshine at middle distance, and a shout at the eyes works (${JSON.stringify(moon)})`);
   const rush = await page.evaluate(() => { const g = window.__game; g.load(2); g.start(); g.step(40); g.S.nextSpawn = 99;
     const a = { a: 0, d: .5, v: .08, flee: 0, snapT: 9, id: 1, pack: 7 }, b = { a: 2, d: .3, v: .08, flee: 0, snapT: 9, id: 2, pack: 7, lurk: true }; g.S.beasts = [a, b];
     g.step(120); const held = b.d; a.flee = 1; const v0 = b.v; g.step(2); return { held: +held.toFixed(2), faster: +(b.v / v0).toFixed(1), lurk: b.lurk }; });
@@ -496,6 +499,10 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const near = await runDay(2, 'nearest'), sw = await runDay(2, 'sweep');
   check(near.max >= 40 && near.hearts < 3 && sw.max < 20 && sw.hearts === 3, `goingup: on THE TOP FLOOR nearest-first left someone ${near.max} s (took the stairs), the sweep's longest wait was ${sw.max} s`);
   // zoning is a trade: on the down-peak it bounds the longest wait (nobody takes the stairs) at a worse average
+  const bell = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.bell), L = g.LEVELS[i]; g.load(i); g.start(); g.step(40); let inWin = 0, before = 0, seen = new Set();
+    for (let k = 0; k < 4000 && g.S.clock < L.bell.at + L.bell.len; k++) { g.S.waiting.forEach(p => { if (!seen.has(p.id)) { seen.add(p.id); if (p.at >= L.bell.at) inWin++; else before++; } }); g.step(1); g.S.waiting.forEach(p => { p.at = p.at; }); g.S.hearts = 3; }
+    return { inWin, before }; });
+  check(bell.inWin >= 25, `goingup LUNCH BELL: the bell brings a real surge (${bell.inWin} people in 15 s after ${bell.before} in 45 s)`);
   const fz = await runDay(4, 'zoned'), fs = await runDay(4, 'sweep');
   check(fz.s === 'win' && fz.hearts === 3 && fz.max < fs.max, `goingup: on FIVE O'CLOCK zones cut the longest wait to ${fz.max} s from the sweep's ${fs.max} s`);
   // manual: tapping a floor sends the lift there
@@ -540,7 +547,7 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `lobby-S${i + 1}-report.png`) });
     check(r.smart.pass && r.smart.happy > r.fifo.happy, `lobby shift ${i + 1}: waiting for fair lobbies passes (${r.smart.happy} happy, ${r.smart.quits} quits); first-come matching doesn't beat it (${r.fifo.happy} happy)`);
   }
-  const law = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.length - 1, L = g.LEVELS[i]; g.load(i); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
+  const law = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.name === 'LAUNCH DAY'), L = g.LEVELS[i]; g.load(i); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
     return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(i).length }; });
   check(law.served <= law.cap && law.arrived > law.cap, `lobby launch day: three servers cap the shift at ${law.cap} players however you play (served ${law.served} of ${law.arrived})`);
   const v = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[2], p = (skill, reg, at) => ({ skill, reg, at });
@@ -551,6 +558,10 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const fit = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(60); g.S.clock = 0; const P = (id, skill) => ({ id, name: 'p' + id, skill, reg: 'EU', at: 0, pat: 99, party: null });
     g.S.queue = [P(1, 5), P(2, 5), P(3, 9)]; g.S.sel = new Set([1]); return [g.fits(g.S.queue[1]), g.fits(g.S.queue[2]), g.fits(g.S.queue[0])].join(); });
   check(fit === 'true,false,', `lobby: rows show whether adding them keeps the lobby fair (${fit})`);
+  const rentCurve = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.rent), out = {};
+    for (const c of [2, 6, 9]) { g.load(i); g.rent(c); g.autopilot = 'smart'; for (let k = 0; k < 700 && g.state !== 'report'; k++) g.step(10); out[c] = { net: g.net(), pass: g.result().pass }; } return out; });
+  check(rentCurve[6].pass && !rentCurve[2].pass && rentCurve[6].net > rentCurve[9].net && rentCurve[6].net > rentCurve[2].net,
+    `lobby SEASON 2: renting about the load wins (6 servers net ${rentCurve[6].net}); too few (2: ${rentCurve[2].net}) or too many (9: ${rentCurve[9].net}) lose happy players`);
   const bf = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.leave), out = {};
     for (const pol of ['smart', 'fifo']) { g.load(i); g.autopilot = pol; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10); out[pol] = { filled: g.S.filled, abandoned: g.S.abandoned, happy: g.S.happy }; } return out; });
   check(bf.smart.filled > 0 && bf.smart.abandoned === 0 && bf.fifo.abandoned > 0, `lobby backfill: filling open seats saves matches (${bf.smart.filled} filled, 0 abandoned); ignoring them abandons ${bf.fifo.abandoned / 3}`);
@@ -578,6 +589,14 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `faro-L${i + 1}-win.png`) });
     check(st.s === 'win' && st.m === st.par, `faro hand ${i + 1} solved at par (${st.m}/${st.par})`);
   }
+  const poss = await page.evaluate(() => { const g = window.__game, n = 8, key = d => d.join(','), seen = new Set([key(g.newDeck(n))]), q = [g.newDeck(n)];
+    while (q.length) { const d = q.shift(); for (const f of [g.inFaro, g.outFaro]) { const e = f(d); if (!seen.has(key(e))) { seen.add(key(e)); q.push(e); } } }
+    const anyOdd = [...seen].some(k => g.odd(k.split(',').map(Number)));
+    const calls = g.LEVELS.filter(L => L.goal.target).map(L => g.possible(L) + (g.odd(L.goal.target) ? ':odd' : ':even'));
+    const i = g.LEVELS.findIndex(L => L.goal.target && g.possible(L)); g.load(i); g.start(); g.step(60); const m0 = g.S.moves; g.declare(); const penalty = g.S.moves - m0, still = g.state;
+    return { reach: seen.size, anyOdd, calls: calls.join(), penalty, still }; });
+  check(poss.reach === 24 && !poss.anyOdd && poss.calls === 'true:even,false:odd,false:even' && poss.penalty === 3 && poss.still === 'play',
+    `faro POSSIBLE?: 8 cards reach ${poss.reach} orders, none odd; hands are possible / odd / even-but-unreachable (${poss.calls}); a wrong IMPOSSIBLE call costs ${poss.penalty}`);
   const house = await page.evaluate(() => { const g = window.__game; let bad = 0, min = 99; for (let k = 0; k < 30; k++) { const L = g.houseDeal(k), p = g.par(L); if (!(p >= 4)) bad++; min = Math.min(min, p); } return { bad, min }; });
   check(house.bad === 0, `faro: 30 house deals are all solvable and at least 4 shuffles deep (shallowest ${house.min})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);

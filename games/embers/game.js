@@ -19,6 +19,7 @@
     { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. ONE COMES IN, ONE WAITS AT THE EDGE OF THE LIGHT. SCARE THE FIRST AND THE SECOND RUSHES: KEEP A SHOUT FOR IT.', len: 75, cold: 1.8, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
     { name: 'RED LIGHT', tip: 'A RED TORCH DOES NOT SPOIL NIGHT SIGHT, BUT IT ONLY REACHES WHAT IS CLOSE.', len: 80, cold: 2.0, spawn: 6, speed: .08, pack: 2, torch: 25 },
     { name: 'THE LONGEST NIGHT', tip: 'EVERYTHING AT ONCE. UNTIL DAWN.', len: 100, cold: 2.2, spawn: 5.5, speed: .085, pack: 2, torch: 20 },
+    { name: 'NEW MOON', tip: 'NO MOON, NO TORCH. EVEN RESTED EYES SEE LITTLE. LISTEN FOR THE SNAPS, FACE THEM, AND SHOUT AT THE EYES ONCE THEY ARE CLOSE.', len: 90, cold: 2.0, spawn: 6.5, speed: .075, pack: 2, torch: 0, dark: .45 },
   ];
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -44,7 +45,7 @@
   }
   function pause() { S.lockUntil = S.t + .6; S.warming = false; }
   const paused = () => S.t < S.lockUntil;
-  const V = () => sight(S.debt);
+  const V = () => sight(S.debt) * (S.L.dark || 1);   // a new moon caps what even rested eyes can do
   function start() { S.state = 'play'; pause(); }
 
   // ---------- the fire and your eyes ----------
@@ -131,7 +132,7 @@
       else if (S.warmth < 35) setWarming(true);
     }
     if (S.warming) { S.turn = 0; return; }
-    for (const b of S.beasts) { if (visible(b) && b.d >= SHOUT && S.voice >= 1) { b.seen = (b.seen || 0) + dt; if (b.seen > .5) shoo(b); } else b.seen = 0; }
+    for (const b of S.beasts) { if ((visible(b) || (S.L.dark && eyesOnly(b))) && b.d >= SHOUT && S.voice >= 1) { b.seen = (b.seen || 0) + dt; if (b.seen > .5) shoo(b); } else b.seen = 0; }
     // turn toward the nearest thing it has heard (the snaps tell it where)
     const heard = S.beasts.filter(b => !b.flee).sort((x, y) => y.d - x.d)[0];
     if (heard) { const rel = wrap(heard.a - S.look); S.turn = Math.abs(rel) < .1 ? 0 : clamp(rel * 3, -1, 1); }
@@ -151,7 +152,7 @@
         s.connect(fl).connect(g); if (p) { p.pan.value = clamp(pan, -1, 1); g.connect(p).connect(c.destination); } else g.connect(c.destination); s.start(t, S.rng()); s.stop(t + dur + .05);
       } catch (_) {}
     },
-    snap(rel, d) { const back = Math.abs(rel) > Math.PI / 2; this.burst(back ? 1400 : 2600, 3, .06, .12 + d * .3, Math.sin(rel)); this.burst(back ? 900 : 1800, 4, .05, .08 + d * .2, Math.sin(rel), .07); },
+    snap(rel, d) { const back = Math.abs(rel) > Math.PI / 2; this.burst(back ? 1400 : 2600, .8, .04, .14 + d * .3, Math.sin(rel)); this.burst(back ? 900 : 1800, .9, .035, .09 + d * .2, Math.sin(rel), .07); },   // broadband with a sharp onset: easier to place by ear
     growl(rel) { this.burst(160, 1.5, .6, .35, Math.sin(rel)); Audio.tone(70, .6, 'sawtooth', .08, 50); },
     croak() { this.burst(500, 2, .15, .12); },
     shout() { Audio.tone(220, .25, 'sawtooth', .12, 160); this.burst(800, 1, .2, .2); },
@@ -245,7 +246,7 @@
   }
   function render(c) {
     ctx = c;
-    if (S.state === 'done') { card('DAWN', '#ffe14a', ['FIVE NIGHTS. YOU KEPT YOUR EYES AND YOUR FINGERS.', 'DEMO COMPLETE'], 'TAP FOR THE DISC MENU'); return; }
+    if (S.state === 'done') { card('DAWN', '#ffe14a', ['SIX NIGHTS. YOU KEPT YOUR EYES AND YOUR FINGERS.', 'DEMO COMPLETE'], 'TAP FOR THE DISC MENU'); return; }
     if (S.warming && S.state === 'play') fireView(); else panorama();
     for (const f of S.flash) { const k = (S.t - f.t) / .5; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, 'HEY!', sx(f.a), HOR + 40 + f.d * 200, 40, '#fff'); ctx.globalAlpha = 1; } }
     for (const f of S.notes) { const k = (S.t - f.t) / 1; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, f.s, clamp(sx(f.a), 120, W - 120), HOR + 40 + f.d * 200 - k * 20, 22, '#ffd8a0'); ctx.globalAlpha = 1; } }
@@ -266,7 +267,7 @@
   function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; pause(); } }
   function tapAt(x, y) {
     let best = null, bd = 90;
-    for (const b of S.beasts) { if (!visible(b)) continue; const bx = sx(b.a), by = HOR + 10 + b.d * b.d * 330 - 20 * (.35 + b.d * 1.6), d = Math.hypot(bx - x, by - y); if (d < bd) { bd = d; best = b; } }
+    for (const b of S.beasts) { if (!visible(b) && !(S.L.dark && eyesOnly(b))) continue; const bx = sx(b.a), by = HOR + 10 + b.d * b.d * 330 - 20 * (.35 + b.d * 1.6), d = Math.hypot(bx - x, by - y); if (d < bd) { bd = d; best = b; } }
     if (best) shoo(best);
   }
   function onPointer(type, x, y) {
