@@ -387,7 +387,7 @@
     for (const k of S.karts) for (const c of S.trk.cones) { const dx = k.x - c.x, dy = k.y - c.y, d = Math.hypot(dx, dy); if (d < KR + 3 && d > 0) { const nx = dx / d, ny = dy / d, vn = k.vx * nx + k.vy * ny; k.x = c.x + nx * (KR + 3); k.y = c.y + ny * (KR + 3); if (vn < 0) { k.vx -= 1.5 * vn * nx; k.vy -= 1.5 * vn * ny; k.vx *= .7; k.vy *= .7; k.bump = .3; } } }
     for (const k of S.karts) { track(k, S.trk); unstick(k, S.trk); }
     if (S.player.done && !S.finishedAt) S.finishedAt = S.clock;
-    if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 20) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
+    if (S.player.done && (S.karts.every(k => k.done) || S.clock - S.finishedAt > 30) || S.clock > 300) { S.state = 'results'; S.karts.filter(k => !k.done).sort((a, b) => b.prog - a.prog).forEach(k => S.order.push(k)); }
   }
   // ---------- select: pick a shopper and a vehicle ----------
   const CARD = (i) => ({ x: 22 + (i % 4) * 126, y: 200 + Math.floor(i / 4) * 160, w: 118, h: 150 });
