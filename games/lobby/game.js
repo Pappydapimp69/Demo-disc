@@ -21,6 +21,8 @@
       tip: 'EU AND NA. MIX THEM AND EVERYONE LAGS: NOBODY IN THAT LOBBY IS HAPPY.' },
     { name: 'BRING A FRIEND', n: 4, gap: 1.4, len: 60, servers: 9, dur: 8, regions: false, party: .4, need: 24, quits: 5,
       tip: 'PARTIES (A, B, C...) QUEUE TOGETHER AND PLAY TOGETHER. TAP ONE, YOU GET BOTH.' },
+    { name: 'BACKFILL', n: 4, gap: 1.3, len: 60, servers: 9, dur: 10, regions: false, party: 0, leave: .45, need: 24, quits: 5,
+      tip: 'SOMEONE QUITS MID-MATCH. TAP ONE PLAYER CLOSE TO THAT LOBBY\'S SKILL AND MATCH TO FILL THE SEAT, OR THE OTHER THREE GIVE UP.' },
     { name: 'LAUNCH DAY', n: 4, gap: .55, len: 60, servers: 3, dur: 12, regions: false, party: .2, need: 40, quits: 99,
       tip: 'THE AD SAID TEN MILLION PLAYERS. YOU HAVE THREE SERVERS. MAKE THE MATCHES YOU CAN.' },
   ];
@@ -70,7 +72,7 @@
   function load(i) {
     const L = LEVELS[i];
     Object.assign(S, { li: i, L, state: 'intro', clock: 0, incoming: arrivals(i), queue: [], sel: new Set(), servers: Array(Math.min(L.servers, 9)).fill(0),
-      log: [], happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0 });
+      log: [], happy: 0, matched: 0, quits: 0, unhappy: 0, flash: null, cursor: 0, ap: 0, endT: 0, boot: 0, leaves: [], open: [], mm: rng(5000 + i * 31), filled: 0, abandoned: 0 });
     pause(); API.autopilot = null;
   }
   function pause() { S.lockUntil = S.t + .6; }
@@ -100,21 +102,41 @@
   function match() {
     if (S.state !== 'play' || paused()) return false;
     const g = S.queue.filter(p => S.sel.has(p.id));
+    if (g.length === 1 && S.open.length) return backfill(g[0]);
     if (g.length !== S.L.n) { S.flash = { s: `NEED ${S.L.n} PLAYERS`, t: S.t }; Snd.err(); return false; }
     const k = S.servers.findIndex(f => f <= S.clock);
     if (k < 0) { S.flash = { s: 'NO FREE SERVER', t: S.t }; Snd.err(); return false; }
     const v = verdict(g, S.clock, S.L);
     S.servers[k] = S.clock + S.L.dur; S.queue = S.queue.filter(p => !S.sel.has(p.id)); S.sel.clear();
     S.happy += v.happy; S.unhappy += g.length - v.happy; S.matched += g.length;
+    if (S.L.leave && S.mm() < S.L.leave) S.leaves.push({ k, at: S.clock + 2 + S.mm() * (S.L.dur - 5), skill: Math.round(g.reduce((a, p) => a + p.skill, 0) / g.length) });
     const what = v.mixed ? 'LAG. EVERYONE IS MAD' : v.happy === g.length ? 'GG' : v.spread >= 5 ? 'STOMP' : `${g.length - v.happy} SALTY`;
     say(`> MATCH SRV${k + 1} SPREAD ${v.spread}  ${what}`, v.happy === g.length ? GREEN : v.happy ? AMBER : RED);
     v.happy === g.length ? Snd.gg() : Snd.meh();
     return true;
   }
 
+  // a seat left open mid-match: one player fills it, happy if the lobby's skill is inside their window
+  function backfill(p) {
+    const o = S.open.shift(), ok = Math.abs(p.skill - o.skill) <= tol(S.clock - p.at);
+    S.queue = S.queue.filter(q => q.id !== p.id); S.sel.clear(); S.matched++; S.filled++;
+    if (ok) S.happy++; else S.unhappy++;
+    say(`> BACKFILL SRV${o.k + 1} (~${o.skill}) WITH ${p.skill}  ${ok ? 'SAVED' : 'SALTY'}`, ok ? GREEN : AMBER); ok ? Snd.gg() : Snd.meh();
+    return true;
+  }
+  function seats() {
+    for (const l of S.leaves) if (!l.done && l.at <= S.clock && S.servers[l.k] > S.clock) { l.done = true; S.open.push({ k: l.k, skill: l.skill, until: S.clock + 8 }); say(`! SRV${l.k + 1} PLAYER LEFT. NEEDS 1 (~${l.skill})`, AMBER); Snd.err(); }
+    for (const o of S.open) if (o.until <= S.clock) { o.gone = true; S.abandoned += S.L.n - 1; S.happy = Math.max(0, S.happy - (S.L.n - 1)); say(`X SRV${o.k + 1} ABANDONED: -${S.L.n - 1} HAPPY`, RED); Snd.quit(); }
+    S.open = S.open.filter(o => !o.gone);
+  }
+
   // ---------- autopilot (tests): 'smart' waits for lobbies that please everyone; 'fifo' takes the queue in order ----------
   function autopilot() {
     if ((S.ap += 1) % 15) return;                      // decide four times a second
+    if (S.open.length && S.queue.length && API.autopilot !== 'fifo') {
+      const o = S.open[0], p = S.queue.slice().sort((a, b) => Math.abs(a.skill - o.skill) - Math.abs(b.skill - o.skill) || a.at - b.at)[0];
+      S.sel = new Set([p.id]); match(); return;
+    }
     if (S.servers.every(f => f > S.clock) || S.queue.length < S.L.n) return;
     let pick = null;
     if (API.autopilot === 'fifo') { const g = []; for (const u of units(S.queue)) if (g.length + u.length <= S.L.n) g.push(...u); if (g.length === S.L.n) pick = g; }
@@ -143,6 +165,7 @@
       say(`X ${p.name}${mates.length > 1 ? ' +1' : ''} RAGE-QUIT`, RED); Snd.quit();
     }
     S.queue = S.queue.filter(p => !p.gone);
+    seats();
     if (API.autopilot && !paused()) autopilot();
     if (S.clock >= S.L.len) { S.state = 'report'; S.endT = 0; S.sel.clear(); pause(); passed() ? Audio.sfx('win') : Audio.sfx('fail'); }
   }
@@ -217,21 +240,25 @@
     // the lobby being built
     const g = S.queue.filter(p => S.sel.has(p.id));
     let ly = 648 - 22;
-    if (g.length) {
+    const o = S.open[0], fill = o && g.length === 1;
+    if (o && g.length <= 1) {
+      const ok = g.length && Math.abs(g[0].skill - o.skill) <= tol(S.clock - g[0].at);
+      T(c, g.length ? `FILL SRV${o.k + 1} (~${o.skill}) WITH ${g[0].skill}: ${ok ? 'FITS' : 'SALTY'}  ${Math.ceil(o.until - S.clock)}s` : `OPEN SEAT SRV${o.k + 1} (~${o.skill}): TAP 1 PLAYER  ${Math.ceil(o.until - S.clock)}s`, 18, ly, g.length && ok ? GREEN : AMBER);
+    } else if (g.length) {
       const v = verdict(g, S.clock, L);
       T(c, `LOBBY ${g.length}/${L.n}  SPREAD ${v.spread}${v.mixed ? '  MIXED REGIONS' : ''}  HAPPY ${v.happy}/${g.length}`, 18, ly, v.mixed || v.happy < g.length ? AMBER : GREEN);
     } else T(c, `LOBBY 0/${L.n}  TAP ${L.n} PLAYERS`, 18, ly, DIM);
-    box(c, BTN.sort, S.sort === 'skill' ? 'BY SKILL' : 'BY ARRIVAL', S.sort === 'skill'); box(c, BTN.match, '[ MATCH ]', g.length === L.n); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
+    box(c, BTN.sort, S.sort === 'skill' ? 'BY SKILL' : 'BY ARRIVAL', S.sort === 'skill'); box(c, BTN.match, fill ? '[ FILL SEAT ]' : '[ MATCH ]', g.length === L.n || fill); box(c, BTN.clear, '[ CLEAR ]', g.length > 0);
     // servers
     let sx = 18; T(c, 'SRV', sx, 744, DIM); sx += 4 * CW;   // each server shows the seconds its match has left
-    S.servers.forEach(f => { const busy = f > S.clock; T(c, busy ? `[${Math.min(9, Math.ceil(f - S.clock))}]` : '[ ]', sx, 744, busy ? GREEN : DIM); sx += 3.6 * CW; });
+    S.servers.forEach((f, k) => { const busy = f > S.clock, op = S.open.some(o => o.k === k); T(c, op ? '[?]' : busy ? `[${Math.min(9, Math.ceil(f - S.clock))}]` : '[ ]', sx, 744, op ? AMBER : busy ? GREEN : DIM); sx += 3.6 * CW; });
     S.log.forEach((l, i) => T(c, l.s.slice(0, 44), 18, 786 + i * 30, l.col));
     if (S.flash && S.t - S.flash.t < 1.2) { c.fillStyle = BG; c.fillRect(W / 2 - 150, 560, 300, 50); c.strokeStyle = RED; c.strokeRect(W / 2 - 150, 560, 300, 50); T(c, S.flash.s, W / 2 - S.flash.s.length * CW / 2, 586, RED); }
   }
   function drawReport(c) {
     const L = S.L, ok = passed(), st = stars();
     const lines = [`> SHIFT ${S.li + 1} REPORT: ${L.name}`, '', `  MATCHED      ${S.matched}`, `  HAPPY        ${S.happy}  (GOAL ${L.need})`, `  SALTY        ${S.unhappy}`,
-      `  RAGE-QUITS   ${S.quits}${L.quits < 99 ? '  (MAX ' + L.quits + ')' : ''}`, `  STILL QUEUED ${S.queue.length + S.incoming.length}`, '', ok ? `  RATING  ${'* '.repeat(st)}${'. '.repeat(3 - st)}` : '  RATING  ---'];
+      `  RAGE-QUITS   ${S.quits}${L.quits < 99 ? '  (MAX ' + L.quits + ')' : ''}`, `  STILL QUEUED ${S.queue.length + S.incoming.length}`, ...(L.leave ? [`  BACKFILLED   ${S.filled}   ABANDONED ${S.abandoned / (L.n - 1)}`] : []), '', ok ? `  RATING  ${'* '.repeat(st)}${'. '.repeat(3 - st)}` : '  RATING  ---'];
     let y = 160; for (const s of lines) { T(c, s, 24, y, s.startsWith('> ') ? AMBER : GREEN); y += 36; }
     const verdictLine = ok ? (S.li === LEVELS.length - 1 ? '> TEN MILLION? WE SERVED ' + S.matched + '. SHIP IT.' : '> SHIFT PASSED. NEXT SHIFT LOADING.') : S.quits > L.quits ? '> TOO MANY RAGE-QUITS. AGAIN.' : '> NOT ENOUGH HAPPY PLAYERS. AGAIN.';
     wrap(verdictLine, 40).forEach((s, i) => T(c, s, 24, y + 20 + i * 34, ok ? GREEN : RED));

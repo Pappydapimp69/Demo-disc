@@ -29,6 +29,24 @@
     if (!prev.has(want)) return null;
     const path = []; let k = want; while (prev.get(k)) { const [pk, m] = prev.get(k); path.unshift(m); k = pk; } return path;
   }
+  // every joint position the given cards can reach, with its shuffle distance (for dealing solvable hands)
+  function reachable(ps, n) {
+    const key = x => x.join(','), seen = new Map([[key(ps), { ps, d: 0 }]]), q = [ps];
+    while (q.length) { const x = q.shift(), d = seen.get(key(x)).d; for (const m of ['out', 'in']) { const y = x.map(p => where(p, n, m)); if (!seen.has(key(y))) { seen.set(key(y), { ps: y, d: d + 1 }); q.push(y); } } }
+    return [...seen.values()];
+  }
+  function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  // the house deals forever: goals are drawn only from positions the shuffles can reach, at least 4 shuffles away
+  function houseDeal(k) {
+    const r = mkRng(9000 + k * 7919), base = LEVELS[LEVELS.length - 1];
+    if (k % 3 === 2) {   // a buried ace in a full deck
+      const start = Array.from({ length: 3 }, () => r() < .5 ? 'in' : 'out'), d = deal({ n: 52, start });
+      const far = reachable([d.indexOf(0)], 52).filter(x => x.d >= 4), g = far[Math.floor(r() * far.length)];
+      return { ...base, n: 52, start, goal: { card: 0, pos: g.ps[0] }, tip: 'THE ACE IS ALREADY BURIED. GET IT TO THE GOLD SLOT.' };
+    }
+    const c2 = 1 + Math.floor(r() * 14), far = reachable([0, c2], 16).filter(x => x.d >= 4), g = far[Math.floor(r() * far.length)];
+    return { ...base, n: 16, start: [], goal: { cards: [[0, g.ps[0]], [c2, g.ps[1]]] }, tip: 'TWO CARDS, TWO SLOTS, ONE SEQUENCE.' };
+  }
   const goalsOf = L => L.goal.cards || (L.goal.order ? null : [[L.goal.card, L.goal.pos]]);
   const LEVELS = [
     { name: 'THE TOP CARD', n: 8, start: [], goal: { card: 0, pos: 3 }, tip: 'OUT KEEPS THE TOP CARD ON TOP. IN TUCKS IT TO SECOND. PUT THE ACE IN THE GOLD SLOT.' },
@@ -38,13 +56,14 @@
     { name: 'TWO CARDS', n: 16, start: [], goal: { cards: [[0, 9], [5, 3]] }, tip: 'BOTH AT ONCE: THE ACE AND THE 6 OF SPADES INTO THEIR SLOTS. EVERY SHUFFLE MOVES BOTH.' },
     { name: 'NEW DECK ORDER', n: 52, start: ['out', 'out', 'out'], goal: { order: true }, tip: 'SOMEONE DID THREE OUT FAROS. PUT EVERY CARD BACK IN ITS STARTING PLACE.' },
     { name: 'BRING IT HOME', n: 16, start: ['in', 'out', 'in', 'in'], goal: { card: 0, pos: 0 }, tip: 'NOW THE ACE IS BURIED. SHUFFLE IT BACK TO THE TOP.' },
+    { name: 'HOUSE DEAL', house: true, n: 16, start: [], goal: { card: 0, pos: 5 }, tip: 'THE HOUSE DEALS FOREVER.' },
   ];
   function deal(L) { let d = newDeck(L.n); for (const k of L.start) d = k === 'in' ? inFaro(d) : outFaro(d); return d; }
   const solved = (L, d) => L.goal.order ? d.every((c, i) => c === i) : goalsOf(L).every(([c, p]) => d[p] === c);
   function par(L) { const d = deal(L); if (L.goal.order) { let k = 0, e = d; while (!e.every((c, i) => c === i)) { e = outFaro(e); k++; } return k; } return planMulti(d, goalsOf(L), L.n).length; }
 
-  const S = { li: 0, L: null, deck: [], prev: [], moves: 0, hist: [], state: 'intro', t: 0, lockUntil: 0, anim: null, endT: 0, par: 0, ap: null };
-  function load(i) { const L = LEVELS[i]; Object.assign(S, { li: i, L, deck: deal(L), prev: null, moves: 0, hist: [], state: 'intro', anim: null, endT: 0, par: par(L), ap: null }); pause(); API.autopilot = null; }
+  const S = { house: 0, li: 0, L: null, deck: [], prev: [], moves: 0, hist: [], state: 'intro', t: 0, lockUntil: 0, anim: null, endT: 0, par: 0, ap: null };
+  function load(i) { const L = LEVELS[i].house ? { ...houseDeal(S.house), name: `HOUSE DEAL #${S.house + 1}` } : LEVELS[i]; Object.assign(S, { li: i, L, deck: deal(L), prev: null, moves: 0, hist: [], state: 'intro', anim: null, endT: 0, par: par(L), ap: null }); pause(); API.autopilot = null; }
   function pause() { S.lockUntil = S.t + .6; }
   const paused = () => S.t < S.lockUntil;
   function start() { S.state = 'play'; pause(); }
@@ -138,14 +157,14 @@
     if (S.state === 'intro') card(`HAND ${S.li + 1}: ${S.L.name}`, '#ffe14a', [S.L.tip, `PAR: ${S.par} SHUFFLES`], 'TAP TO DEAL');
     if (S.state === 'win') {
       const stars = S.moves <= S.par ? 3 : S.moves <= S.par + 2 ? 2 : 1;
-      card('PERFECT!', '#7af08a', [`${S.moves} SHUFFLES · PAR ${S.par}`, S.L.goal.order ? 'EIGHT OUT FAROS BRING A 52-CARD DECK HOME.' : S.L.goal.cards ? 'ONE SEQUENCE, TWO CARDS. THE DECK HAS NO FREE MOVES.' : `${S.L.goal.pos} IN BINARY IS ${S.L.goal.pos.toString(2)}.`], S.li < LEVELS.length - 1 ? 'TAP FOR THE NEXT HAND' : 'TAP TO FINISH');
+      card('PERFECT!', '#7af08a', [`${S.moves} SHUFFLES · PAR ${S.par}`, S.L.goal.order ? 'EIGHT OUT FAROS BRING A 52-CARD DECK HOME.' : S.L.goal.cards ? 'ONE SEQUENCE, TWO CARDS. THE DECK HAS NO FREE MOVES.' : `${S.L.goal.pos} IN BINARY IS ${S.L.goal.pos.toString(2)}.`], S.L.house ? 'TAP FOR ANOTHER DEAL' : 'TAP FOR THE NEXT HAND');
       for (let i = 0; i < 3; i++) { const kk = back(clamp((S.endT - .3 - i * .15) / .3)); if (kk > 0) { ctx.save(); ctx.translate(W / 2 + (i - 1) * 80, 600); ctx.scale(kk, kk); Draw.star(ctx, 0, 0, 30, i < stars ? '#ffd23a' : '#2a4a3a'); ctx.restore(); } }
     }
   }
 
   // ---------- input ----------
   const hit = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
-  function next() { if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; pause(); } }
+  function next() { if (S.L.house) { S.house++; load(S.li); } else if (S.li < LEVELS.length - 1) load(S.li + 1); else { S.state = 'done'; pause(); } }
   function onPointer(type, x, y) {
     if (type !== 'down' || paused()) return;
     if (S.state === 'done') { Engine.exit(); return; }
@@ -162,7 +181,7 @@
     else if (key === 'r' || key === 'R') reset();
   }
 
-  const API = { LEVELS, S, load, start, shuffle, outFaro, inFaro, binary, plan, planMulti, newDeck, par, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
+  const API = { LEVELS, S, houseDeal, reachable, next, load, start, shuffle, outFaro, inFaro, binary, plan, planMulti, newDeck, par, autopilot: null, step: n => game.step(n), get state() { return S.state; } };
   load(0);
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
   window.__game = API;

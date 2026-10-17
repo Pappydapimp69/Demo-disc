@@ -17,7 +17,7 @@
     { name: 'THE TOP FLOOR', floors: 9, cars: 1, rate: .9, goal: 75, time: 130, tip: "THE LOW FLOORS ARE BUSY. DON'T FORGET WHO IS WAITING AT THE TOP.",
       traffic: (r, F) => r() < .1 ? [F - 1, 0] : (() => { const a = Math.floor(r() * 4); let b = Math.floor(r() * 3); if (b >= a) b++; return [a, b]; })() },
     { name: 'LUNCH', floors: 10, cars: 2, rate: 1.0, goal: 90, time: 130, tip: 'TWO LIFTS NOW. TAP A LIFT TO PICK IT, THEN TAP A FLOOR.', traffic: (r, F) => r() < .5 ? anywhere(r, F) : r() < .5 ? [0, 1 + Math.floor(r() * (F - 1))] : [1 + Math.floor(r() * (F - 1)), 0] },
-    { name: "FIVE O'CLOCK", floors: 12, cars: 2, rate: 1.2, goal: 110, time: 140, tip: 'EVERYONE WANTS TO GO HOME. ALL THE WAY DOWN.', traffic: (r, F) => r() < .85 ? [1 + Math.floor(r() * (F - 1)), 0] : anywhere(r, F) },
+    { name: "FIVE O'CLOCK", floors: 12, cars: 2, rate: 1.2, goal: 110, time: 140, tip: 'EVERYONE WANTS TO GO HOME. ALL THE WAY DOWN. ZONES GIVE EACH LIFT HALF THE BUILDING: SLOWER ON AVERAGE, BUT NOBODY IS FORGOTTEN.', traffic: (r, F) => r() < .85 ? [1 + Math.floor(r() * (F - 1)), 0] : anywhere(r, F) },
   ];
   function mkRng(seed) { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -84,6 +84,8 @@
     // a full lift can only serve its riders' floors; and it never "goes" to the floor it is already standing at
     const full = c.riders.length >= CAP, here = Math.round(c.y);
     const fs = requests(c).filter(f => (!full || c.riders.some(p => p.to === f)) && !(f === here && Math.abs(c.y - here) < .01)); if (!fs.length) return null;
+    // zoned: with two lifts, each answers calls only in its half (plus the lobby); riders still go anywhere
+    if (rule === 'zoned' && S.L.cars > 1) { const mid = Math.ceil(S.L.floors / 2), mine = f => f === 0 || (c.id === 0 ? f < mid : f >= mid) || c.riders.some(p => p.to === f); const z = fs.filter(mine); if (!z.length) return null; fs.length = 0; fs.push(...z); }
     if (rule === 'nearest') return fs.sort((a, b) => Math.abs(a - c.y) - Math.abs(b - c.y) || a - b)[0];
     // sweep: nearest request ahead in the current direction; if none, turn around
     const ahead = fs.filter(f => (f - c.y) * c.dir >= 0).sort((a, b) => Math.abs(a - c.y) - Math.abs(b - c.y));
@@ -158,7 +160,10 @@
     });
     for (const p of S.pops) { const k = (S.t - p.t) / 1; if (k > 0 && k < 1) { ctx.globalAlpha = 1 - k; Draw.bigText(ctx, p.stairs ? 'TOOK THE STAIRS' : '+1', p.stairs ? 150 : W - 90, floorY(p.f) - k * 30, p.stairs ? 18 : 24, p.stairs ? '#e02a2a' : '#2a9a3a', '#fff'); ctx.globalAlpha = 1; } }
   }
-  const AUTO = [{ x: 20, y: H - 84, w: 160, h: 64, rule: null, label: 'MANUAL' }, { x: 190, y: H - 84, w: 160, h: 64, rule: 'nearest', label: 'AUTO: NEAREST' }, { x: 360, y: H - 84, w: 160, h: 64, rule: 'sweep', label: 'AUTO: SWEEP' }];
+  const AUTO3 = [{ x: 20, y: H - 84, w: 160, h: 64, rule: null, label: 'MANUAL' }, { x: 190, y: H - 84, w: 160, h: 64, rule: 'nearest', label: 'AUTO: NEAREST' }, { x: 360, y: H - 84, w: 160, h: 64, rule: 'sweep', label: 'AUTO: SWEEP' }];
+  // two lifts add zoning: each lift answers calls only in its half (plus the lobby)
+  const AUTO4 = [{ rule: null, label: 'MANUAL' }, { rule: 'nearest', label: 'NEAREST' }, { rule: 'sweep', label: 'SWEEP' }, { rule: 'zoned', label: 'ZONES' }].map((b, i) => ({ ...b, x: 16 + i * 128, y: H - 84, w: 120, h: 64 }));
+  const autoBtns = () => S.L && S.L.cars > 1 ? AUTO4 : AUTO3;
   function hud() {
     Draw.bigText(ctx, `${S.li + 1}/${LEVELS.length} · ${S.L.name}`, W / 2, 66, 26, '#1a2a4a', '#fff');
     const hh = Math.floor(9 + S.clock / S.L.time * 8), mm = Math.floor((S.clock / S.L.time * 8 * 60) % 60);
@@ -167,7 +172,7 @@
     ctx.textAlign = 'center'; ctx.fillText(`DELIVERED ${S.delivered}/${S.L.goal}`, W / 2, 112);
     ctx.textAlign = 'right'; ctx.fillStyle = '#e02a2a'; ctx.fillText('♥'.repeat(Math.max(0, S.hearts)) + '♡'.repeat(3 - Math.max(0, S.hearts)), W - 24, 112);
     ctx.font = '700 13px system-ui'; ctx.fillStyle = '#3a4a6a'; ctx.textAlign = 'center'; ctx.fillText(`LONGEST WAIT ${Math.round(S.maxWait)} s · PEOPLE GIVE UP AT ${PATIENCE} s`, W / 2, 140);
-    for (const b of AUTO) { const on = S.auto === b.rule; ctx.fillStyle = on ? '#3a7ad0' : '#ffffffcc'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 18); ctx.fill(); ctx.strokeStyle = '#3a7ad0'; ctx.lineWidth = 3; ctx.stroke(); ctx.font = '800 15px system-ui'; ctx.fillStyle = on ? '#fff' : '#1a2a4a'; ctx.textAlign = 'center'; ctx.fillText(b.label, b.x + b.w / 2, b.y + 38); }
+    for (const b of autoBtns()) { const on = S.auto === b.rule; ctx.fillStyle = on ? '#3a7ad0' : '#ffffffcc'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 18); ctx.fill(); ctx.strokeStyle = '#3a7ad0'; ctx.lineWidth = 3; ctx.stroke(); ctx.font = '800 15px system-ui'; ctx.fillStyle = on ? '#fff' : '#1a2a4a'; ctx.textAlign = 'center'; ctx.fillText(b.label, b.x + b.w / 2, b.y + 38); }
   }
   function wrapText(s, x, y, maxW, lh, font, col) { ctx.font = font; ctx.fillStyle = col; ctx.textAlign = 'center'; let line = '', yy = y; for (const w of s.split(' ')) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW) { ctx.fillText(line, x, yy); line = w; yy += lh; } else line = t; } ctx.fillText(line, x, yy); }
   function card(title, col, lines, prompt) {
@@ -201,7 +206,7 @@
     if (S.state === 'intro') { start(); return; }
     if (S.state === 'lost') { load(S.li); return; }
     if (S.state === 'win') { if (S.endT > 1) next(); return; }
-    for (const b of AUTO) if (hit(b, x, y)) { setAuto(b.rule); Audio.sfx('select'); return; }
+    for (const b of autoBtns()) if (hit(b, x, y)) { setAuto(b.rule); Audio.sfx('select'); return; }
     for (const c of S.cars) { const sx = shaftX(c.id); if (Math.abs(x - sx) < SHAFTW / 2 && Math.abs(y - floorY(c.y)) < FH() / 2) { S.sel = c.id; Audio.sfx('select'); return; } }
     if (y > TOP - 10 && y < BOT + 10) press = { f: clamp(Math.floor((BOT - y) / FH()), 0, S.L.floors - 1), t: S.t };
   }
@@ -215,6 +220,7 @@
     if (key === 'ArrowDown') { setAuto(null); goNow(c, Math.max(0, (c.target ?? Math.round(c.y)) - 1)); }
     if (key === 'n' || key === 'N') setAuto('nearest');
     if (key === 's' || key === 'S') setAuto('sweep');
+    if ((key === 'z' || key === 'Z') && S.L.cars > 1) setAuto('zoned');
     if (key === 'm' || key === 'M') setAuto(null);
     if (key === 'p' || key === 'P') park(c, Math.round(c.y));
   }

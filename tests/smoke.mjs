@@ -388,6 +388,10 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   check(sr === 'false,true,false,true', `embers: a shout at the treeline is wasted, a close one works, no voice no shout, and eyes show before the body (${sr})`);
   const told = await page.evaluate(() => { const g = window.__game; g.autopilot = null; g.load(0); g.start(); g.step(40); g.S.debt = 0; g.S.voice = 3; g.shoo({ a: g.S.look, d: .1, v: 0, flee: 0, snapT: 9, id: 7 }); return g.S.callout && g.S.callout.text; });
   check(/TOO FAR/.test(told || ''), `embers: the first wasted shout explains itself (${told})`);
+  const rush = await page.evaluate(() => { const g = window.__game; g.load(2); g.start(); g.step(40); g.S.nextSpawn = 99;
+    const a = { a: 0, d: .5, v: .08, flee: 0, snapT: 9, id: 1, pack: 7 }, b = { a: 2, d: .3, v: .08, flee: 0, snapT: 9, id: 2, pack: 7, lurk: true }; g.S.beasts = [a, b];
+    g.step(120); const held = b.d; a.flee = 1; const v0 = b.v; g.step(2); return { held: +held.toFixed(2), faster: +(b.v / v0).toFixed(1), lurk: b.lurk }; });
+  check(rush.held <= .38 && rush.faster > 2 && !rush.lurk, `embers: a pack's second one waits at the edge of the light (${rush.held}) and rushes ${rush.faster}x faster once you scare the first`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'embers: an accidental tap as the night opens is ignored');
   check(errors.length === 0, `embers runs without errors ${errors.join(' | ')}`);
@@ -491,6 +495,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   // the lesson: nearest-first strands the top floor until someone takes the stairs; the sweep bounds the wait
   const near = await runDay(2, 'nearest'), sw = await runDay(2, 'sweep');
   check(near.max >= 40 && near.hearts < 3 && sw.max < 20 && sw.hearts === 3, `goingup: on THE TOP FLOOR nearest-first left someone ${near.max} s (took the stairs), the sweep's longest wait was ${sw.max} s`);
+  // zoning is a trade: on the down-peak it bounds the longest wait (nobody takes the stairs) at a worse average
+  const fz = await runDay(4, 'zoned'), fs = await runDay(4, 'sweep');
+  check(fz.s === 'win' && fz.hearts === 3 && fz.max < fs.max, `goingup: on FIVE O'CLOCK zones cut the longest wait to ${fz.max} s from the sweep's ${fs.max} s`);
   // manual: tapping a floor sends the lift there
   const man = await page.evaluate(() => { const g = window.__game; g.load(0); g.start(); g.step(40); g.send(g.S.cars[0], 3); g.step(150); return Math.round(g.S.cars[0].y); });
   check(man === 3, 'goingup: a tapped floor gets the lift');
@@ -533,8 +540,8 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `lobby-S${i + 1}-report.png`) });
     check(r.smart.pass && r.smart.happy > r.fifo.happy, `lobby shift ${i + 1}: waiting for fair lobbies passes (${r.smart.happy} happy, ${r.smart.quits} quits); first-come matching doesn't beat it (${r.fifo.happy} happy)`);
   }
-  const law = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[4]; g.load(4); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
-    return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(4).length }; });
+  const law = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.length - 1, L = g.LEVELS[i]; g.load(i); g.autopilot = 'smart'; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10);
+    return { served: g.S.matched, cap: Math.floor(L.servers * L.n * L.len / L.dur), arrived: g.arrivals(i).length }; });
   check(law.served <= law.cap && law.arrived > law.cap, `lobby launch day: three servers cap the shift at ${law.cap} players however you play (served ${law.served} of ${law.arrived})`);
   const v = await page.evaluate(() => { const g = window.__game, L = g.LEVELS[2], p = (skill, reg, at) => ({ skill, reg, at });
     return [g.tol(0), g.tol(16), g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 0, L).happy, g.verdict([p(3, 'EU', 0), p(4, 'EU', 0), p(4, 'EU', 0), p(5, 'EU', 0)], 16, L).happy, g.verdict([p(4, 'EU', 0), p(4, 'NA', 0), p(4, 'EU', 0), p(4, 'EU', 0)], 30, L).happy]; });
@@ -544,6 +551,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const fit = await page.evaluate(() => { const g = window.__game; g.load(1); g.start(); g.step(60); g.S.clock = 0; const P = (id, skill) => ({ id, name: 'p' + id, skill, reg: 'EU', at: 0, pat: 99, party: null });
     g.S.queue = [P(1, 5), P(2, 5), P(3, 9)]; g.S.sel = new Set([1]); return [g.fits(g.S.queue[1]), g.fits(g.S.queue[2]), g.fits(g.S.queue[0])].join(); });
   check(fit === 'true,false,', `lobby: rows show whether adding them keeps the lobby fair (${fit})`);
+  const bf = await page.evaluate(() => { const g = window.__game, i = g.LEVELS.findIndex(L => L.leave), out = {};
+    for (const pol of ['smart', 'fifo']) { g.load(i); g.autopilot = pol; for (let k = 0; k < 600 && g.state !== 'report'; k++) g.step(10); out[pol] = { filled: g.S.filled, abandoned: g.S.abandoned, happy: g.S.happy }; } return out; });
+  check(bf.smart.filled > 0 && bf.smart.abandoned === 0 && bf.fifo.abandoned > 0, `lobby backfill: filling open seats saves matches (${bf.smart.filled} filled, 0 abandoned); ignoring them abandons ${bf.fifo.abandoned / 3}`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'lobby: an accidental tap as the shift opens is ignored');
   check(errors.length === 0, `lobby runs without errors ${errors.join(' | ')}`);
@@ -568,6 +578,8 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     await page.screenshot({ path: path.join(shots, `faro-L${i + 1}-win.png`) });
     check(st.s === 'win' && st.m === st.par, `faro hand ${i + 1} solved at par (${st.m}/${st.par})`);
   }
+  const house = await page.evaluate(() => { const g = window.__game; let bad = 0, min = 99; for (let k = 0; k < 30; k++) { const L = g.houseDeal(k), p = g.par(L); if (!(p >= 4)) bad++; min = Math.min(min, p); } return { bad, min }; });
+  check(house.bad === 0, `faro: 30 house deals are all solvable and at least 4 shuffles deep (shallowest ${house.min})`);
   await page.evaluate(() => window.__game.load(0)); await page.mouse.click(270, 500);
   check(await page.evaluate(() => window.__game.state === 'intro'), 'faro: an accidental tap as the hand opens is ignored');
   check(errors.length === 0, `faro runs without errors ${errors.join(' | ')}`);

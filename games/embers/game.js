@@ -9,13 +9,14 @@
   const { createGame, Audio, Draw, back, clamp } = Engine;
   const W = 540, H = 960, HOR = 430, FOV = 1.75;        // horizon y, field of view (rad)
   const GLANCE = 2, STARE = 17, BLEACH_T = 5;           // night-minutes of re-adaptation: a glance, a full stare, and how fast a look grows from one to the other
+  const LURK = .38, RUSH = 2.2;                        // where a pack's second one waits, and how much faster it comes once you scare the first
   const SHOUT = .3, VOICE = 3, VOICE_BACK = 2.5;      // a shout only scares what is this close; you have three in you, one back every 2.5 s
   const HEAT = 9, HEAT_RAMP = .8;                      // warmth per second once your hands have caught the heat, and how long that takes (a flick of a glance barely warms)
 
   const LEVELS = [
     { name: 'FIRST NIGHT', tip: "DON'T LOOK AT THE FIRE. YOUR EYES NEED THE DARK. EYES IN THE TREES COME FIRST; SHOUT (TAP) ONCE IT'S CLOSE ENOUGH TO CARE. SHOUTS COST VOICE.", len: 60, cold: 1.0, spawn: 7, speed: .06, pack: 1, torch: 0 },
     { name: 'COLD SNAP', tip: 'IT IS COLDER. WARM YOUR HANDS, BUT EVERY LOOK AT THE FIRE COSTS YOU YOUR EYES. HANDS TAKE A MOMENT TO CATCH THE HEAT.', len: 70, cold: 1.8, spawn: 6, speed: .07, pack: 1, torch: 0 },
-    { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. LISTEN FOR THE TWIGS AND TURN TOWARD THEM.', len: 75, cold: 1.8, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
+    { name: 'THE PACK', tip: 'THEY COME IN TWOS NOW. ONE COMES IN, ONE WAITS AT THE EDGE OF THE LIGHT. SCARE THE FIRST AND THE SECOND RUSHES: KEEP A SHOUT FOR IT.', len: 75, cold: 1.8, spawn: 6.5, speed: .075, pack: 2, torch: 0 },
     { name: 'RED LIGHT', tip: 'A RED TORCH DOES NOT SPOIL NIGHT SIGHT, BUT IT ONLY REACHES WHAT IS CLOSE.', len: 80, cold: 2.0, spawn: 6, speed: .08, pack: 2, torch: 25 },
     { name: 'THE LONGEST NIGHT', tip: 'EVERYTHING AT ONCE. UNTIL DAWN.', len: 100, cold: 2.2, spawn: 5.5, speed: .085, pack: 2, torch: 20 },
   ];
@@ -68,7 +69,8 @@
     const n = S.L.pack, base = S.rng() * Math.PI * 2;
     for (let k = 0; k < n; k++) {
       const a = wrap(base + (k ? (S.rng() < .5 ? -1 : 1) * (1.4 + S.rng()) : 0));
-      S.beasts.push({ a, d: 0, v: S.L.speed * (.8 + S.rng() * .4), flee: 0, snapT: 0, id: Math.floor(S.rng() * 1e6) });
+      // in a pack the second one hangs back at the edge of the light and rushes when you scare its partner
+      S.beasts.push({ a, d: 0, v: S.L.speed * (.8 + S.rng() * .4), flee: 0, snapT: 0, id: Math.floor(S.rng() * 1e6), pack: base, lurk: k > 0 });
       Snd.snap(wrap(a - S.look), 0);
     }
   }
@@ -76,7 +78,8 @@
     S.nextSpawn -= dt; if (S.nextSpawn <= 0) { spawn(); S.nextSpawn = S.L.spawn * (.8 + S.rng() * .4); }
     for (const b of S.beasts) {
       if (b.flee) { b.d -= dt * .5; continue; }
-      b.d += b.v * dt;
+      if (b.lurk && !S.beasts.some(o => o !== b && o.pack === b.pack && !o.flee && !o.gone)) { b.lurk = false; b.v *= RUSH; Snd.growl(wrap(b.a - S.look)); callout('rush', 'IT WAS WAITING FOR THAT. THE SECOND ONE IS COMING.'); }
+      b.d = b.lurk ? Math.min(LURK, b.d + b.v * dt) : b.d + b.v * dt;
       b.snapT -= dt; if (b.snapT <= 0) { Snd.snap(wrap(b.a - S.look), b.d); b.snapT = 2.5 - b.d * 1.6; }
       if (b.d >= 1) { b.gone = true; S.lives--; S.hurt = 1; Snd.lunge(); }
     }
@@ -149,6 +152,7 @@
       } catch (_) {}
     },
     snap(rel, d) { const back = Math.abs(rel) > Math.PI / 2; this.burst(back ? 1400 : 2600, 3, .06, .12 + d * .3, Math.sin(rel)); this.burst(back ? 900 : 1800, 4, .05, .08 + d * .2, Math.sin(rel), .07); },
+    growl(rel) { this.burst(160, 1.5, .6, .35, Math.sin(rel)); Audio.tone(70, .6, 'sawtooth', .08, 50); },
     croak() { this.burst(500, 2, .15, .12); },
     shout() { Audio.tone(220, .25, 'sawtooth', .12, 160); this.burst(800, 1, .2, .2); },
     lunge() { Audio.tone(110, .5, 'sawtooth', .2, 60); this.burst(400, .8, .5, .4); },
