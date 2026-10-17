@@ -317,6 +317,7 @@
     if (!aliveFoes().length) return winBattle();
     if (!aliveParty().length) { B.phase = 'lose'; B.t = 0; Audio.sfx('fail'); return; }
     B.slow = 1;
+    if (B.kind === 'dojo' && S.dojo) return void dojoTurn(B);   // the tutorial picks every turn
     if (S.demo && demoTurn(B)) return;   // the playable pitch picks who acts while it is teaching
     if (!B.turnQ.length) {
       B.round++;
@@ -429,7 +430,7 @@
   function castTap(B, hand) {   // one hand of a two-hand cast; the spell resolves when both are in (or the second ring passes)
     const r = B.ring, key = hand === 'L' ? 'gL' : 'gR'; if (r[key] !== null) return;
     if (hand === 'R' && r.gL === null && B.t < r.t1 + .16) { r.gL = 1; pop(B, 'LEFT FIRST', 45, 54, 'r2'); }   // the right hand cannot start the spell
-    const g = gradeOf(Math.abs(B.t - (hand === 'L' ? r.t1 : r.t2))); r[key] = g; ghost(hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, PAD_Y + 36, hand);
+    const e = B.t - (hand === 'L' ? r.t1 : r.t2), g = gradeOf(Math.abs(e)); r[key] = g; r[hand === 'L' ? 'eL' : 'eR'] = e; ghost(hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, PAD_Y + 36, hand);
     pop(B, g > 1.4 ? 'PERFECT' : g > 1 ? 'GOOD' : 'OK', hand === 'L' ? 30 : 60, 54, g > 1.4 ? 'au' : g > 1 ? 'c3' : 's4');
     FXS.castNote(hand, g); if (g > 1.4) { B.stats.perfect++; buzz(12); }
     if (r.gL !== null && r.gR !== null) { B.hitT = B.t; B.grade = (r.gL + r.gR) / 2 * (r.gL > 1.4 && r.gR > 1.4 ? 1.15 : 1); if (B.grade > 1.6) { pop(B, 'TWO-HAND!', 45, 40, 'p2', true); S.hitstop = .1; shake(.4); } }
@@ -447,11 +448,12 @@
     if (B.lock[hand] > B.t) return;
     const d = B.t - h.at, win = hand === 'L' ? BLOCK_WIN + (G.gear.mirror ? .07 : 0) : h.kind === 'h' ? BLOCK_WIN : PARRY_WIN + (G.gear.mirror ? .03 : 0);
     if (Math.abs(d) <= win) {
+      h.err = d;
       h.res = hand === 'L' ? 'block' : h.kind === 'h' ? 'crushed' : 'parry';
       if (h.res === 'parry') { pop(B, 'PARRY!', 66, 58, 'c2', true); S.fieldFlash = .07; FXS.parry(); S.hitstop = .09; buzz(20); }
       else if (h.res === 'block') { pop(B, 'BLOCK', 66, 58, 'c3', true); FXS.block(); S.hitstop = .05; buzz(15); }
       else { pop(B, 'CRUSHED!', 66, 58, 'r2', true); FXS.crushed(); }
-    } else if (d < -win) { B.lock[hand] = h.at + .06; pop(B, 'EARLY', hand === 'L' ? 20 : 70, 90, 's3'); Audio.tone(200, .05, 'square', .03); }
+    } else if (d < -win) { B.lock[hand] = h.at + .06; h.locked = true; h.err = d; pop(B, 'EARLY', hand === 'L' ? 20 : 70, 90, 's3'); Audio.tone(200, .05, 'square', .03); }
   }
   function resolveAction(target, grade) {
     const B = S.battle, a = B.actor, c = B.cmd;
@@ -507,6 +509,7 @@
       if (h.res !== 'parry') { d = Math.max(1, d); v.hp = Math.max(0, v.hp - d); if (B.noLose) v.hp = Math.max(1, v.hp); B.stats.taken += d; v.hurtT = S.t; pop(B, String(d), vx - 1, vy - 9, h.res === 'block' ? 'c3' : 'r2'); }
     }
     if (h.res) B.stats[h.res]++;
+    dojoHit(B, h);
     f.lungeT = S.t;
     if (h.res === 'parry') {   // the counter: a free riposte, a wake pip and a notch of break
       const cd = Math.max(1, Math.round(counter * (B.aoe ? .5 : 1)));
@@ -678,6 +681,109 @@
     B.hits.forEach((h, j) => { const tk = j ? [-.2, 0] : TICKS; h.cued = h.cued || 0; while (h.cued < tk.length && B.t >= h.at + tk[h.cued] - .06) { const ahead = (h.at + tk[h.cued] - B.t) / (B.slow || 1); FXS.tick(h.kind === 'h', h.cued === tk.length - 1, ahead); h.cued++; } });   // later hits in a string get a short count, so ticks never overlap
   }
 
+  // ---------- the dojo: a tutorial on attacking, parrying and spell casting ----------
+  // Each chapter SHOWS the move (an animated card: the ring, the pad, a ghost thumb tapping on the beat), then you
+  // PRACTISE it against a training hand that never dies, and every try gets a TIMING METER: where you tapped against the
+  // window, with EARLY / LATE in milliseconds. A chapter passes after enough good tries; the parry slows down after two
+  // misses in a row. It runs on the real battle code, so what you learn here is exactly what the fight checks.
+  const DOJO = [
+    { id: 'attack', title: 'ATTACK', actor: 'hero', need: 3, hand: 'R', c: 'au',
+      lines: ['TAP STRIKE.', 'A RING CLOSES ON', 'THE FOE: TAP WHEN', 'THE RINGS MEET.', 'PERFECT = MORE DAMAGE'] },
+    { id: 'parry', title: 'PARRY', need: 3, hand: 'R', c: 'c2',
+      lines: ['BLUE HIT = SWIFT.', 'TAP THE RIGHT PAD', 'AS ITS RING CLOSES.', 'NO DAMAGE + COUNTER.', 'EARLY = THUMB LOCKED.'] },
+    { id: 'cast', title: 'CAST', actor: 'mage', need: 2, hand: 'B', c: 'p2',
+      lines: ['SPELLS: BOTH HANDS.', 'TAP FIREBALL, THEN', 'LEFT RING, THEN RIGHT', 'BOTH PERFECT = THE', 'STRONGEST HIT.'] },
+  ];
+  function startDojo() {
+    S.dojo = { ch: 0, phase: 'explain', t: 0, reps: 0, fails: 0, streak: 0, fb: null };
+    G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest';
+    startBattle(['thand'], 'dojo'); S.battle.noLose = true; S.battle.foes[0].name = 'TRAINING HAND';
+  }
+  const dojoCh = () => S.dojo && DOJO[S.dojo.ch];
+  function dojoTurn(B) {   // the chapter decides every turn
+    const d = S.dojo, C = dojoCh(), f = B.foes[0]; f.hp = f.maxhp; f.brk = 0; f.stun = 0; f.intent = null;
+    for (const p of G.party) p.hp = p.maxhp;
+    if (!C) return true;
+    if (C.id === 'attack') { B.wake = Math.max(B.wake, 2); partyAct(B, G.party[0]); }
+    else if (C.id === 'parry') { foeAct(B, f, 's', null, false); B.victim = G.party[0]; B.slow = d.reps === 0 || d.streak >= 2 ? .5 : .8; }
+    else { B.wake = WAKE_MAX; partyAct(B, G.party[2]); }
+    return true;
+  }
+  function dojoTry(ok, fb) {   // one attempt judged: feedback, count, maybe the chapter is done
+    const d = S.dojo; if (!d || d.phase !== 'practice') return;
+    d.fb = { ...fb, ok, t: S.t };
+    if (ok) { d.reps++; d.streak = 0; } else { d.fails++; d.streak++; }
+    if (d.reps >= dojoCh().need) { d.phase = 'clear'; d.t = 0; FXS.lesson(); }
+  }
+  // hooks the battle code calls
+  function dojoStrike(B) { if (!S.dojo || B.kind !== 'dojo') return; const C = dojoCh(); if (!C) return;
+    if (C.id === 'attack') { const err = B.hitT === null ? null : B.hitT - B.ring.dur; dojoTry(B.grade >= 1.2 && B.hitT !== null, { kind: 'strike', err, grade: B.hitT === null ? 0 : B.grade, win: [.07, .16] }); }
+    else if (C.id === 'cast') {
+      if (!B.ring.cast) return dojoTry(false, { kind: 'msg', msg: 'TAP FIREBALL FIRST' });
+      const r = B.ring; dojoTry((r.gL || 0) >= 1.2 && (r.gR || 0) >= 1.2, { kind: 'cast', eL: r.eL ?? null, eR: r.eR ?? null, gL: r.gL, gR: r.gR, win: [.07, .16] });
+    } }
+  function dojoHit(B, h) { if (!S.dojo || B.kind !== 'dojo' || dojoCh().id !== 'parry') return;
+    dojoTry(h.res === 'parry', { kind: 'parry', err: h.err ?? null, res: h.res, locked: !!h.locked, win: [PARRY_WIN, PARRY_WIN] }); }
+  function dojoNext() {   // explain -> practice -> clear -> next chapter ... -> into the fight
+    const d = S.dojo;
+    if (d.phase === 'explain') { d.phase = 'practice'; d.t = 0; d.fb = null; S.battle.phase = 'after'; S.battle.t = .4; return; }
+    if (d.phase === 'clear') { d.ch++; d.reps = 0; d.fails = 0; d.streak = 0; d.fb = null; d.t = 0; d.phase = d.ch < DOJO.length ? 'explain' : 'done'; S.battle.phase = 'after'; S.battle.t = 0; return; }
+    if (d.phase === 'done') { S.dojo = null; dojoTotals(); startDemoFight(); }
+  }
+  function dojoUpdate(dt) {   // true while the battle should hold still (a card is up)
+    const d = S.dojo; if (!d) return false; d.t += dt;
+    if (d.phase === 'clear' && d.t > 1.3) dojoNext();
+    else if (d.phase !== 'practice' && S.demo && S.demo.watch && d.t > (d.phase === 'explain' ? 3.2 : 2)) dojoNext();
+    return d.phase !== 'practice';
+  }
+  function dojoTotals() { const B = S.battle; if (S.demo && B && B.kind === 'dojo') for (const k in S.demo.tot) S.demo.tot[k] += B.stats[k] || 0; }   // the card counts the dojo too
+  function skipDojo() { S.dojo = null; dojoTotals(); startDemoFight(); }
+  const DOJO_BTNS = { skip: [LPAD[0], PAD_Y + 50, 86, 30], go: [RPAD[0], PAD_Y + 50, 86, 30] };
+  function meter(x0, y, w, err, win, c) {   // a timing bar: centre = the beat; gold = perfect window, light = good
+    const sc = w / .6, cx0 = x0 + w / 2; rect(x0, y, w, 7, 'k'); rect(cx0 - win[1] * sc, y + 1, win[1] * 2 * sc, 5, 's2'); rect(cx0 - win[0] * sc, y + 1, win[0] * 2 * sc, 5, 'au');
+    rect(cx0, y - 2, 1, 11, 'wt'); text('EARLY', x0, y + 9, 's3', 'left', null); text('LATE', x0 + w, y + 9, 's3', 'right', null);
+    if (err !== null && err !== undefined) { const mx = clamp(cx0 + err * sc, x0 + 1, x0 + w - 2); rect(mx - 1, y - 3, 3, 13, c); }
+  }
+  function verdict(err, g, short) { if (err === null || err === undefined) return ['NO TAP', 'r2']; if (g > 1.4) return [short ? 'PERFECT' : 'PERFECT!', 'au']; const ms = Math.round(Math.abs(err) * 1000); return [(err < 0 ? 'EARLY ' : 'LATE ') + ms + (short ? '' : 'MS'), g > 1 ? 'c3' : 'r2']; }
+  function drawDojo(t) {
+    const d = S.dojo, C = dojoCh(), B = S.battle; if (!d) return;
+    // chapter strip
+    rect(0, 0, 152, 13, 'k');
+    DOJO.forEach((q, i) => { const x = [4, 60, 108][i], done = i < d.ch || (i === d.ch && d.phase === 'clear'); text(q.title, x, 3, done ? 'g4' : i === d.ch ? q.c : 's2', 'left', null); if (done) rect(x, 11, q.title.length * 8 - 1, 1, 'g4'); });
+    if (d.phase === 'done') { panel(6, 60, 168, 92, 'g3'); text('DOJO', 90, 66, 's4', 'center', null); text('CLEARED!', 90, 76, 'g4', 'center', 'k', 16); ['YOU CAN ATTACK,', 'PARRY AND CAST.', '', 'NOW A REAL FIGHT.'].forEach((l, i) => text(l, 90, 94 + i * 11, i === 3 ? 'au' : 'wt', 'center', null)); button(DOJO_BTNS.go, 'FIGHT', true, 'r1'); return; }
+    if (!C) return;
+    if (d.phase === 'explain') {   // the card: words on top, the move animated on the real pads below
+      rect(0, 14, W, 222, 'n0'); for (let i = 0; i < 30; i++) px(hash(i) * W, 14 + hash(i + 9) * 200, 'n1');
+      text(C.title, 90, 22, C.c, 'center', 'k', 16);
+      C.lines.forEach((l, i) => text(l, 90, 46 + i * 11, i >= 3 ? 's4' : 'wt', 'center', null));
+      const loop = 2.2, k = (t % loop) / 1.6, beat = k >= 1 && k < 1.12, bx = 90, by = 150;
+      if (C.id === 'attack') { const r = Math.round(mix(26, 7, clamp(k))); ring(bx, by, 7, 'au'); if (k < 1) ring(bx, by, r, 'wt'); if (beat) { burst(bx, by, ['au', 'wt'], 2, 30); text('PERFECT!', bx, by - 30, 'au', 'center'); } }
+      if (C.id === 'parry') { const r = Math.round(mix(26, 9, clamp(k))); swordIcon(bx, by - 16, Math.floor(t * 8) % 2 ? 'c2' : 'wt'); ring(bx, by, 9, 'au'); if (k < 1) ring(bx, by, r, 'c2'); if (beat) text('PARRY!', bx, by - 34, 'c2', 'center'); }
+      if (C.id === 'cast') { const k1 = clamp(k / .67), k2 = clamp(k); ring(60, by, 8, 'p2'); ring(120, by, 8, 'p2'); if (k1 < 1) ring(60, by, Math.round(mix(24, 8, k1)), 'wt'); if (k2 < 1) ring(120, by, Math.round(mix(24, 8, k2)), 'wt'); text('1', 60, by - 4, 'wt', 'center'); text('2', 120, by - 4, 'wt', 'center'); if (beat) text('TWO-HAND!', 90, by - 34, 'p2', 'center'); }
+      text('YOUR PADS BELOW', 90, 196, 's3', 'center', null); text('WORK THE SAME WAY', 90, 206, 's3', 'center', null);
+      // the pads, with a ghost thumb on the beat
+      rect(0, 196 + 40, W, 84, 'k');
+      for (const [h, P0] of [['L', LPAD], ['R', RPAD]]) { const used = C.hand === 'B' || C.hand === h; panel(P0[0], P0[1], P0[2], 46, used ? (h === 'L' ? 'au' : C.c) : 's1'); text(h === 'L' ? 'LEFT' : 'RIGHT', P0[0] + 43, P0[1] + 6, used ? 'wt' : 's2', 'center', null); }
+      const tapL = C.id === 'cast' && k >= .67 && k < .8, tapR = (C.id !== 'cast' && beat) || (C.id === 'cast' && beat);
+      if (tapL) { disc(LPAD[0] + 43, PAD_Y + 28, 8, 'au'); ring(LPAD[0] + 43, PAD_Y + 28, 12, 'wt'); }
+      if (tapR) { disc(RPAD[0] + 43, PAD_Y + 28, 8, 'c2'); ring(RPAD[0] + 43, PAD_Y + 28, 12, 'wt'); }
+      button(DOJO_BTNS.skip, d.ch === 0 ? 'SKIP DOJO' : 'SKIP', false); button(DOJO_BTNS.go, 'TRY IT', true, 'r1');
+      return;
+    }
+    // practice: what to do, the reps, and the last try on a meter
+    rect(0, 22, W, 12, 'k'); const need = C.need;
+    text(C.id === 'attack' ? 'STRIKE ON THE RING' : C.id === 'parry' ? 'PARRY THE BLUE HIT' : 'FIREBALL: L THEN R', 4, 24, C.c, 'left', null);
+    for (let i = 0; i < need; i++) { const x = 176 - (need - i) * 9; rect(x, 24, 7, 7, 'k'); rect(x + 1, 25, 5, 5, i < d.reps ? 'g4' : 's1'); }
+    if (B && B.slow < 1 && C.id === 'parry') text('SLOW MOTION', 90, 36, 's3', 'center', null);
+    const fb = d.fb; if (fb && S.t - fb.t < 2.2) {
+      const y = 140; rect(0, y - 4, W, 40, 'k');
+      if (fb.kind === 'msg') text(fb.msg, 90, y + 8, 'r2', 'center');
+      else if (fb.kind === 'cast') { const [v1, c1] = verdict(fb.eL, fb.gL, true), [v2, c2] = verdict(fb.eR, fb.gR, true); text(v1, 46, y, c1, 'center', null); text(v2, 134, y, c2, 'center', null); meter(8, y + 14, 76, fb.eL, fb.win, 'au'); meter(96, y + 14, 76, fb.eR, fb.win, 'c2'); }
+      else { const [v, c] = fb.kind === 'parry' && fb.res === 'block' ? ['BLOCKED: USE RIGHT', 'n6'] : fb.kind === 'parry' && fb.locked ? ['TOO EARLY: LOCKED', 'r2'] : verdict(fb.err, fb.kind === 'parry' ? (fb.res === 'parry' ? 1.45 : 1) : fb.grade); text(v, 90, y, fb.ok ? (c === 'r2' ? 'c3' : c) : c, 'center'); meter(30, y + 14, 120, fb.err, fb.win, fb.kind === 'parry' ? 'c2' : 'au'); }
+    }
+    if (d.phase === 'clear') { rect(0, 80, W, 34, 'k'); text(C.title, 90, 83, C.c, 'center', null); text('LEARNED!', 90, 94, 'g4', 'center', 'k', 16); }
+  }
+
   // ---------- the playable pitch ----------
   // Opens on a two-thumb hold, then teaches by doing inside one real fight (a stone hand of the titan), one verb at a
   // time, then throws everything at once (the titan's eye and both hands), then shows the player's own numbers and the
@@ -685,11 +791,8 @@
   // tutorial rule set: the fight IS the game. WATCH mode plays the same flow with the autopilot and ghost thumbs.
   const LESSONS = [
     { id: 'block', who: 'foe', pat: 'h', slow: .4, hand: 'L', l1: 'HEAVY HIT', c1: 'r2', verb: 'BLOCK', ok: (s, b) => s.block > b.block, again: 'BLOCK AS THE RING CLOSES' },
-    { id: 'parry', who: 'foe', pat: 's', slow: .45, hand: 'R', l1: 'SWIFT HIT', c1: 'c2', verb: 'PARRY', ok: (s, b) => s.parry > b.parry, again: 'PARRY AS THE RING CLOSES' },
-    { id: 'strike', who: 'p', actor: 'hero', hand: 'R', l1: 'YOUR TURN', c1: 'au', verb: 'STRIKE', sub: 'TAP WHEN RINGS MEET', ok: (s, b) => s.actions > b.actions },
     { id: 'string', who: 'foe', pat: 'shs', slow: .8, l1: 'A STRING', c1: 'wt', verb: 'READ EACH HIT', sub: 'RED=LEFT  BLUE=RIGHT', ok: (s, b) => s.strings > b.strings },
     { id: 'skill', who: 'p', actor: 'hero', hand: 'R', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
-    { id: 'magic', who: 'p', actor: 'mage', hand: 'B', l1: 'MAGIC = TWO HANDS', c1: 'p2', verb: 'FIREBALL', sub: 'LEFT RING, THEN RIGHT', pre: B => { B.wake = Math.max(B.wake, 2); }, ok: (s, b) => (s.casts || 0) > (b.casts || 0) && s.actions > b.actions },
     { id: 'item', who: 'p', actor: 'mage', hand: 'R', l1: 'BRUNA IS HURT', c1: 'g4', verb: 'POTION', sub: 'ITEM > POTION > BRUNA', pre: () => { const k = G.party.find(p => p.id === 'knight'); k.hp = Math.min(k.hp, Math.round(k.maxhp * .3)); }, ok: (s, b) => (s.items || 0) > (b.items || 0) },
     { id: 'break', who: 'free', l1: 'FILL ITS BREAK BAR', c1: 'au', verb: 'BREAK IT', sub: 'PERFECTS + PARRIES', ok: (s, b) => s.breaks > b.breaks },
     { id: 'finish', who: 'free', l1: 'IT IS OPEN', c1: 'au', verb: 'FINISH IT', ok: () => false },
@@ -699,12 +802,17 @@
     G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest'; G.items = { POTION: 3, ETHER: 1 };
     S.demo = { i: 0, base: null, watch: !!watch, shown: S.t, fails: 0, tot: { parry: 0, block: 0, crushed: 0, perfect: 0, breaks: 0, actions: 0, taps: 0, skills: 0, casts: 0, items: 0 }, finale: false };
     API.autopilot = watch ? 'perfect' : null; API.botThink = watch ? .8 : 0;
-    startBattle(['thand'], 'demo1'); S.battle.noLose = true;
+    startDojo();
     S.lockUntil = S.t + .5;
   }
+  function startDemoFight() {
+    G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest'; G.items = { POTION: 3, ETHER: 1 };
+    S.demo.i = 0; S.demo.base = null; S.demo.shown = S.t;
+    startBattle(['thand'], 'demo1'); S.battle.noLose = true;
+  }
   // the lesson fight cannot end before every verb is taught: until the break lesson, the foe stays above 30% HP
-  function lessonFloor(f) { const L = lesson(); if (L && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
-  function lesson() { const d = S.demo; return d && !d.finale ? LESSONS[d.i] : null; }
+  function lessonFloor(f) { if (S.battle && S.battle.kind === 'dojo') { f.hp = Math.max(f.hp, 1); return; } const L = lesson(); if (L && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
+  function lesson() { const d = S.demo; return d && !d.finale && !S.dojo && S.battle && S.battle.kind !== 'dojo' ? LESSONS[d.i] : null; }
   function demoTurn(B) {   // returns true when the lesson chose this turn
     const d = S.demo, L = lesson(); if (!L) return false;
     if (d.base && L.ok(B.stats, d.base)) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; FXS.lesson(); }
@@ -820,6 +928,7 @@
     const eye = B.foes.find(f => f.id === 'eye' && f.open && f.hp > 0), shelled = B.foes.find(f => f.shell && f.hp > 0), sunk = B.foes.find(f => f.burrowed && f.hp > 0), lit = B.foes.find(f => f.phased && f.hp > 0);
     const rainy = B.foes.find(f => f.hp > 0 && f.intent && TRICK[f.intent].aoe), hurt = G.party.find(p => p.hp > 0 && p.hp < p.maxhp * .35);
     const at = f => B.foes.indexOf(f), plain = B.foes.find(f => f.hp > 0 && f.open !== false && !f.shell && !f.burrowed && !f.phased) || B.foes.find(f => f.hp > 0);
+    if (S.dojo && dojoCh() && dojoCh().id === 'cast') return { cmd: 'FIREBALL', pick: 0 };
     if (lesson() && lesson().id === 'skill' && a.id === 'hero') return { cmd: 'SHARD STRIKE', pick: at(plain) };
     if (lesson() && lesson().id === 'magic' && a.id === 'mage') return { cmd: 'FIREBALL', pick: at(plain) };
     if (lesson() && lesson().id === 'item') return { cmd: 'POTION', ally: G.party.findIndex(p => p.id === 'knight') };
@@ -866,7 +975,9 @@
     if (S.mode === 'calm') { updateCalm(dt); return; }
     if (S.mode === 'ending') { S.ending.t += dt; return; }
     if (S.mode !== 'battle') return;
-    const B = S.battle; B.t += dt * (B.phase === 'foeWind' ? B.slow || 1 : 1);
+    const B = S.battle;
+    if (B.kind === 'dojo' && S.dojo && dojoUpdate(dt)) return;
+    B.t += dt * (B.phase === 'foeWind' ? B.slow || 1 : 1);
     if (B.phase === 'lose' && S.demo && S.demo.watch && B.t > 1.5) return startFinale();
     cueHits(B);
     const auto = API.autopilot;
@@ -876,7 +987,7 @@
       if (auto && B.ring.cast) { const sd = auto === 'human' ? (API.human || { sd: .06 }).sd : 0; B.botCast = B.botCast || { L: B.ring.t1 + gauss() * sd, R: B.ring.t2 + gauss() * sd }; if (B.ring.gL === null && B.t >= B.botCast.L - .01) timingTap('L'); if (B.ring.gR === null && B.ring.gL !== null && B.t >= B.botCast.R - .01) timingTap('R'); }
       else if (auto && B.hitT === null) { const off = auto === 'human' ? (B.botOff = B.botOff ?? gauss() * (API.human || { sd: .06 }).sd) : 0; if (B.t >= B.ring.dur - .01 + off) { timingTap(); B.botOff = undefined; } }
       if (B.ring.cast && B.hitT === null && B.t > B.ring.t2 + .3) { const r = B.ring; B.grade = ((r.gL ?? .85) + (r.gR ?? .85)) / 2; B.hitT = B.t; }
-      if (B.t > B.ring.dur + .3 && (!B.ring.cast || B.hitT !== null)) { B.botCast = null; B.botOff = undefined; const g = B.hitT === null ? 1 : B.grade; if (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'all') resolveAction(null, g); else resolveAction(B.target, g); }
+      if (B.t > B.ring.dur + .3 && (!B.ring.cast || B.hitT !== null)) { B.botCast = null; B.botOff = undefined; const g = B.hitT === null ? 1 : B.grade; B.grade = g; dojoStrike(B); if (B.cmd.kind === 'skill' && SKILL[B.cmd.name].target === 'all') resolveAction(null, g); else resolveAction(B.target, g); }
     }
     else if (B.phase === 'foeWind') {
       if (auto && !B.botPress) botDefend(B);
@@ -1148,7 +1259,7 @@
     else if (S.mode === 'card') { drawCard(t); drawGhosts(); }
     else if (S.mode === 'cut') drawCut(t);
     else if (S.mode === 'map') drawMap(t);
-    else if (S.mode === 'battle') { drawBattle(t); drawLesson(t); drawGhosts(); }
+    else if (S.mode === 'battle') { drawBattle(t); if (S.dojo) drawDojo(t); else drawLesson(t); drawGhosts(); }
     else if (S.mode === 'calm') drawCalm(t);
     else if (S.mode === 'ending') drawEnding(t);
     else if (S.mode === 'over') { text('THE PARTY FELL', 90, 140, 'r2', 'center'); text('TAP TO TRY AGAIN', 90, 160, 's4', 'center'); }
@@ -1202,6 +1313,7 @@
     }
     if (S.mode === 'battle') {
       const B = S.battle;
+      if (S.dojo && S.dojo.phase !== 'practice') { if (S.dojo.phase === 'explain' && inBox(x, y, DOJO_BTNS.skip)) return skipDojo(); if (S.dojo.phase !== 'clear' && (inBox(x, y, DOJO_BTNS.go) || S.dojo.t > 1.2)) dojoNext(); return; }
       if (B.phase === 'win') { endBattle(); return; }
       if (B.phase === 'lose') { if (S.demo) return startFinale(); S.battle = null; healParty(1); enterRegion(G.region); return; }
       if (B.phase === 'timing') { timingTap(x < 90 ? 'L' : 'R'); return; }
@@ -1265,6 +1377,7 @@
     }
     if (S.mode === 'battle') {
       const B = S.battle;
+      if (S.dojo && S.dojo.phase !== 'practice') { if (key === 'Backspace' || key === 's' || key === 'S') return skipDojo(); if (ok && S.dojo.phase !== 'clear') dojoNext(); return; }
       if (B.phase === 'win' && ok) return endBattle();
       if (B.phase === 'lose' && ok) { if (S.demo) return startFinale(); S.battle = null; healParty(1); return enterRegion(G.region); }
       if (B.phase === 'timing' && (ok || left)) return timingTap(left ? 'L' : 'R');
@@ -1284,7 +1397,7 @@
 
   // ---------- test hooks ----------
   const API = {
-    G, S, MAPS, FINDS, newGame, startDemo, startFinale, lesson: () => lesson(), enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
+    G, S, MAPS, FINDS, newGame, startDemo, dojo: () => S.dojo && { ...S.dojo, id: dojoCh() && dojoCh().id }, startFinale, lesson: () => lesson(), enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
     get state() { return S.mode; },
     decide: () => botDecide(S.battle), ui: () => S.battle ? { right: S.battle.actor && G.party.includes(S.battle.actor) ? rightButtons() : [], chips: foeChips(), L: LPAD, R: RPAD, act: ACT } : { act: ACT },
     seed(n) { botSeed = n >>> 0 || 1; },

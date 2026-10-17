@@ -607,13 +607,15 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
 // ---------- STONEWAKE: TWO HANDS (prototype) ----------
 {
   const { page, errors } = await open('games/stonewake-proto/index.html');
-  const fight = (setup, auto, human) => page.evaluate(([setup, auto, human]) => { const g = window.__game, [r, foes, allies, lv, sh] = setup; g.seed(7); g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.G.shards = sh; g.setLevel(lv); g.autopilot = auto; g.human = human; g.startBattle(foes, 'boss');
+  const fight = (setup, auto, human, seed = 7) => page.evaluate(([setup, auto, human, seed]) => { const g = window.__game, [r, foes, allies, lv, sh] = setup; g.seed(seed); g.S.t += seed * 1.37; g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.G.shards = sh; g.setLevel(lv); g.autopilot = auto; g.human = human; g.startBattle(foes, 'boss');
     let minhp = 1; for (let k = 0; k < 12000 && g.S.mode === 'battle' && !['win', 'lose'].includes(g.S.battle.phase); k++) { g.step(10); for (const p of g.G.party) minhp = Math.min(minhp, p.hp / p.maxhp); }
-    return { phase: g.S.battle.phase, minhp, stats: g.S.battle.stats }; }, [setup, auto, human]);
+    return { phase: g.S.battle.phase, minhp, stats: g.S.battle.stats }; }, [setup, auto, human, seed]);
   const bosses = [['forest', ['gforest'], [], 1, 0], ['cave', ['gcave'], ['knight'], 3, 1], ['desert', ['gdesert'], ['knight', 'mage'], 5, 2], ['cave', ['wraith'], ['knight', 'mage', 'archer'], 6, 3], ['titan', ['lhand', 'eye', 'rhand'], ['knight', 'mage', 'archer'], 7, 3]];
   for (const b of bosses) { const r = await fight(b, 'perfect'); check(r.phase === 'win' && r.stats.parry + r.stats.block > 0, `stonewake-proto ${b[1].join('+')}: perfect two-hand play wins (${r.phase}, parries ${r.stats.parry}, blocks ${r.stats.block})`); }
   // the second thumb is a decision, not decoration: parrying beats blocking everything; mashing both thumbs loses
-  const parry = await fight(bosses[2], 'human', { sd: .05, parry: true }), block = await fight(bosses[2], 'human', { sd: .05, parry: false }), mash = await fight(bosses[2], 'human', { sd: .05, parry: true, mash: true });
+  // averaged over seeds: one seed can flip a close pair (Brain demo-disc#E7: test strategy claims over many seeds)
+  const avgHp = async parryOn => { let s = 0, wins = 0; for (let k = 1; k <= 6; k++) { const r = await fight(bosses[2], 'human', { sd: .05, parry: parryOn }, k * 11); s += r.minhp; wins += r.phase === 'win'; } return { minhp: s / 6, phase: wins === 6 ? 'win' : 'lose' }; };
+  const parry = await avgHp(true), block = await avgHp(false), mash = await fight(bosses[2], 'human', { sd: .05, parry: true, mash: true });
   check(parry.phase === 'win' && parry.minhp > block.minhp, `stonewake-proto: parrying swift hits leaves more HP than blocking all (${parry.minhp.toFixed(2)} vs ${block.minhp.toFixed(2)})`);
   check(mash.phase === 'lose' || mash.minhp < block.minhp, `stonewake-proto: mashing both thumbs is punished (${mash.phase}, ${mash.minhp.toFixed(2)})`);
   // real touches: a held left thumb walks with the floating stick while the right thumb holds DASH
@@ -642,12 +644,12 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await touch('touchStart', [[44, 270, 11]]); await touch('touchStart', [[44, 270, 11], [136, 270, 12]]);
   await page.evaluate(() => window.__game.step(50));
   await touch('touchEnd', [[136, 270, 12]]); await touch('touchEnd', []);
-  const begun = await page.evaluate(() => ({ mode: window.__game.S.mode, lesson: window.__game.lesson() && window.__game.lesson().id }));
-  check(begun.mode === 'battle' && begun.lesson === 'block', `stonewake-proto pitch: holding both thumbs starts the first lesson (${JSON.stringify(begun)})`);
+  const begun = await page.evaluate(() => ({ mode: window.__game.S.mode, dojo: window.__game.dojo() && window.__game.dojo().id }));
+  check(begun.mode === 'battle' && begun.dojo === 'attack', `stonewake-proto pitch: holding both thumbs starts the dojo (${JSON.stringify(begun)})`);
   const flow = await page.evaluate(() => { const g = window.__game, seen = []; g.startDemo(true);
-    for (let k = 0; k < 20000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(); const id = L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
+    for (let k = 0; k < 20000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(), D = g.dojo(); const id = D ? 'dojo-' + (D.id || 'done') : L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
     return { mode: g.S.mode, seen: seen.join('>'), tot: g.S.demo && g.S.demo.tot }; });
-  check(flow.mode === 'card' && /block>parry>strike>string>skill>magic>item>break/.test(flow.seen) && flow.tot.casts > 0 && flow.tot.items > 0 && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
+  check(flow.mode === 'card' && /dojo-attack>dojo-parry>dojo-cast>dojo-done>block>string>skill>item>break/.test(flow.seen) && flow.tot.casts > 0 && flow.tot.items > 0 && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();
