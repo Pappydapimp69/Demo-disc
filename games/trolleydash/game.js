@@ -54,6 +54,35 @@
     for (let i = 0; i < out.length; i++) { const a = out[i], b = out[(i + 1) % out.length], d = Math.hypot(b.x - a.x, b.y - a.y) || 1; a.dx = (b.x - a.x) / d; a.dy = (b.y - a.y) / d; }
     out.L = L; return out;
   }
+  // ---------- textures: every texel from a small set of designed colour ramps (hue-shifted: cool shadows, warm lights) ----------
+  const hash = (x, y) => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1000 / 1000;
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const dith = (v, x, y) => v * 16 > BAYER[(y & 3) * 4 + (x & 3)];   // ordered dither of a 0..1 value
+  const ramp = (c, k) => { const r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255; return k < 1 ? rgb(r * k | 0, g * k | 0, Math.min(255, b * k + (1 - k) * 40) | 0) : rgb(Math.min(255, r * k + 8) | 0, Math.min(255, g * k + 4) | 0, Math.min(255, b * k) | 0); };
+  const patch = (x, y) => .5 + .25 * (Math.sin(x * .043 + Math.sin(y * .021) * 2) + Math.cos(y * .051 + x * .017));
+  function texel(name, th, t, x, y, s, d, w) {
+    const n = hash(x, y);
+    if (t === T.START) return ((x >> 3) + (y >> 3)) & 1 ? rgb(250, 250, 250) : rgb(30, 30, 40);
+    if (t === T.CURB) return Math.floor(s / 10) & 1 ? th.curbA : ramp(th.curbB, .96 + n * .04);
+    if (t === T.BOOST) return ((x + y) >> 2) & 1 ? rgb(255, 214, 60) : rgb(255, 120, 30);
+    if (t === T.ICE) return dith(patch(x * 2, y * 2), x, y) ? rgb(222, 244, 255) : rgb(188, 226, 250);
+    if (t === T.SAND) return n < .12 ? rgb(170, 136, 90) : dith(patch(x * 3, y * 3), x, y) ? rgb(220, 186, 126) : rgb(204, 168, 110);
+    if (t === T.PEAS) return n < .4 ? (n < .2 ? rgb(110, 200, 80) : rgb(70, 160, 56)) : rgb(196, 214, 226);
+    if (t === T.GRASS) { if (name === 'frozen') return dith(patch(x, y), x, y) ? rgb(170, 220, 245) : rgb(150, 206, 238);
+      return n < .04 ? ramp(th.grass, 1.15) : dith(patch(x, y), x, y) ? th.grass : th.grass2; }
+    if (t === T.ROAD) {
+      if (d < 1.4 && Math.floor(s / 12) % 2 === 0) return name === 'frozen' ? rgb(80, 150, 230) : name === 'garden' ? rgb(240, 230, 200) : rgb(240, 240, 240);
+      const edge = d > w - 12 ? .93 : 1;
+      if (name === 'frozen') { const grout = (x & 15) === 0 || (y & 15) === 0; return grout ? rgb(170, 186, 204) : ramp(((x >> 4) + (y >> 4)) & 1 ? th.road : th.road2, edge * (.98 + n * .04)); }
+      if (name === 'garden') { const row = y >> 3, off = row & 1 ? 6 : 0, mortar = (y & 7) === 0 || ((x + off) % 12) === 0; return mortar ? rgb(130, 110, 90) : ramp(hash((x + off) / 12 | 0, row) < .5 ? th.road : th.road2, edge * (.97 + n * .05)); }
+      return ramp(n < .5 ? th.road : th.road2, edge * (.96 + n * .07));
+    }
+    // outside the track: a car park with bays, freezer-aisle shelving tops, or flower beds
+    if (name === 'carpark') { const bay = (x % 40) < 2 && (y % 120) < 80; return bay ? rgb(210, 214, 220) : ramp(n < .5 ? th.wall : th.wall2, .96 + n * .06); }
+    if (name === 'frozen') { const shelf = (y % 24) < 3; return shelf ? rgb(170, 190, 214) : (hash(x >> 2, y >> 2) < .5 ? rgb([230, 120, 120][0], 200, 220) : ramp(th.wall, .97 + n * .05)); }
+    const flower = n < .06 ? [rgb(255, 120, 160), rgb(255, 220, 80), rgb(160, 120, 255)][(n * 50 | 0) % 3] : 0;
+    return flower || (dith(patch(x * 2, y * 2), x, y) ? th.wall : th.wall2);
+  }
   // rasterize: terrain codes, the distance along the track for each texel (for curbs and progress), and colours
   function buildTrack(def) {
     const N = def.size, ter = new Uint8Array(N * N), sAt = new Float32Array(N * N).fill(-1), col = new Uint32Array(N * N);
@@ -65,6 +94,8 @@
     for (const p of line) stamp(p.x, p.y, def.width + def.verge, T.GRASS, T.GRASS);
     for (const p of line) stamp(p.x, p.y, def.width, T.CURB, T.CURB, p.s);
     for (const p of line) stamp(p.x, p.y, def.width - 6, T.ROAD, undefined, p.s);
+    const dAt = new Float32Array(N * N).fill(99);   // distance to the centreline (for the dashed centre line and edge shading)
+    for (const p of line) { const r = def.width; for (let yy = Math.max(0, Math.floor(p.y - r)); yy <= Math.min(N - 1, Math.ceil(p.y + r)); yy++) for (let xx = Math.max(0, Math.floor(p.x - r)); xx <= Math.min(N - 1, Math.ceil(p.x + r)); xx++) { const d = Math.hypot(xx - p.x, yy - p.y), i = yy * N + xx; if (d < dAt[i]) dAt[i] = d; } }
     // the start line: a checkered band across the road at s = 0
     { const p = line[0]; for (let a = -4; a <= 4; a++) for (let o = -(def.width - 6); o <= def.width - 6; o++) { const x = Math.round(p.x + p.dx * a - p.dy * o), y = Math.round(p.y + p.dy * a + p.dx * o); if (x >= 0 && y >= 0 && x < N && y < N) ter[y * N + x] = T.START; } }
     // shortcuts: a curb-edged alley or an off-road strip cut through whatever is there; they skip part of the lap
@@ -77,20 +108,10 @@
     for (const [, , , kind, [px, py]] of def.patches || []) stamp(px, py, 40, T[kind], undefined);
     for (const [s0, off] of def.boosts || []) { const p = at(s0); for (let a = -12; a <= 12; a += 1) stamp(p.x + p.dx * a - p.dy * off, p.y + p.dy * a + p.dx * off, 9, T.BOOST); }
     // colours
-    const theme = THEMES[def.theme], r = mkRng(7);
+    const theme = THEMES[def.theme];
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const i = y * N + x, t = ter[i], s = sAt[i];
-      let c;
-      if (t === T.ROAD) { const tile = ((x >> 4) + (y >> 4)) & 1; c = tile ? theme.road : theme.road2; }
-      else if (t === T.CURB) c = Math.floor(s / 10) & 1 ? theme.curbA : theme.curbB;
-      else if (t === T.START) c = ((x >> 3) + (y >> 3)) & 1 ? rgb(250, 250, 250) : rgb(30, 30, 40);
-      else if (t === T.GRASS) c = (r() < .5) ? theme.grass : theme.grass2;
-      else if (t === T.SAND) c = r() < .5 ? rgb(214, 180, 120) : rgb(200, 166, 108);
-      else if (t === T.PEAS) c = r() < .35 ? rgb(90, 190, 70) : r() < .5 ? rgb(70, 160, 56) : rgb(200, 220, 230);
-      else if (t === T.ICE) c = ((x + y) >> 3) & 1 ? rgb(214, 240, 255) : rgb(190, 228, 250);
-      else if (t === T.BOOST) c = ((x + y) >> 2) & 1 ? rgb(255, 210, 40) : rgb(255, 120, 30);
-      else c = ((x >> 5) + (y >> 5)) & 1 ? theme.wall : theme.wall2;
-      col[i] = c;
+      const i = y * N + x, t = ter[i];
+      col[i] = texel(def.theme, theme, t, x, y, sAt[i], dAt[i], def.width);
     }
     const cones = (def.cones || []).map(([s0, off]) => { const p = at(s0); return { x: p.x - p.dy * off, y: p.y + p.dx * off }; });
     const shortcuts = (def.shortcuts || []).map(sc => { const near = ([x, y]) => line.reduce((b, p, i) => (p.x - x) ** 2 + (p.y - y) ** 2 < (line[b].x - x) ** 2 + (line[b].y - y) ** 2 ? i : b, 0);
@@ -108,7 +129,7 @@
       sky: ['#9ad0ff', '#e8f4ff'], skyline: '#7a8ab8', fog: [214, 232, 250] },
     frozen: { road: rgb(200, 214, 228), road2: rgb(188, 204, 220), curbA: rgb(70, 140, 230), curbB: rgb(245, 250, 255), grass: rgb(150, 210, 240), grass2: rgb(140, 200, 235), wall: rgb(230, 240, 250), wall2: rgb(210, 226, 244),
       sky: ['#cfe6ff', '#ffffff'], skyline: '#a8c4e8', fog: [236, 244, 255] },
-    garden: { road: rgb(176, 150, 120), road2: rgb(166, 140, 112), curbA: rgb(250, 250, 240), curbB: rgb(120, 90, 60), grass: rgb(90, 160, 70), grass2: rgb(80, 150, 64), wall: rgb(40, 110, 50), wall2: rgb(34, 100, 44),
+    garden: { road: rgb(190, 160, 128), road2: rgb(176, 148, 118), curbA: rgb(250, 250, 240), curbB: rgb(120, 90, 60), grass: rgb(96, 168, 72), grass2: rgb(80, 150, 64), wall: rgb(110, 76, 50), wall2: rgb(96, 66, 44),
       sky: ['#bfe8a8', '#fff8d0'], skyline: '#5a9a5a', fog: [240, 244, 214] },
   };
 
@@ -133,11 +154,26 @@
     }
     lctx.putImageData(img, 0, HOR);
   }
+  // the backdrop slides with the heading: one full turn = 4 screen widths (PAN), drawn as tiles that wrap
+  const PAN = LW * 4;
   function sky(cam, theme) {
     const g = lctx.createLinearGradient(0, 0, 0, HOR); g.addColorStop(0, theme.sky[0]); g.addColorStop(1, theme.sky[1]); lctx.fillStyle = g; lctx.fillRect(0, 0, LW, HOR);
-    // a skyline that slides with the heading (one full turn = 4 screen widths)
-    const off = (-cam.a / (2 * Math.PI)) * LW * 4; lctx.fillStyle = theme.skyline;
-    for (let i = -1; i < 6; i++) { const base = ((off % (LW * 4)) + LW * 4) % (LW * 4) - LW * 4 + i * LW * .8; for (let b = 0; b < 6; b++) { const bx = Math.floor(base + b * 24), h = 8 + ((i * 7 + b * 13) % 5) * 5; lctx.fillRect(bx, HOR - h, 20, h); } }
+    const off = ((-cam.a / (2 * Math.PI)) * PAN % PAN + PAN) % PAN, name = S.trk.def.theme;
+    const tile = (w, f) => { for (let x = -off % w - w; x < LW + w; x += w) f(Math.round(x)); };
+    if (name === 'carpark') {
+      lctx.fillStyle = '#ffffffcc'; tile(PAN / 3, x => { lctx.fillRect(x + 10, 8, 26, 4); lctx.fillRect(x + 16, 5, 14, 4); lctx.fillRect(x + 70, 16, 20, 3); });   // clouds
+      lctx.fillStyle = '#8a9ac0'; tile(48, x => { lctx.fillRect(x, HOR - 22, 16, 22); lctx.fillRect(x + 20, HOR - 14, 22, 14); });   // the town
+      tile(PAN / 2, x => { lctx.fillStyle = '#e8e4dc'; lctx.fillRect(x + 20, HOR - 26, 120, 26); lctx.fillStyle = '#c8304a'; lctx.fillRect(x + 20, HOR - 26, 120, 7); lctx.fillStyle = '#fff'; lctx.font = 'bold 6px monospace'; lctx.fillText('TROLLEY DASH SUPERSTORE', x + 26, HOR - 20.5);
+        lctx.fillStyle = '#7ab0d8'; for (let i = 0; i < 6; i++) lctx.fillRect(x + 28 + i * 18, HOR - 15, 12, 10); lctx.fillStyle = '#5a6a7a'; lctx.fillRect(x + 72, HOR - 15, 16, 15); });
+    } else if (name === 'frozen') {
+      lctx.fillStyle = '#e8f2ff'; tile(30, x => { lctx.fillRect(x + 4, 6, 18, 2); lctx.fillRect(x + 2, 18, 22, 2); });   // strip lights on the ceiling
+      lctx.fillStyle = '#ffffffcc'; lctx.fillRect(0, 30, LW, 1);
+      tile(36, x => { lctx.fillStyle = '#d8e4f0'; lctx.fillRect(x, HOR - 20, 34, 20); lctx.fillStyle = '#9ad8ff'; lctx.fillRect(x + 2, HOR - 18, 14, 14); lctx.fillRect(x + 18, HOR - 18, 14, 14); lctx.fillStyle = '#ffffff99'; lctx.fillRect(x + 3, HOR - 17, 2, 12); lctx.fillRect(x + 19, HOR - 17, 2, 12); lctx.fillStyle = ['#e85a5a', '#ffd23a', '#5ab85a'][(x / 36 & 3) % 3]; lctx.fillRect(x + 5, HOR - 9, 8, 3); lctx.fillRect(x + 21, HOR - 12, 8, 3); });
+    } else {
+      lctx.strokeStyle = '#ffffff88'; lctx.lineWidth = 1; tile(24, x => { lctx.beginPath(); lctx.moveTo(x + .5, 0); lctx.lineTo(x + .5, HOR - 18); lctx.stroke(); }); lctx.fillStyle = '#ffffff55'; lctx.fillRect(0, 14, LW, 1);   // greenhouse glass
+      lctx.fillStyle = '#4a8a4a'; tile(30, x => { lctx.beginPath(); lctx.arc(x + 10, HOR - 10, 12, Math.PI, 0); lctx.fill(); lctx.beginPath(); lctx.arc(x + 24, HOR - 6, 9, Math.PI, 0); lctx.fill(); });
+      lctx.fillStyle = '#ff7a9a'; tile(30, x => { lctx.fillRect(x + 8, HOR - 16, 2, 2); lctx.fillRect(x + 22, HOR - 10, 2, 2); }); lctx.fillStyle = '#6a4a2a'; lctx.fillRect(0, HOR - 3, LW, 3);
+    }
   }
   // project a world point to the low-res screen: null if behind the camera
   function project(cam, x, y) { const dx = x - cam.x, dy = y - cam.y, fz = dx * cam.fx + dy * cam.fy; if (fz < 4) return null; const lat = dx * cam.rx + dy * cam.ry; return { x: LW / 2 + lat * FOCAL / fz, y: HOR + CAMH * FOCAL / fz, s: FOCAL / fz, z: fz }; }
@@ -145,7 +181,8 @@
   // ---------- sprites: small procedural pixel canvases, drawn as billboards ----------
   function spr(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); draw(g); return c; }
   const SPR = {
-    bag: spr(14, 14, g => { g.fillStyle = '#ffd23a'; g.fillRect(1, 3, 12, 11); g.fillStyle = '#e8a020'; g.fillRect(1, 12, 12, 2); g.strokeStyle = '#a06a10'; g.strokeRect(4.5, .5, 5, 4); g.fillStyle = '#3a2a6a'; g.font = 'bold 10px monospace'; g.fillText('?', 4, 12); }),
+    bag: spr(16, 18, g => { g.fillStyle = '#7a4a10'; g.fillRect(4, 0, 1, 5); g.fillRect(11, 0, 1, 5); g.fillRect(4, 0, 8, 1); g.fillStyle = '#ffd23a'; g.fillRect(1, 4, 14, 14); g.fillStyle = '#ffe98a'; g.fillRect(1, 4, 4, 14); g.fillStyle = '#e8a020'; g.fillRect(11, 4, 4, 14); g.fillRect(1, 16, 14, 2);
+      g.fillStyle = '#5a2a8a'; g.fillRect(6, 7, 4, 2); g.fillRect(9, 8, 2, 3); g.fillRect(7, 10, 2, 2); g.fillRect(7, 13, 2, 2); g.fillStyle = '#fff'; g.fillRect(2, 5, 1, 3); }),
     banana: spr(10, 6, g => { g.fillStyle = '#ffe14a'; g.fillRect(0, 2, 10, 3); g.fillStyle = '#c8a020'; g.fillRect(0, 2, 2, 2); g.fillRect(8, 2, 2, 2); }),
     melon: spr(10, 10, g => { g.fillStyle = '#3a9a3a'; g.beginPath(); g.arc(5, 5, 5, 0, 7); g.fill(); g.fillStyle = '#8ad08a'; g.fillRect(2, 2, 1, 6); g.fillRect(5, 1, 1, 8); g.fillRect(8, 2, 1, 6); }),
     trolley: spr(14, 10, g => { g.fillStyle = '#333'; g.fillRect(1, 8, 2, 2); g.fillRect(11, 8, 2, 2); g.fillStyle = '#c8d0dc'; g.fillRect(0, 2, 14, 6); g.fillStyle = '#e83a3a'; g.fillRect(0, 0, 14, 2); }),
@@ -157,12 +194,32 @@
     tree: spr(20, 30, g => { g.fillStyle = '#6a4a2a'; g.fillRect(8, 18, 4, 12); g.fillStyle = '#3a9a4a'; g.beginPath(); g.arc(10, 11, 10, 0, 7); g.fill(); g.fillStyle = '#5ab85a'; g.beginPath(); g.arc(7, 8, 5, 0, 7); g.fill(); }),
     kart: spr(24, 18, g => { g.fillStyle = '#222'; g.fillRect(0, 10, 6, 8); g.fillRect(18, 10, 6, 8); g.fillStyle = '#e83a5a'; g.fillRect(3, 6, 18, 9); g.fillStyle = '#ffd8b0'; g.fillRect(9, 0, 6, 6); g.fillStyle = '#333'; g.fillRect(8, 0, 8, 2); }),
   };
+  // wall props: a row of things just past the verge, so the track reads as walled in (themed per track)
+  const shade = (hex, k) => { const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return k < 1 ? `rgb(${r * k | 0},${g * k | 0},${Math.min(255, b * k + (1 - k) * 50) | 0})` : `rgb(${Math.min(255, r * k + 10) | 0},${Math.min(255, g * k + 5) | 0},${Math.min(255, b * k) | 0})`; };
+  const PROPS = {
+    car: ['#e85a5a', '#3a8aff', '#f4f4f4', '#ffd23a', '#4ad05a', '#5a5a6a'].map(c => spr(28, 16, g => { g.fillStyle = '#0003'; g.fillRect(1, 14, 26, 2); g.fillStyle = shade(c, .7); g.fillRect(1, 6, 26, 8); g.fillStyle = c; g.fillRect(1, 6, 26, 5); g.fillStyle = shade(c, 1.15); g.fillRect(6, 1, 15, 6); g.fillStyle = '#9ad0f0'; g.fillRect(8, 2, 5, 4); g.fillRect(15, 2, 5, 4); g.fillStyle = '#222'; g.fillRect(3, 12, 5, 4); g.fillRect(20, 12, 5, 4); g.fillStyle = '#ffe9a0'; g.fillRect(1, 8, 2, 2); })),
+    barrier: [spr(20, 8, g => { g.fillStyle = '#555'; g.fillRect(1, 2, 2, 6); g.fillRect(17, 2, 2, 6); for (let i = 0; i < 5; i++) { g.fillStyle = i % 2 ? '#fff' : '#e83a3a'; g.fillRect(i * 4, 1, 4, 3); } })],
+    freezer: [0, 1, 2].map(v => spr(24, 22, g => { g.fillStyle = '#c8d4e2'; g.fillRect(0, 0, 24, 22); g.fillStyle = '#eef4fb'; g.fillRect(0, 0, 24, 3); g.fillStyle = '#7ac8ff'; g.fillRect(2, 4, 9, 16); g.fillRect(13, 4, 9, 16); g.fillStyle = '#c8ecff'; g.fillRect(3, 5, 2, 14); g.fillRect(14, 5, 2, 14);
+      for (let j = 0; j < 3; j++) { g.fillStyle = ['#e85a5a', '#ffd23a', '#5ab85a', '#a77aff'][(j + v) % 4]; g.fillRect(5, 7 + j * 5, 5, 2); g.fillStyle = ['#3a8aff', '#ff9a3a', '#ffffff'][(j + v) % 3]; g.fillRect(16, 7 + j * 5, 5, 2); } })),
+    hedge: [0, 1].map(v => spr(24, 14, g => { for (let y = 0; y < 14; y++) for (let x = 0; x < 24; x++) { const n = hash(x + v * 30, y); if (y < 2 && n < .5) continue; g.fillStyle = n < .3 ? '#2e7a3a' : n < .7 ? '#3a9a46' : '#5ab85a'; g.fillRect(x, y, 1, 1); } g.fillStyle = '#ff7a9a'; if (v) { g.fillRect(5, 4, 2, 2); g.fillRect(16, 7, 2, 2); } })),
+    pot: [spr(10, 14, g => { g.fillStyle = '#c8603a'; g.fillRect(1, 7, 8, 7); g.fillStyle = '#e07a4a'; g.fillRect(1, 7, 3, 7); g.fillStyle = '#3a9a46'; g.beginPath(); g.arc(5, 5, 5, 0, 7); g.fill(); g.fillStyle = '#ffd23a'; g.fillRect(3, 2, 2, 2); g.fillRect(6, 4, 2, 2); })],
+  };
+  const WALLSET = { carpark: [['car', 11], ['car', 11], ['barrier', 5]], frozen: [['freezer', 19]], garden: [['hedge', 12], ['hedge', 12], ['pot', 9]] };
+  function wallProps(trk) {
+    const out = [], r = mkRng(57), d = trk.def, set = WALLSET[d.theme], L = trk.line, n = L.length;
+    for (let i = 0; i < n; i += 11) { const p = L[i];
+      for (const side of [-1, 1]) { const off = d.width + d.verge + 6, x = p.x - p.dy * off * side, y = p.y + p.dx * off * side;
+        // only where it is really wall, and not near another part of the track or a shortcut
+        let ok = terrainAt(trk, x, y) === T.WALL; for (let a = 0; a < 8 && ok; a++) if (terrainAt(trk, x + Math.cos(a) * 14, y + Math.sin(a) * 14) > T.GRASS) ok = false; if (!ok) continue;
+        const [kind, size] = set[Math.floor(r() * set.length)], imgs = PROPS[kind]; out.push({ x, y, img: imgs[Math.floor(r() * imgs.length)], size, wall: true }); } }
+    return out;
+  }
   // scenery placed along the verge on both sides, from the track's own centreline
   function scenery(trk) {
-    const out = [], r = mkRng(31), d = trk.def, every = 70;
+    const out = wallProps(trk), r = mkRng(31), d = trk.def, every = 70;
     for (let s = 20; s < trk.L; s += every) {
       const p = trk.line[Math.floor(s / trk.L * trk.line.length) % trk.line.length];
-      for (const side of [-1, 1]) { const off = d.width + 8 + r() * (d.verge - 12), kind = r() < .5 ? 'lamp' : r() < .5 ? 'tree' : 'cone';
+      for (const side of [-1, 1]) { const off = d.width + 8 + r() * (d.verge - 12), kind = d.theme === 'frozen' ? (r() < .5 ? 'cone' : 'lamp') : r() < .5 ? 'lamp' : r() < .5 ? 'tree' : 'cone';
         out.push({ x: p.x - p.dy * off * side, y: p.y + p.dx * off * side, img: SPR[kind], size: kind === 'lamp' ? 34 : kind === 'tree' ? 26 : 8 }); }
     }
     return out;
@@ -504,8 +561,79 @@
     if (c.hat === 'curls') { g.fillStyle = c.hair; g.fillRect(x - 4, y - 7, 8, 5); }
     if (c.hat === 'mop') { g.fillStyle = c.hair; g.fillRect(x - 4, y - 7, 8, 4); }
   }
+  // ---------- karts as tiny 3D box models, rendered once per viewing angle (16 of them) and cached ----------
+  // model space: x forward, y right, z up, in world units. Faces get a hue-shifted ramp: tops warm and light, sides mid, the far side cool and dark.
+  const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  const tone = (h, k) => { const [r, g, b] = hex2rgb(h); return k >= 1 ? `rgb(${Math.min(255, r * k + 14 * (k - 1) * 4) | 0},${Math.min(255, g * k + 6 * (k - 1) * 4) | 0},${Math.min(255, b * k) | 0})` : `rgb(${r * k | 0},${g * k | 0},${Math.min(255, b * k + 60 * (1 - k)) | 0})`; };
+  function model(ci, vi) {
+    const c = CHARS[ci], B = [], box = (x0, x1, y0, y1, z0, z1, col, k = 1) => B.push({ x0, x1, y0, y1, z0, z1, col, k });
+    const rider = (x, y, z, kid) => {   // torso, head, hair or hat
+      const sc = kid ? .8 : 1; box(x - 1.6 * sc, x + 1.2 * sc, y - 1.6 * sc, y + 1.6 * sc, z, z + 3.4 * sc, c.body);
+      if (c.hat === 'beak') { box(x - 1.4, x + 1.4, y - 1.3, y + 1.3, z + 3.4, z + 6, c.skin); box(x + 1.4, x + 2.6, y - .5, y + .5, z + 4.4, z + 5.2, '#ffb030'); return; }
+      box(x - 1.2 * sc, x + 1.2 * sc, y - 1.2 * sc, y + 1.2 * sc, z + 3.4 * sc, z + 5.8 * sc, c.skin);
+      box(x - 1.4 * sc, x + .2 * sc, y - 1.3 * sc, y + 1.3 * sc, z + 4.6 * sc, z + 6.2 * sc, c.hair);   // back of the head: hair
+      if (c.hat === 'cap') box(x - 1.3, x + 2.2, y - 1.3, y + 1.3, z + 5.6, z + 6.4, '#e83a3a');
+      if (c.hat === 'guard') box(x - 1.4, x + 2, y - 1.4, y + 1.4, z + 5.6, z + 6.6, '#1a2a4a');
+      if (c.hat === 'chef') box(x - 1.1, x + 1.1, y - 1.1, y + 1.1, z + 5.8, z + 9, '#ffffff');
+      if (c.hat === 'bun') box(x - 2, x - .8, y - .7, y + .7, z + 5.8, z + 7, c.hair);
+      if (c.hat === 'curls') box(x - 1.6, x + .6, y - 1.6, y + 1.6, z + 5.2, z + 6.8, c.hair);
+      if (c.hat === 'mop') box(x - 1.5, x + .8, y - 1.5, y + 1.5, z + 5, z + 6.6, c.hair);
+    };
+    const riders = (x, z) => c.hat === 'twins' ? (rider(x, -1.6, z, true), rider(x, 1.6, z, true)) : rider(x, 0, z);
+    const wheel = (x, y, r, w = 1.4) => box(x - r, x + r, y - w / 2, y + w / 2, 0, r * 2, '#2a2a30');
+    if (vi === 0) {   // trolley: wire basket on four castors, the handle at the back
+      for (const [x, y] of [[-4.5, -3.5], [-4.5, 3.5], [4.5, -3.5], [4.5, 3.5]]) wheel(x, y, .9, 1);
+      box(-5.2, 5.2, -4, 4, 1.8, 2.4, '#8a96a8'); riders(-.5, 2.4);
+      box(-5, 5, -4, -3.6, 2.4, 6.6, '#c8d2de', .9); box(-5, 5, 3.6, 4, 2.4, 6.6, '#c8d2de', .9); box(4.6, 5, -4, 4, 2.4, 6.6, '#c8d2de', .9);
+      box(-5.6, -5, -4.2, 4.2, 6.6, 7.4, '#ff5a6a'); box(-5.6, -5, -4.2, -3.6, 2.4, 6.6, '#8a96a8'); box(-5.6, -5, 3.6, 4.2, 2.4, 6.6, '#8a96a8');
+    } else if (vi === 1) {   // go-kart: low body, fat rear tyres, front bumper
+      wheel(-4.2, -4.6, 1.7, 2); wheel(-4.2, 4.6, 1.7, 2); wheel(4.2, -4.2, 1.3, 1.6); wheel(4.2, 4.2, 1.3, 1.6);
+      const bc = c.body === '#f4f4f4' ? '#e8a030' : c.body; box(-5.5, 5.5, -3.4, 3.4, .8, 2.6, bc); box(3.5, 6.5, -2.4, 2.4, .6, 1.8, '#dddddd');
+      box(-4, -1, -2, 2, 2.6, 4.2, '#333340'); riders(-2.2, 2.6);
+    } else {   // mobility scooter: long base, tall seat, front basket and an orange flag
+      wheel(-4.4, -3, 1.1); wheel(-4.4, 3, 1.1); wheel(4.4, -2.6, 1.1); wheel(4.4, 2.6, 1.1);
+      box(-5.6, 5.6, -3.2, 3.2, 1.2, 2.4, '#3a6ad0'); box(-4.6, -2, -2.4, 2.4, 2.4, 6.4, '#2a2a3a'); box(3.6, 6, -2.4, 2.4, 2.4, 5, '#c8d2de', .9); box(2.6, 3.2, -.4, .4, 2.4, 6.4, '#8a96a8');
+      box(-5.4, -5, 2.6, 3, 2.4, 11, '#aaaaaa'); box(-5.4, -5, 3, 5, 9.4, 11, '#ff8a2a'); riders(-2.6, 2.4);
+    }
+    return B;
+  }
+  const PXU = 2.4;   // pixels per world unit in a kart frame
+  function renderModel(B, yaw) {
+    // camera looks along +x after rotating the model by yaw; pitched down like the race camera
+    const pitch = .62, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), W0 = 40, H0 = 40;
+    const P = (x, y, z) => { const rx = x * cy - y * sy, ry = x * sy + y * cy; return [W0 / 2 + ry * PXU, H0 - 8 - (z * cp - rx * sp) * PXU, rx * cp + z * sp]; };
+    const faces = [];
+    for (const b of B) {
+      const V = (x, y, z) => P(x ? b.x1 : b.x0, y ? b.y1 : b.y0, z ? b.z1 : b.z0);
+      const add = (q, nx, ny, nz, k) => { const rnx = nx * cy - ny * sy; const toward = -rnx * cp + nz * sp; if (toward <= 0.01) return; faces.push({ q, depth: q.reduce((a, v) => a + v[2], 0) / 4, col: tone(b.col, k * b.k) }); };
+      add([V(0, 0, 1), V(1, 0, 1), V(1, 1, 1), V(0, 1, 1)], 0, 0, 1, 1.18);   // top: warm light
+      add([V(0, 0, 0), V(0, 1, 0), V(0, 1, 1), V(0, 0, 1)], -1, 0, 0, .92);  // back
+      add([V(1, 0, 0), V(1, 1, 0), V(1, 1, 1), V(1, 0, 1)], 1, 0, 0, .8);    // front
+      const ry = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+      add([V(0, 0, 0), V(1, 0, 0), V(1, 0, 1), V(0, 0, 1)], 0, -1, 0, ry < Math.PI ? .7 : .86);   // left side
+      add([V(0, 1, 0), V(1, 1, 0), V(1, 1, 1), V(0, 1, 1)], 0, 1, 0, ry < Math.PI ? .86 : .7);    // right side
+    }
+    faces.sort((a, b) => b.depth - a.depth);
+    return spr(W0, H0, g => {
+      for (const f of faces) { g.fillStyle = f.col; g.beginPath(); f.q.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill(); }
+      // crisp it: hard alpha, then a coloured outline (the body's own colour, darkened) where the silhouette meets the background
+      const im = g.getImageData(0, 0, W0, H0), d = im.data, solid = i => d[i * 4 + 3] > 0;
+      for (let i = 0; i < W0 * H0; i++) d[i * 4 + 3] = d[i * 4 + 3] > 110 ? 255 : 0;
+      const out = new Uint8ClampedArray(d);
+      for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) { const i = y * W0 + x; if (solid(i)) continue; const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b2]) => (x + a >= 0 && x + a < W0 && y + b2 >= 0 && y + b2 < H0) ? (y + b2) * W0 + x + a : -1).filter(j => j >= 0 && solid(j));
+        if (nb.length) { const j = nb[0]; out[i * 4] = d[j * 4] * .35; out[i * 4 + 1] = d[j * 4 + 1] * .35; out[i * 4 + 2] = Math.min(255, d[j * 4 + 2] * .35 + 30); out[i * 4 + 3] = 255; } }
+      im.data.set(out); g.putImageData(im, 0, 0);
+    });
+  }
+  const FRAMES = {};
+  function kartFrame(ci, vi, rel) {   // rel: kart heading minus the direction from the camera to the kart (0 = we see its back)
+    const key = ci + ':' + vi, n = 16, b = ((Math.round(rel / (2 * Math.PI) * n) % n) + n) % n;
+    const set = FRAMES[key] || (FRAMES[key] = { B: model(ci, vi), f: [] });
+    return set.f[b] || (set.f[b] = renderModel(set.B, b / n * 2 * Math.PI));
+  }
   const SPRC = {};
-  function kartSprite(ci, vi) {
+  function kartSprite(ci, vi) { return kartFrame(ci, vi, Math.PI * .15); }
+  function kartSpriteFlat(ci, vi) {
     const key = ci + ':' + vi; if (SPRC[key]) return SPRC[key];
     const c = CHARS[ci];
     return SPRC[key] = spr(26, 22, g => {
@@ -563,9 +691,9 @@
     Draw.bigText(ctx, 'TROLLEY DASH', W / 2, 90, 54, '#ffe14a', '#3a1a00'); ctx.font = '800 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText('CHOOSE YOUR SHOPPER', W / 2, 170);
     ctx.imageSmoothingEnabled = false;
     CHARS.forEach((c, i) => { const b = CARD(i), on = S.pick.c === i; ctx.fillStyle = on ? '#ffe14a' : '#ffffff18'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 16); ctx.fill();
-      ctx.drawImage(kartSprite(i, S.pick.v), b.x + 7, b.y + 10, 104, 88); ctx.font = '900 18px system-ui'; ctx.fillStyle = on ? '#2a1a00' : '#fff'; ctx.fillText(c.name, b.x + b.w / 2, b.y + 120); ctx.font = '700 11px system-ui'; ctx.fillText(c.who, b.x + b.w / 2, b.y + 138); });
+      ctx.drawImage(kartSprite(i, S.pick.v), b.x + 15, b.y + 2, 88, 88); ctx.font = '900 18px system-ui'; ctx.fillStyle = on ? '#2a1a00' : '#fff'; ctx.fillText(c.name, b.x + b.w / 2, b.y + 120); ctx.font = '700 11px system-ui'; ctx.fillText(c.who, b.x + b.w / 2, b.y + 138); });
     VEHS.forEach((v, i) => { const b = VCARD(i), on = S.pick.v === i; ctx.fillStyle = on ? '#4ab8ff' : '#ffffff18'; Draw.rr(ctx, b.x, b.y, b.w, b.h, 16); ctx.fill();
-      ctx.drawImage(kartSprite(S.pick.c, i), b.x + 40, b.y + 8, 78, 66); ctx.font = '900 18px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(v.name, b.x + b.w / 2, b.y + 96); });
+      ctx.drawImage(kartSprite(S.pick.c, i), b.x + 44, b.y + 2, 72, 72); ctx.font = '900 18px system-ui'; ctx.fillStyle = '#fff'; ctx.fillText(v.name, b.x + b.w / 2, b.y + 96); });
     const st = statsFor(S.pick.c, S.pick.v), rel = (k, lo, hi) => (st[k] / BASE[k] - lo) / (hi - lo);
     bar(ctx, 'SPEED', rel('top', .8, 1.2), 700); bar(ctx, 'ACCEL', rel('accel', .5, 1.5), 726); bar(ctx, 'HANDLING', rel('turn', .6, 1.4), 752); bar(ctx, 'WEIGHT', rel('weight', .4, 1.6), 778);
     ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14a'; ctx.fillText(`${CHARS[S.pick.c].name}: ${CHARS[S.pick.c].desc} · ${VEHS[S.pick.v].desc}`, W / 2, 826);
@@ -578,14 +706,14 @@
     if (S.state === 'podium') {
       Draw.bigText(ctx, 'SUPERMARKET CUP', W / 2, 90, 44, '#ffe14a', '#3a1a00');
       [[0, W / 2, 300], [1, 140, 360], [2, W - 140, 400]].forEach(([i, x, y]) => { const t = table[i]; ctx.fillStyle = ['#ffd23a', '#c8d0dc', '#d08a4a'][i]; Draw.rr(ctx, x - 70, y + 90, 140, 560 - y, 12); ctx.fill(); Draw.bigText(ctx, String(i + 1), x, y + 130, 48, '#fff', '#3a2a00');
-        ctx.drawImage(kartSprite(t.ci, t.ci === S.pick.c ? S.pick.v : S.cup.veh[t.ci] || 0), x - 52, y - 10, 104, 88); ctx.font = '900 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(CHARS[t.ci].name + (t.ci === S.pick.c ? ' (YOU)' : ''), x, y + 196); });
+        ctx.drawImage(kartSprite(t.ci, t.ci === S.pick.c ? S.pick.v : S.cup.veh[t.ci] || 0), x - 48, y - 18, 96, 96); ctx.font = '900 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(CHARS[t.ci].name + (t.ci === S.pick.c ? ' (YOU)' : ''), x, y + 196); });
       const mine = table.findIndex(t => t.ci === S.pick.c) + 1;
       ctx.font = '800 22px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText(mine === 1 ? '🏆 YOU WIN THE CUP!' : `YOU FINISHED ${mine}${['ST', 'ND', 'RD'][mine - 1] || 'TH'} OVERALL`, W / 2, 720);
       ctx.fillText('TAP FOR A NEW CUP', W / 2, 860); return;
     }
     Draw.bigText(ctx, `STANDINGS · AFTER RACE ${S.cup.race + 1}/3`, W / 2, 90, 30, '#ffe14a', '#3a1a00');
     table.forEach((t, i) => { const y = 160 + i * 74, me = t.ci === S.pick.c; ctx.fillStyle = me ? '#ffe14a' : '#ffffff18'; Draw.rr(ctx, 40, y, W - 80, 64, 14); ctx.fill();
-      ctx.drawImage(kartSprite(t.ci, me ? S.pick.v : S.cup.veh[t.ci] || 0), 90, y + 6, 62, 52); ctx.font = '900 24px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = me ? '#2a1a00' : '#fff'; ctx.fillText(`${i + 1}. ${CHARS[t.ci].name}`, 170, y + 42); ctx.textAlign = 'right'; ctx.fillText(`${t.pts}`, W - 64, y + 42); });
+      ctx.drawImage(kartSprite(t.ci, me ? S.pick.v : S.cup.veh[t.ci] || 0), 92, y + 4, 56, 56); ctx.font = '900 24px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = me ? '#2a1a00' : '#fff'; ctx.fillText(`${i + 1}. ${CHARS[t.ci].name}`, 170, y + 42); ctx.textAlign = 'right'; ctx.fillText(`${t.pts}`, W - 64, y + 42); });
     ctx.font = '800 14px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText(`NEXT: ${TRACKS[S.cup.race + 1].name} · LEADER STARTS AT THE BACK · TAP`, W / 2, 790);
   }
   function render(ctx) {
@@ -594,12 +722,12 @@
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     const th = dark() ? { ...theme, fog: [8, 8, 16], sky: ['#05050a', '#14142a'] } : theme; S.fogNow = dark() ? 260 : FOG;
     sky(cam, th); ground(S.trk, cam, th);
+    lctx.fillStyle = '#0004'; for (const k of S.karts) { const q = project(cam, k.x, k.y); if (q && q.z < FOG * .8) { lctx.beginPath(); lctx.ellipse(q.x, q.y - .5 * q.s, 5 * q.s, 1.5 * q.s, 0, 0, 7); lctx.fill(); } }
     for (const p of S.puddles) { const q = project(cam, p.x, p.y); if (q) { lctx.fillStyle = '#7ac8ff99'; lctx.beginPath(); lctx.ellipse(q.x, q.y, p.r * q.s, p.r * q.s * .35, 0, 0, 7); lctx.fill(); } }
     billboards(cam, [...S.scenery, ...S.trk.cones.filter(c => !(c.down > S.clock)).map(c => ({ x: c.x, y: c.y, img: SPR.cone, size: 8 })), ...S.trk.boxes.filter(b => b.back <= S.clock).map(b => ({ x: b.x, y: b.y, img: SPR.bag, size: 9, lift: 2 + Math.sin(S.t * 4 + b.x) })),
-      ...S.drops.map(d => ({ x: d.x, y: d.y, img: SPR.banana, size: 3 })), ...S.events.flatMap(e => (e.until && S.clock <= e.until && e.movers) ? e.movers.map(m => ({ x: m.x, y: m.y, img: SPR[m.img], size: m.big ? 18 : 8 })) : []), ...S.trk.shortcuts.filter(sc => sc.closed).map(sc => ({ x: sc.doorAt.x, y: sc.doorAt.y, img: SPR.door, size: 20 })), ...S.shots.map(sh => ({ x: sh.x, y: sh.y, img: SPR[sh.kind], size: sh.kind === 'melon' ? 6 : 7 })), ...S.puddles.map(p => ({ x: p.x, y: p.y, img: SPR.sign, size: 9 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: k.spr, size: 7, lift: k.hop ? 2 : 0 }))]);
+      ...S.drops.map(d => ({ x: d.x, y: d.y, img: SPR.banana, size: 3 })), ...S.events.flatMap(e => (e.until && S.clock <= e.until && e.movers) ? e.movers.map(m => ({ x: m.x, y: m.y, img: SPR[m.img], size: m.big ? 18 : 8 })) : []), ...S.trk.shortcuts.filter(sc => sc.closed).map(sc => ({ x: sc.doorAt.x, y: sc.doorAt.y, img: SPR.door, size: 20 })), ...S.shots.map(sh => ({ x: sh.x, y: sh.y, img: SPR[sh.kind], size: sh.kind === 'melon' ? 6 : 7 })), ...S.puddles.map(p => ({ x: p.x, y: p.y, img: SPR.sign, size: 9 })), ...S.karts.map(k => ({ x: k.x, y: k.y, img: kartFrame(k.ci, k.vi, wrapA(k.a - Math.atan2(k.y - cam.y, k.x - cam.x)) + (k === S.player ? S.inp.steer * .3 + (k.drift || 0) * .45 : (k.drift || 0) * .45) + (k.spin > 0 ? S.t * 20 : 0)), size: 40 / PXU, lift: (k.hop ? 2 : 0) - 8 / PXU }))]);
+    particles(cam);
     const pk = S.player, pp = project(cam, pk.x, pk.y);
-    if (pp && pk.drift) { const c = pk.charge >= 2 ? '#ff9a2a' : pk.charge >= 1 ? '#4ab8ff' : '#ffffff'; lctx.fillStyle = c; for (let i = 0; i < 4; i++) lctx.fillRect(Math.round(pp.x - 14 * pk.drift - 2 + (S.t * 60 + i * 7) % 6), Math.round(pp.y - 2 - i), 2, 2); }
-    if (pp && pk.boost > 0) { lctx.fillStyle = (S.t * 20 | 0) % 2 ? '#ffd23a' : '#ff6a2a'; lctx.fillRect(Math.round(pp.x - 3), Math.round(pp.y), 6, 3); }
     Snd.engine(S.player); Snd.music();
     // juice is presentation only: shake offsets the blit, speed lines overlay; the race underneath is unchanged
     if (S.player.boost > 0) { lctx.strokeStyle = '#ffffff88'; lctx.lineWidth = 1; for (let i = 0; i < 10; i++) { const a = (i * 2.4 + S.t * 40) % (Math.PI * 2), r0 = 40 + (S.t * 300 + i * 37) % 60; lctx.beginPath(); lctx.moveTo(LW / 2 + Math.cos(a) * r0, 120 + Math.sin(a) * r0 * .6); lctx.lineTo(LW / 2 + Math.cos(a) * (r0 + 18), 120 + Math.sin(a) * (r0 + 18) * .6); lctx.stroke(); } }
@@ -622,6 +750,25 @@
     Draw.bigText(ctx, `LAP ${clamp(S.player.lap + 1, 1, LAPS)}/${LAPS}`, 90, 90, 30, '#fff', '#000');
     if (S.state === 'count') { const n = 3 - Math.floor(S.t - S.t0); Draw.bigText(ctx, n > 0 ? String(n) : 'GO!', W / 2, 300, 120, n > 0 ? '#fff' : '#4ad05a', '#000'); }
     if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); if (S.cup) { ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14a'; ctx.fillText(`RACE ${S.cup.race + 1}/3 · ${S.trk.def.name} · TAP TO GO ON`, W / 2, 166); } S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${CHARS[k.ci].name}${k === S.player ? ' (YOU)' : ''}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.finishT ? (k.est ? '~' : '') + k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
+  }
+  // ---------- particles (presentation only: own random numbers, moved by the frame, never read by the race) ----------
+  const PARTS = [];
+  function emit(x, y, z, vx, vy, vz, life, col, size = 1) { if (PARTS.length < 260) PARTS.push({ x, y, z, vx, vy, vz, life, max: life, col, size }); }
+  function particles(cam) {
+    const dt = 1 / 60;
+    for (const k of S.karts) {
+      const q = project(cam, k.x, k.y); if (!q || q.z > 300) continue;
+      const v = speedOf(k), fx = Math.cos(k.a), fy = Math.sin(k.a), bx = k.x - fx * 5, by = k.y - fy * 5, R = Math.random;
+      if ((k.ter === T.GRASS || k.ter === T.SAND || k.ter === T.PEAS) && v > 30 && R() < .6) emit(bx + (R() - .5) * 6, by + (R() - .5) * 6, 1, -fx * 20 + (R() - .5) * 20, -fy * 20 + (R() - .5) * 20, 14 + R() * 10, .5, k.ter === T.GRASS ? '#7ac860' : '#d8b880', 1.4);
+      if (k.drift && R() < .9) { const c = k.charge >= 2 ? '#ff9a2a' : k.charge >= 1 ? '#4ab8ff' : '#ffffff'; for (const side of [-1, 1]) emit(bx - fy * 4 * side, by + fx * 4 * side, .5, (R() - .5) * 30 - fx * 10, (R() - .5) * 30 - fy * 10, 10 + R() * 20, .25, c, 1); }
+      if (k.boost > 0 && R() < .8) emit(bx, by, 2, -fx * 40 + (R() - .5) * 10, -fy * 40 + (R() - .5) * 10, 4, .22, R() < .5 ? '#ffd23a' : '#ff5a1a', 1.6);
+      if (k.spin > 0 && R() < .3) emit(k.x, k.y, 9, (R() - .5) * 20, (R() - .5) * 20, 6, .5, '#ffe14a', 1.2);
+    }
+    for (const b of S.trk.boxes) if (b.back <= S.clock && Math.random() < .03) emit(b.x + (Math.random() - .5) * 6, b.y + (Math.random() - .5) * 6, 8, 0, 0, 6, .5, '#ffffff', 1);
+    for (const pt of PARTS) { pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.z = Math.max(0, pt.z + pt.vz * dt); pt.vz -= 40 * dt; }
+    for (let i = PARTS.length - 1; i >= 0; i--) if (PARTS[i].life <= 0) PARTS.splice(i, 1);
+    for (const pt of PARTS) { const q = project(cam, pt.x, pt.y); if (!q) continue; const sz = Math.max(1, Math.round(pt.size * q.s * .5)); lctx.globalAlpha = Math.min(1, pt.life / pt.max * 1.5); lctx.fillStyle = pt.col; lctx.fillRect(Math.round(q.x), Math.round(q.y - pt.z * q.s), sz, sz); }
+    lctx.globalAlpha = 1;
   }
   // minimap: the centreline traced small, every kart a dot (you are the big one)
   function drawMinimap(ctx, x0, y0, w, h) {
