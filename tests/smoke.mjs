@@ -571,6 +571,16 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- TROLLEY DASH (the ad is a quiet cart-return puzzle; the game is a kart racer) ----------
+{
+  const { page, errors } = await open('games/trolleydash/index.html');
+  const tr = await page.evaluate(() => { const g = window.__game, out = [];
+    for (let i = 0; i < g.TRACKS.length; i++) { g.load(i); const t = g.S.trk, p = t.line[0]; out.push({ L: Math.round(t.L), start: t.ter[(p.y | 0) * t.N + (p.x | 0)] }); } return out; });
+  check(tr.every(t => t.L > 1500 && t.start === 7), `trolleydash: every track builds a closed road with the start line on it (${tr.map(t => t.L).join(', ')} units)`);
+  check(errors.length === 0, `trolleydash runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 // ---------- FARO (the ad is a casino; the game is a perfect-shuffle puzzle) ----------
 {
   const { page, errors } = await open('games/faro/index.html');
