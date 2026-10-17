@@ -647,9 +647,20 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   const begun = await page.evaluate(() => ({ mode: window.__game.S.mode, dojo: window.__game.dojo() && window.__game.dojo().id }));
   check(begun.mode === 'battle' && begun.dojo === 'attack', `stonewake-proto pitch: holding both thumbs starts the dojo (${JSON.stringify(begun)})`);
   const flow = await page.evaluate(() => { const g = window.__game, seen = []; g.startDemo(true);
-    for (let k = 0; k < 20000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(), D = g.dojo(); const id = D ? 'dojo-' + (D.id || 'done') : L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
+    for (let k = 0; k < 30000 && g.S.mode !== 'card'; k++) { g.step(6); const L = g.lesson(), D = g.dojo(), M = g.mapLesson(); const id = D ? 'dojo-' + (D.id || 'done') : M ? 'map-' + M : L ? L.id : g.S.mode; if (seen[seen.length - 1] !== id) seen.push(id); }
     return { mode: g.S.mode, seen: seen.join('>'), tot: g.S.demo && g.S.demo.tot }; });
-  check(flow.mode === 'card' && /dojo-attack>dojo-parry>dojo-cast>dojo-done>block>string>skill>item>break/.test(flow.seen) && flow.tot.casts > 0 && flow.tot.items > 0 && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
+  check(flow.mode === 'card' && /dojo-attack>dojo-parry>dojo-cast>dojo-done>map-move>map-dash>map-chest>map-golem>block>guard>string>skill>item>break>.*inter>.*volley>eye/.test(flow.seen) && flow.tot.casts > 0 && flow.tot.items > 0 && flow.tot.parry > 0 && flow.tot.block > 0 && flow.tot.skills > 0, `stonewake-proto pitch: watch mode teaches every verb and reaches the end card (${flow.seen})`);
+  // the second ending: at the titan, CALM IT hands the three shards back with both hands (left, then right)
+  const calm = await page.evaluate(() => { const g = window.__game; g.startInter(); g.S.inter.t = 2.5; g.interPick('L'); g.autopilot = 'perfect';
+    for (let k = 0; k < 3000 && g.S.mode === 'calm'; k++) g.step(5); return { mode: g.S.mode, ending: g.S.demo && g.S.demo.ending }; });
+  check(calm.mode === 'card' && calm.ending === 'sleeps', `stonewake-proto pitch: calming the titan with both hands reaches the other ending (${JSON.stringify(calm)})`);
+  // no soft-lock: pressing the wrong button in a hero lesson three times moves the lesson on (Brain seven#E21)
+  const stuck = await page.evaluate(() => { const g = window.__game;
+    g.startDemo(true); for (let k = 0; k < 20000 && !(g.lesson() && g.lesson().id === 'guard'); k++) g.step(4);   // the autopilot plays up to the GUARD lesson
+    g.autopilot = null; let presses = 0;
+    for (let k = 0; k < 4000 && g.lesson() && g.lesson().id === 'guard'; k++) { g.step(4); const B = g.S.battle; if (B.phase === 'menu') { presses++; B.stats.actions++; B.phase = 'after'; B.t = 0; } }   // a wrong press: the turn passes without GUARD
+    return { lesson: g.lesson() && g.lesson().id, presses }; });
+  check(stuck.lesson === 'string' && stuck.presses >= 3, `stonewake-proto pitch: three wrong presses in a lesson move it on (${JSON.stringify(stuck)})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();

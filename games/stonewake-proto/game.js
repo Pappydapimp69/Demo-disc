@@ -162,6 +162,7 @@
     gdesert: { name: 'SAND GOLEM', hp: 660, atk: 23, spd: 6, xp: 55, pat: 'sh', brkMax: 6, draw: 'golem', tint: ['d0', 'd1'], boss: true },
     wraith: { name: 'SHARD WRAITH', hp: 800, atk: 23, spd: 15, xp: 60, pat: 'ssh', brkMax: 6, draw: 'golem', tint: ['n1', 'p1'], weak: 'fire', boss: true },
     eye: { name: 'TITAN EYE', hp: 680, atk: 20, spd: 7, xp: 0, pat: 'hs', brkMax: 6, draw: 'eye', weak: 'shard', boss: true },
+    tgolem: { name: 'MOSS GOLEM', weak: 'fire', hp: 240, atk: 12, spd: 8, xp: 0, pat: 'sh', brkMax: 4, draw: 'golem', tint: ['g1', 'g2'], boss: true },
     thand: { name: 'STONE HAND', weak: 'fire', hp: 240, atk: 12, spd: 8, xp: 0, pat: 'sh', brkMax: 4, draw: 'hand', boss: true },
     lhand: { short: 'LH', name: 'LEFT HAND', hp: 190, atk: 18, spd: 9, xp: 0, pat: 'h', brkMax: 3, draw: 'hand', boss: true }, rhand: { short: 'RH', name: 'RIGHT HAND', hp: 190, atk: 18, spd: 10, xp: 0, pat: 's', brkMax: 3, draw: 'hand', boss: true },
   };
@@ -237,7 +238,7 @@
     const b = blocker(nx, ny);
     if (b) { S.path = []; return interact(b); }
     if (!walkable(m, nx, ny)) return;
-    S.hero.px = S.hero.x; S.hero.py = S.hero.y; S.hero.x = nx; S.hero.y = ny; S.hero.k = 0;
+    S.hero.px = S.hero.x; S.hero.py = S.hero.y; S.hero.x = nx; S.hero.y = ny; S.hero.k = 0; mapStepped();
     if (tileAt(m, nx, ny) === '^') leaveRegion();
   }
   function leaveRegion() {
@@ -251,6 +252,7 @@
     if (b.type === 'npc') say([['elder', G.shards < 3 ? 'The shards. North. Hurry, child.' : 'You have them all. Go to the titan.']]);
     else if (b.type === 'fire' && G.fireUsed[G.region]) say([[null, 'THE EMBERS ARE COLD. THEY ONLY HAD ONE NIGHT IN THEM.']]);
     else if (b.type === 'fire') { G.fireUsed[G.region] = true; healParty(1); Audio.tone(523, .1, 'triangle', .06); Audio.tone(784, .2, 'triangle', .06, null, .1); say([[null, 'You rest by the fire. HP and MP restored.']]); }
+    else if (b.type === 'boss' && S.demo && S.demo.map) startDemoFight();
     else if (b.type === 'boss') startBattle([MAPS[G.region].bossKind === 'forest' ? 'gforest' : MAPS[G.region].bossKind === 'cave' ? 'gcave' : 'gdesert'], 'boss');
     else if (b.type === 'altar') say([[null, G.cleared[G.region] ? 'The altar is empty now.' : 'A shard glows on the altar. A golem stands guard.']]);
     else if (b.type === 'eye') finaleChoice();
@@ -265,7 +267,7 @@
   }
   function updateMap(dt) {
     const h = S.hero;
-    h.k = Math.min(1, h.k + dt * SPEED * (S.dash ? 1.8 : 1));
+    h.k = Math.min(1, h.k + dt * SPEED * (S.dash || S.botDash || ((S.keys.z || S.keys.Z) && S.demo && S.demo.map) ? 1.8 : 1));
     if (h.k >= 1 && !S.dialog) {
       if (S.path.length) { const [nx, ny] = S.path.shift(); tryStep(Math.sign(nx - h.x), Math.sign(ny - h.y)); }
       else { const sd = stickDir(), kx = sd ? sd[0] : (S.keys.ArrowRight ? 1 : 0) - (S.keys.ArrowLeft ? 1 : 0), ky = sd ? sd[1] : (S.keys.ArrowDown ? 1 : 0) - (S.keys.ArrowUp ? 1 : 0); if (kx) tryStep(kx, 0); else if (ky) tryStep(0, ky); }
@@ -549,23 +551,11 @@
     const c = S.choice; S.choice = null;
     if (c && c.shrine) { if (i === 0) { S.shrineKey = c.shrine; startBattle(['wraith'], 'optional'); } return; }
     if (i === 0) startBattle(['lhand', 'eye', 'rhand'], 'finale');
-    else { S.mode = 'calm'; S.calm = { n: 0, t: 0, hitT: null, fails: 0, res: null }; }
-  }
-  function updateCalm(dt) {
-    const c = S.calm; c.t += dt;
-    const DUR = 1.2;
-    if (c.res) { if (c.t > 1.0) { c.res = null; c.t = 0; c.hitT = null; if (c.n >= 3) ending('sleeps'); } return; }
-    const auto = API.autopilot;
-    if (auto === 'perfect' && c.hitT === null && c.t >= DUR - .01) c.hitT = c.t;
-    if (c.hitT !== null) {
-      const q = Math.abs(c.hitT - DUR);
-      if (q < .18) { c.n++; c.res = 'ok'; Audio.tone(784 + c.n * 200, .3, 'triangle', .07); }
-      else { c.res = 'bad'; c.fails++; for (const p of G.party) p.hp = Math.max(0, p.hp - 12); Audio.noise(.4, .2); S.flash = .15; if (!aliveParty().length) { S.mode = 'over'; S.mt = 0; } }
-      c.t = 0;
-    } else if (c.t > DUR + .5) { c.hitT = c.t; }
+    else startCalm();
   }
   function ending(which) {
     G.endings[which] = true; saveEndings();
+    if (S.demo) { S.demo.ending = which; S.mode = 'card'; S.card = { t: 0 }; API.autopilot = null; Audio.sfx('win'); return; }
     S.mode = 'ending'; S.ending = { which, t: 0 };
     Audio.sfx('win');
   }
@@ -728,7 +718,7 @@
     const d = S.dojo;
     if (d.phase === 'explain') { d.phase = 'practice'; d.t = 0; d.fb = null; S.battle.phase = 'after'; S.battle.t = .4; return; }
     if (d.phase === 'clear') { d.ch++; d.reps = 0; d.fails = 0; d.streak = 0; d.fb = null; d.t = 0; d.phase = d.ch < DOJO.length ? 'explain' : 'done'; S.battle.phase = 'after'; S.battle.t = 0; return; }
-    if (d.phase === 'done') { S.dojo = null; dojoTotals(); startDemoFight(); }
+    if (d.phase === 'done') { S.dojo = null; dojoTotals(); startDemoMap(); }
   }
   function dojoUpdate(dt) {   // true while the battle should hold still (a card is up)
     const d = S.dojo; if (!d) return false; d.t += dt;
@@ -737,7 +727,7 @@
     return d.phase !== 'practice';
   }
   function dojoTotals() { const B = S.battle; if (S.demo && B && B.kind === 'dojo') for (const k in S.demo.tot) S.demo.tot[k] += B.stats[k] || 0; }   // the card counts the dojo too
-  function skipDojo() { S.dojo = null; dojoTotals(); startDemoFight(); }
+  function skipDojo() { S.dojo = null; dojoTotals(); startDemoMap(); }
   const DOJO_BTNS = { skip: [LPAD[0], PAD_Y + 50, 86, 30], go: [RPAD[0], PAD_Y + 50, 86, 30] };
   function meter(x0, y, w, err, win, c) {   // a timing bar: centre = the beat; gold = perfect window, light = good
     const sc = w / .6, cx0 = x0 + w / 2; rect(x0, y, w, 7, 'k'); rect(cx0 - win[1] * sc, y + 1, win[1] * 2 * sc, 5, 's2'); rect(cx0 - win[0] * sc, y + 1, win[0] * 2 * sc, 5, 'au');
@@ -784,6 +774,87 @@
     if (d.phase === 'clear') { rect(0, 80, W, 34, 'k'); text(C.title, 90, 83, C.c, 'center', null); text('LEARNED!', 90, 94, 'g4', 'center', 'k', 16); }
   }
 
+  // ---------- the pitch's walk: two thumbs on the map ----------
+  // Between the dojo and the fight: steer with the floating stick, hold DASH with the other thumb, open a chest, then
+  // walk into the golem. Each step is pinned to a real map event (steps taken, steps taken while dashing, the chest's
+  // found flag), not to a timer.
+  const MAP_LESSONS = [
+    { id: 'move', hand: 'L', l1: 'WALK THE PATH', c1: 'au', verb: 'MOVE', sub: 'SLIDE ON LOWER LEFT', keys: 'ARROW KEYS', ok: m => m.steps >= 4 },
+    { id: 'dash', hand: 'R', l1: 'BOTH THUMBS AT ONCE', c1: 'c2', verb: 'HOLD DASH', sub: 'STEER WITH THE LEFT', keys: 'HOLD Z + ARROWS', ok: m => m.dashSteps >= 5 },
+    { id: 'chest', l1: 'A CHEST, FAR LEFT', c1: 'au', verb: 'OPEN IT', sub: 'WALK INTO IT', target: [1, 8], ok: () => !!G.found['forest:1,8'] },
+    { id: 'golem', l1: 'IT GUARDS THE SHARD', c1: 'r2', verb: 'FIGHT IT', sub: 'WALK INTO THE GOLEM', target: [7, 2], ok: () => false },
+  ];
+  function startDemoMap() {
+    G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 0; G.found = {}; G.cleared = {}; G.items = { POTION: 3, ETHER: 1 };
+    enterRegion('forest'); API.finish(); for (const f of S.foes) f.alive = false;
+    S.demo.map = { i: 0, steps: 0, dashSteps: 0, shown: S.t, bot: 0 }; S.lockUntil = S.t + .4;
+  }
+  const mapLesson = () => S.demo && S.demo.map && MAP_LESSONS[S.demo.map.i];
+  function mapStepped() { const m = S.demo && S.demo.map; if (!m) return; m.steps++; if (S.dash || S.keys.z || S.keys.Z || S.botDash) m.dashSteps++; }
+  function updateMapLesson(dt) {
+    const m = S.demo && S.demo.map; if (!m) return; const L = MAP_LESSONS[m.i];
+    if (L && L.ok(m)) { m.i++; m.shown = S.t; FXS.lesson(); }
+    if (!S.demo.watch) return;
+    // WATCH: the autopilot walks it (path-following), shows a ghost thumb on the stick and one on DASH
+    if (S.dialog) { if (S.t - S.dialog.t > 1.2) advanceDialog(); return; }
+    const N = MAP_LESSONS[m.i]; S.botDash = !!N && N.id !== 'move';
+    if (S.t - m.bot > .35) { m.bot = S.t; ghost(40, 282, 'L'); if (S.botDash) ghost(ACT[0], ACT[1], 'R'); }
+    if (!S.path.length && S.hero.k >= 1 && N) S.path = bfs(...(N.target || [1, 8]));
+  }
+  function drawMapLesson(t) {
+    const L = mapLesson(); if (!L || S.dialog) return;
+    const d = S.demo.map, k = Math.min(1, (S.t - d.shown) * 4), keys = S.scheme === 'keys';
+    rect(0, 0, W, 47, 'k'); rect(0, 46, W * k, 1, L.c1);
+    text(L.l1, 90, 3, L.c1, 'center', null);
+    text(L.hand ? handName(L.hand) : ' ', 90, 14, L.hand === 'L' ? 'au' : 'c2', 'center', null);
+    text(L.verb, 90, 24, 'wt', 'center', 'k', L.verb.length <= 11 ? 16 : 8);
+    if (L.target && Math.floor(t * 3) % 2) { const x = L.target[0] * TS + 6, y = MAP_Y + L.target[1] * TS - 4; for (let i = 0; i < 4; i++) rect(x - 4 + i, y - 4 + i, 9 - i * 2, 1, 'au'); }
+    const sub = keys && L.keys ? L.keys : L.sub; rect(0, 47, W, 10, 'k'); text(sub, 90, 48, 's4', 'center', null);
+  }
+  // ---------- the choice at the titan, and calming it with both hands ----------
+  function startInter() {
+    S.mode = 'inter'; S.inter = { t: 0 }; S.battle = null; FXS.rumble();
+    G.party = ['hero', 'knight', 'mage', 'archer'].map(newMember); API.setLevel(7); G.shards = 3; G.region = 'titan';
+  }
+  const CHOICE = { L: [LPAD[0], PAD_Y + 20, 86, 50], R: [RPAD[0], PAD_Y + 20, 86, 50] };
+  function interPick(h) { if (!S.inter || S.inter.t < 2) return; if (h === 'L') startCalm(); else startFinale(); }
+  function startCalm() { S.demo && (S.demo.finale = true); S.mode = 'calm'; S.calm = { n: 0, t: 0, gL: null, gR: null, eL: null, eR: null, fails: 0, res: null }; S.lockUntil = S.t + .3; }
+  const CALM_T = { L: .9, R: 1.3 };
+  function timingTapCalm(hand = 'R') {   // hand the shard back: left as it nears, right as it touches the eye
+    const c = S.calm; if (c.res) return; const k = hand === 'L' ? 'gL' : 'gR'; if (c[k] !== null) return;
+    if (hand === 'R' && c.gL === null) { c.gL = 99; c.eL = null; }   // the right hand alone cannot hand it back
+    const e = c.t - CALM_T[hand]; c[k] = Math.abs(e); c[hand === 'L' ? 'eL' : 'eR'] = e; FXS.castNote(hand, Math.abs(e) < .07 ? 1.45 : 1.2);
+    ghost(hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, PAD_Y + 45, hand);
+  }
+  function updateCalm(dt) {
+    const c = S.calm; c.t += dt;
+    if (c.res) { if (c.t > 1.0) { c.res = null; c.t = 0; c.gL = c.gR = null; if (c.n >= 3) ending('sleeps'); } return; }
+    if (API.autopilot === 'perfect') { if (c.gL === null && c.t >= CALM_T.L - .01) timingTapCalm('L'); if (c.gR === null && c.gL !== null && c.t >= CALM_T.R - .01) timingTapCalm('R'); }
+    const done = (c.gL !== null && c.gR !== null) || c.t > CALM_T.R + .5;
+    if (done) {
+      if ((c.gL ?? 9) < .18 && (c.gR ?? 9) < .18) { c.n++; c.res = 'ok'; Audio.tone(784 + c.n * 200, .3, 'triangle', .07); FXS.heal(); }
+      else { c.res = 'bad'; c.fails++; for (const p of G.party) p.hp = Math.max(0, p.hp - 12); FXS.hurt(true); S.flash = .15; if (!aliveParty().length) { S.mode = 'over'; S.mt = 0; } }
+      c.t = 0;
+    }
+  }
+  function drawCalm(t) {
+    const c = S.calm;
+    rect(0, 0, W, H, 's1'); for (let i = 0; i < 60; i++) px(hash(i) * W, hash(i + 3) * H, 's2');
+    const droop = c.n / 3, ex = 90, ey = 100, oh = Math.round(30 * (1 - droop * .85));
+    rect(ex - 70, ey - 40 + droop * 20, 140, 5, 's0');
+    for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(66 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(ex - w, ey + dy, w * 2 + 1, 1, dy < -oh * .4 ? 'n6' : 'n7'); }
+    if (oh > 3) rect(ex - 3, ey - oh + 2, 7, oh * 2 - 3, 'k');
+    G.party.forEach((p, i) => spr(p.spr, 52 + i * 20, 196, 0));
+    if (!c.res && c.n < 3) { const k = clamp(c.t / CALM_T.R), sx = mix(80, ex, k), sy = mix(196, ey + 2, ease(k)); shard(sx, sy, t); ring(ex, ey, 8, 'au'); }
+    rect(0, 0, W, 26, 'k'); text(`RETURN SHARD ${Math.min(3, c.n + 1)}/3`, 90, 3, 'c3', 'center');
+    text(c.res === 'ok' ? 'IT EASES...' : c.res === 'bad' ? 'IT ROARS! AGAIN' : 'LEFT, THEN RIGHT', 90, 14, c.res === 'bad' ? 'r2' : c.res === 'ok' ? 'g4' : 'wt', 'center', null);
+    rect(0, PAD_Y - 6, W, H - PAD_Y + 6, 'k');
+    for (const h of ['L', 'R']) { const P0 = h === 'L' ? LPAD : RPAD, x = P0[0] + 43, y = PAD_Y + 38, g = c[h === 'L' ? 'gL' : 'gR'], k = clamp(c.t / CALM_T[h]);
+      panel(P0[0], P0[1], P0[2], P0[3], g === null ? 'c1' : g < .18 ? 'au' : 'r1'); ring(x, y, 10, 'c3'); if (g === null && !c.res) ring(x, y, Math.round(mix(34, 10, k)), 'wt'); else if (g !== null) disc(x, y, 6, g < .18 ? 'au' : 'r2');
+      text(h === 'L' ? '1' : '2', x, y - 4, 'wt', 'center', 'k'); }
+    G.party.forEach((p, i) => text(`${p.hp}`, 10 + i * 44, 222, p.hp < 15 ? 'r2' : 'g4'));
+  }
+
   // ---------- the playable pitch ----------
   // Opens on a two-thumb hold, then teaches by doing inside one real fight (a stone hand of the titan), one verb at a
   // time, then throws everything at once (the titan's eye and both hands), then shows the player's own numbers and the
@@ -791,6 +862,7 @@
   // tutorial rule set: the fight IS the game. WATCH mode plays the same flow with the autopilot and ghost thumbs.
   const LESSONS = [
     { id: 'block', who: 'foe', pat: 'h', slow: .4, hand: 'L', l1: 'HEAVY HIT', c1: 'r2', verb: 'BLOCK', ok: (s, b) => s.block > b.block, again: 'BLOCK AS THE RING CLOSES' },
+    { id: 'guard', who: 'p', actor: 'knight', hand: 'R', l1: 'BRUNA SHIELDS EVERYONE', c1: 'c3', verb: 'GUARD', sub: 'HALF DAMAGE, 2 ROUNDS', pre: B => { B.wake = Math.max(B.wake, 1); }, ok: (s, b) => s.skills > b.skills },
     { id: 'string', who: 'foe', pat: 'shs', slow: .8, l1: 'A STRING', c1: 'wt', verb: 'READ EACH HIT', sub: 'RED=LEFT  BLUE=RIGHT', ok: (s, b) => s.strings > b.strings },
     { id: 'skill', who: 'p', actor: 'hero', hand: 'R', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
     { id: 'item', who: 'p', actor: 'mage', hand: 'R', l1: 'BRUNA IS HURT', c1: 'g4', verb: 'POTION', sub: 'ITEM > POTION > BRUNA', pre: () => { const k = G.party.find(p => p.id === 'knight'); k.hp = Math.min(k.hp, Math.round(k.maxhp * .3)); }, ok: (s, b) => (s.items || 0) > (b.items || 0) },
@@ -808,15 +880,21 @@
   function startDemoFight() {
     G.party = [newMember('hero'), newMember('knight'), newMember('mage')]; API.setLevel(3); G.shards = 1; G.region = 'forest'; G.items = { POTION: 3, ETHER: 1 };
     S.demo.i = 0; S.demo.base = null; S.demo.shown = S.t;
-    startBattle(['thand'], 'demo1'); S.battle.noLose = true;
+    S.demo.map = null; S.botDash = false; startBattle(['tgolem'], 'demo1'); S.battle.noLose = true;
   }
   // the lesson fight cannot end before every verb is taught: until the break lesson, the foe stays above 30% HP
-  function lessonFloor(f) { if (S.battle && S.battle.kind === 'dojo') { f.hp = Math.max(f.hp, 1); return; } const L = lesson(); if (L && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
-  function lesson() { const d = S.demo; return d && !d.finale && !S.dojo && S.battle && S.battle.kind !== 'dojo' ? LESSONS[d.i] : null; }
+  const FINALE_LESSONS = [
+    { id: 'volley', who: 'p', actor: 'archer', hand: 'R', l1: 'WREN HITS EVERY FOE', c1: 'g4', verb: 'VOLLEY', sub: 'ONE ARROW EACH', pre: B => { B.wake = Math.max(B.wake, 2); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'eye', who: 'free', l1: 'THE EYE OPENS EVERY', c1: 'au', verb: 'OTHER ROUND', sub: 'SHARD STRIKE IT THEN', ok: () => false },
+  ];
+  function lessonFloor(f) { if (S.battle && S.battle.kind === 'dojo') { f.hp = Math.max(f.hp, 1); return; } const L = lesson(); if (L && !S.demo.finale && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
+  function lesson() { const d = S.demo; if (!d || S.dojo || !S.battle || S.battle.kind === 'dojo') return null; return d.finale ? (S.battle.kind === 'demo2' ? FINALE_LESSONS[d.i] : null) : LESSONS[d.i]; }
   function demoTurn(B) {   // returns true when the lesson chose this turn
     const d = S.demo, L = lesson(); if (!L) return false;
     if (d.base && L.ok(B.stats, d.base)) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; FXS.lesson(); }
     else if (d.base && L.who === 'foe') { d.fails++; d.shown = S.t; }
+    else if (d.base && L.who === 'p' && ++d.fails >= 3) { d.i++; d.base = null; d.shown = S.t; d.fails = 0; }
+    else if (d.base && L.who === 'p') d.shown = S.t;
     const N = lesson(); if (!N) return false;
     if (!d.base) { d.base = { ...B.stats }; if (N.pre) N.pre(B); }
     const f = aliveFoes()[0];
@@ -826,14 +904,14 @@
   }
   function demoAfterBattle(B) {
     const d = S.demo; for (const k in d.tot) d.tot[k] += B.stats[k] || 0;
-    if (B.kind === 'demo1') { S.mode = 'inter'; S.inter = { t: 0 }; FXS.rumble(); }
-    else { S.mode = 'card'; S.card = { t: 0 }; API.autopilot = null; }
+    if (B.kind === 'demo1') startInter();
+    else { G.endings.fell = true; saveEndings(); S.demo.ending = 'fell'; S.mode = 'card'; S.card = { t: 0 }; API.autopilot = null; }
   }
   function startFinale() {
-    const d = S.demo; d.finale = true; d.shown = S.t;
+    const d = S.demo; d.finale = true; d.shown = S.t; d.i = 0; d.base = null;
     G.party = ['hero', 'knight', 'mage', 'archer'].map(newMember); API.setLevel(7); G.shards = 3; G.region = 'titan';
     startBattle(['lhand', 'eye', 'rhand'], 'demo2'); for (const f of S.battle.foes) { f.maxhp = Math.round(f.maxhp * .5); f.hp = f.maxhp; }   // a demo-length encounter
-    banner(S.battle, 'EVERYTHING AT ONCE. HANDS ARE HEAVY AND SWIFT. STRIKE THE EYE WHILE IT IS OPEN.');
+
   }
   const handName = h => h === 'B' ? (S.scheme === 'keys' ? 'X THEN Z' : 'BOTH THUMBS') : S.scheme === 'keys' ? (h === 'L' ? 'X KEY' : 'Z KEY') : (h === 'L' ? 'LEFT THUMB' : 'RIGHT THUMB');
   function drawLesson(t) {   // the coach: big, short, on the field; an arrow over the pad that answers it
@@ -843,14 +921,14 @@
     const d = S.demo, k = Math.min(1, (S.t - d.shown) * 4), y0 = 2, big = L.verb.length <= 11, hgt = 8 + (L.hand ? 11 : 0) + (big ? 18 : 11) + (L.sub ? 11 : 0);
     rect(0, y0, W, hgt + 4, 'k'); rect(0, y0 + hgt + 3, W * k, 1, L.c1);
     let y = y0 + 3;
-    text(d.fails && L.again ? 'AGAIN! ' + L.again : L.l1, 90, y, d.fails ? 'n6' : L.c1, 'center', null); y += 11;
+    text(d.fails && L.again ? 'AGAIN! ' + L.again : d.fails && L.who === 'p' ? 'TAP WHERE THE ARROW IS' : L.l1, 90, y, d.fails ? 'n6' : L.c1, 'center', null); y += 11;
     if (L.hand) { text(handName(L.hand), 90, y, L.hand === 'L' ? 'au' : L.hand === 'B' ? 'p2' : 'c2', 'center', null); y += 11; }
     text(L.verb, 90, y, 'wt', 'center', 'k', big ? 16 : 8); y += big ? 18 : 11;
     if (L.sub) text(L.sub, 90, y, 's4', 'center', null);
     if (L.hand && Math.floor(t * 3) % 2 && (B.phase === 'foeWind' || B.phase === 'menu' || B.phase === 'timing')) {   // point at the answer
       let x = L.hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, y = PAD_Y - 6;
       if (B.phase === 'allyTarget') { const i = G.party.findIndex(p => p.id === 'knight'); x = 4 + (i % 2) * 88 + 20; y = 193 + Math.floor(i / 2) * 13; }
-      if (B.phase === 'menu') { const want = { skill: 'SHARD STRIKE', magic: 'FIREBALL', item: B.sub === 'item' ? 'POTION' : 'ITEM' }[L.id] || 'STRIKE', b = rightButtons().find(q => q.o === want); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
+      if (B.phase === 'menu') { const want = { skill: 'SHARD STRIKE', magic: 'FIREBALL', guard: 'GUARD', volley: 'VOLLEY', item: B.sub === 'item' ? 'POTION' : 'ITEM' }[L.id] || 'STRIKE', b = rightButtons().find(q => q.o === want); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
       for (let i = 0; i < 4; i++) rect(x - 4 + i, y + i, 9 - i * 2, 1, 'au');
     }
   }
@@ -867,13 +945,17 @@
     for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(22 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(ex - w, ey + dy, w * 2 + 1, 1, dy < -oh / 2 ? 'n6' : 'n7'); }
     if (e > .6) rect(ex - 2, ey - oh + 1, 5, oh * 2 - 1, 'k');
     rect(0, 40, W, 40, 'k'); text('YOU HAVE THE VERBS.', 90, 46, 'wt', 'center'); text('NOW IT STANDS UP.', 90, 62, 'au', 'center');
+    if (k > 2) { rect(0, PAD_Y - 2, W, H - PAD_Y + 2, 'k'); text('CHOOSE YOUR ENDING', 90, PAD_Y + 6, 'wt', 'center', null);
+      button(CHOICE.L, 'CALM IT', false, 'c1'); button(CHOICE.R, 'FIGHT IT', true, 'r1');
+      text('TWO ENDINGS', 90, PAD_Y + 74, 's3', 'center', null); }
   }
   function drawCard(t) {   // the pitch, after the player has felt it
     const d = S.demo.tot, k = S.card.t, n = d.actions || 1;
     rect(0, 0, W, H, 'n0'); for (let i = 0; i < 40; i++) px(hash(i) * W, hash(i + 5) * H, Math.floor(t * 2 + i) % 7 ? 'n1' : 'n2');
     text('YOU JUST PLAYED', 90, 14, 's4', 'center'); text('TWO HANDS', 90, 26, 'au', 'center', 'k', 16);
     const rows = [['PARRIES', d.parry, 'c2'], ['BLOCKS', d.block, 'b2'], ['PERFECT HITS', d.perfect, 'au'], ['BREAKS', d.breaks, 'n6'], ['SPELLS CAST', d.casts, 'p2']];
-    rows.forEach(([l, v, c], i) => { if (k < .25 + i * .15) return; text(l, 12, 52 + i * 12, 'wt'); text(String(v), 168, 52 + i * 12, c, 'right'); });
+    const en = Object.keys(G.endings || {}).length; text(`ENDING ${en}/2: ${S.demo.ending === 'sleeps' ? 'IT SLEEPS' : 'IT FELL'}`, 90, 44, S.demo.ending === 'sleeps' ? 'c3' : 'n6', 'center', null);
+    rows.forEach(([l, v, c], i) => { if (k < .25 + i * .15) return; text(l, 12, 58 + i * 11, 'wt'); text(String(v), 168, 58 + i * 11, c, 'right'); });
     if (k > 1.1) { panel(6, 116, 168, 32, 'b1'); text('TAPS TO ATTACK', 12, 122, 's4'); text('3', 140, 122, 'r2'); text('2', 166, 122, 'g4', 'right'); rect(148, 125, 7, 2, 'wt'); text('AIM WITHOUT REACHING', 12, 134, 'wt', 'left', null); }
     if (k > 1.5) {
       text('THE PLAN', 12, 156, 'au');
@@ -882,8 +964,8 @@
     }
     if (k > 2) CARD_BTNS.forEach(b => button(b.b, b.o, b.o === 'PLAY AGAIN', b.o === 'PLAY AGAIN' ? 'r1' : 'b0'));
   }
-  const CARD_BTNS = [{ o: 'PLAY AGAIN', b: [92, 236, 84, 36] }, { o: 'WATCH IT', b: [4, 236, 84, 36] }, { o: 'FULL GAME', b: [4, 278, 172, 30] }];
-  function cardPress(o) { if (o === 'PLAY AGAIN') startDemo(false); else if (o === 'WATCH IT') startDemo(true); else { S.demo = null; API.autopilot = null; newGame(); } }
+  const CARD_BTNS = [{ o: 'PLAY AGAIN', b: [92, 236, 84, 32] }, { o: 'WATCH IT', b: [4, 236, 84, 32] }, { o: 'OTHER END', b: [4, 274, 84, 32] }, { o: 'FULL GAME', b: [92, 274, 84, 32] }];
+  function cardPress(o) { if (o === 'OTHER END') { S.demo.watch = false; startInter(); S.inter.t = 1.6; return; } if (o === 'PLAY AGAIN') startDemo(false); else if (o === 'WATCH IT') startDemo(true); else { S.demo = null; API.autopilot = null; newGame(); } }
   // title: hold both thumbs to begin (the first thing the pitch asks for is the thing it is about)
   const HOLD = { L: [44, 274], R: [136, 274] };
   const COARSE = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (_) { return true; } })();   // no touch screen: the keyboard (or one click) starts it
@@ -931,6 +1013,8 @@
     if (S.dojo && dojoCh() && dojoCh().id === 'cast') return { cmd: 'FIREBALL', pick: 0 };
     if (lesson() && lesson().id === 'skill' && a.id === 'hero') return { cmd: 'SHARD STRIKE', pick: at(plain) };
     if (lesson() && lesson().id === 'magic' && a.id === 'mage') return { cmd: 'FIREBALL', pick: at(plain) };
+    if (lesson() && lesson().id === 'guard' && a.id === 'knight') return { cmd: 'GUARD' };
+    if (lesson() && lesson().id === 'volley' && a.id === 'archer') return { cmd: 'VOLLEY' };
     if (lesson() && lesson().id === 'item') return { cmd: 'POTION', ally: G.party.findIndex(p => p.id === 'knight') };
     if (auto === 'fightonly') return { cmd: 'STRIKE', pick: at(B.foes.find(f => f.hp > 0 && f.open !== false) || plain) };
     if (hurt && can('HEAL')) return { cmd: 'HEAL', ally: G.party.indexOf(hurt) };
@@ -968,10 +1052,10 @@
     if (S.hitstop > 0) { S.hitstop -= dt; return; }   // hit-stop: the world holds still for a few frames on a big hit
     S.t += dt; S.mt += dt; S.flash = Math.max(0, S.flash - dt); S.fieldFlash = Math.max(0, (S.fieldFlash || 0) - dt); updateFX(dt);
     if (S.mode === 'title') { updateTitle(dt); return; }
-    if (S.mode === 'inter') { S.inter.t += dt; if (S.inter.t > 3.4) startFinale(); return; }
+    if (S.mode === 'inter') { S.inter.t += dt; if (S.demo && S.demo.watch && S.inter.t > 4) interPick(G.endings.fell && !G.endings.sleeps ? 'L' : 'R'); return; }
     if (S.mode === 'card') { S.card.t += dt; if (S.demo.watch && S.card.t > 9) { S.demo = null; S.mode = 'title'; S.idleT = S.t; } return; }
     if (S.mode === 'cut') { S.cut.t += dt; if (S.cut.t > 6.5) endCut(); return; }
-    if (S.mode === 'map') { if (!S.dialog && !S.choice) updateMap(dt); return; }
+    if (S.mode === 'map') { updateMapLesson(dt); if (!S.dialog && !S.choice) updateMap(dt); return; }
     if (S.mode === 'calm') { updateCalm(dt); return; }
     if (S.mode === 'ending') { S.ending.t += dt; return; }
     if (S.mode !== 'battle') return;
@@ -1189,24 +1273,6 @@
     text(k < 3.6 ? 'IT WAS NEVER A' : 'ITS HEART SHATTERED', 90, 26, 'wt', 'center'); text(k < 3.6 ? 'MOUNTAIN.' : 'INTO THREE SHARDS.', 90, 40, 'wt', 'center');
     if (k > 5) text('TAP TO CONTINUE', 90, 300, 's4', 'center');
   }
-  function drawCalm(t) {
-    const c = S.calm;
-    rect(0, 0, W, H, 's1'); for (let i = 0; i < 60; i++) px(hash(i) * W, hash(i + 3) * H, 's2');
-    const droop = c.n / 3, ex = 90, ey = 110, oh = Math.round(30 * (1 - droop * .85));
-    rect(ex - 70, ey - 40 + droop * 20, 140, 5, 's0');
-    for (let dy = -oh; dy <= oh; dy++) { const w = Math.round(66 * Math.sqrt(Math.max(0, 1 - (dy / (oh + .5)) ** 2))); rect(ex - w, ey + dy, w * 2 + 1, 1, dy < -oh * .4 ? 'n6' : 'n7'); }
-    if (oh > 3) rect(ex - 3, ey - oh + 2, 7, oh * 2 - 3, 'k');
-    G.party.forEach((p, i) => spr(p.spr, 52 + i * 20, 236, 0));
-    if (!c.res && c.n < 3) {
-      const k = clamp(c.t / 1.2), sx = mix(80, ex, k), sy = mix(230, ey + 2, ease(k));
-      shard(sx, sy, t);
-      for (let a = 0; a < 48; a++) { const q = a / 48 * 6.28, r = mix(30, 8, k); px(ex + Math.cos(q) * 8, ey + Math.sin(q) * 8, 'au'); px(ex + Math.cos(q) * r, ey + Math.sin(q) * r, 'wt'); }
-    }
-    panel(0, 270, W, 50, 'c1');
-    text(`RETURN SHARD ${Math.min(3, c.n + 1)}/3`, 90, 278, 'c3', 'center');
-    text(c.res === 'ok' ? 'IT EASES...' : c.res === 'bad' ? 'IT ROARS! TRY AGAIN' : 'TAP AS IT REACHES THE EYE', 90, 294, c.res === 'bad' ? 'r2' : 'wt', 'center');
-    G.party.forEach((p, i) => text(`${p.hp}`, 10 + i * 44, 306, p.hp < 15 ? 'r2' : 'g4'));
-  }
   function drawEnding(t) {
     const e = S.ending, k = e.t;
     ['n0', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6'].forEach((c, i) => rect(0, i * 30, W, 31, c));
@@ -1263,7 +1329,7 @@
     else if (S.mode === 'calm') drawCalm(t);
     else if (S.mode === 'ending') drawEnding(t);
     else if (S.mode === 'over') { text('THE PARTY FELL', 90, 140, 'r2', 'center'); text('TAP TO TRY AGAIN', 90, 160, 's4', 'center'); }
-    if (S.mode === 'map') { drawControls(t); drawDialog(t); drawChoice(); }
+    if (S.mode === 'map') { drawControls(t); drawDialog(t); drawChoice(); drawMapLesson(t); drawGhosts(); }
     if (S.flash > 0) rect(0, 0, W, H, 'wt');
     if (['title', 'battle', 'card', 'inter'].includes(S.mode)) drawSpeaker();
     lockPalette();
@@ -1296,12 +1362,12 @@
       if (y >= 236) { (S.titleHold = S.titleHold || {})[x < 90 ? 'L' : 'R'] = id; Audio.tone(x < 90 ? 330 : 440, .05, 'square', .04); }
       return;
     }
-    if (S.mode === 'inter') return;
+    if (S.mode === 'inter') { if (inBox(x, y, CHOICE.L)) interPick('L'); else if (inBox(x, y, CHOICE.R)) interPick('R'); return; }
     if (S.mode === 'card') { if (S.card.t > 2) for (const b of CARD_BTNS) if (inBox(x, y, b.b)) cardPress(b.o); return; }
     if (S.mode === 'cut') { if (S.cut.t > 5) endCut(); return; }
-    if (S.mode === 'over') { healParty(1); enterRegion(G.region); return; }
+    if (S.mode === 'over') { if (S.demo) { healParty(1); return startCalm(); } healParty(1); enterRegion(G.region); return; }
     if (S.mode === 'ending') { if (S.ending.t > 1.5) S.mode = 'title'; return; }
-    if (S.mode === 'calm') { timingTapCalm(); return; }
+    if (S.mode === 'calm') { timingTapCalm(x < 90 ? 'L' : 'R'); return; }
     if (S.mode === 'map') {
       if (S.choice) { S.choice.opts.forEach((o, i) => { if (inBox(x, y, 20, 252 + i * 26, 140, 22)) pickChoice(i); }); return; }
       if (S.dialog) { advanceDialog(); return; }
@@ -1354,7 +1420,6 @@
     ring(ACT[0], ACT[1], ACT[2], on ? 'au' : 's3'); ring(ACT[0], ACT[1], ACT[2] - 1, 'k'); if (on && Math.floor(t * 3) % 2) ring(ACT[0], ACT[1], ACT[2] + 2, 'au');
     text(lab, ACT[0], ACT[1] - 4, on ? 'au' : 's3', 'center', 'k');
   }
-  function timingTapCalm() { if (!S.calm.res && S.calm.hitT === null) S.calm.hitT = S.calm.t; }
   // keys: arrows move / aim, Z = right thumb (STRIKE, PARRY, ACT), X = left thumb (BLOCK); 1-2 skills, I items, R run
   function onKey(key, down) {
     S.keys[key] = down; if (!down) return;
@@ -1362,13 +1427,14 @@
     if (key === 'm' || key === 'M') return setSound(!SND.on);
     if (S.demo && S.demo.watch && S.mode !== 'card') { S.demo = null; API.autopilot = null; S.battle = null; S.mode = 'title'; return; }
     if (S.mode === 'title') { if (key === 'w' || key === 'W') startDemo(true); if (key === 'f' || key === 'F') { S.demo = null; newGame(); } return; }
+    if (S.mode === 'inter') { if (left) interPick('L'); else if (ok) interPick('R'); return; }
     if (S.mode === 'card') { if (S.card.t > 2) { if (key === 'Enter' || key === ' ') cardPress('PLAY AGAIN'); if (key === 'w' || key === 'W') cardPress('WATCH IT'); if (key === 'f' || key === 'F') cardPress('FULL GAME'); } return; }
     const ok = key === 'Enter' || key === ' ' || key === 'z' || key === 'Z', left = key === 'x' || key === 'X';
     if (S.mode === 'title' && ok) return newGame();
     if (S.mode === 'cut' && ok && S.cut.t > 5) return endCut();
     if (S.mode === 'over' && ok) { healParty(1); return enterRegion(G.region); }
     if (S.mode === 'ending' && ok && S.ending.t > 1.5) { S.mode = 'title'; return; }
-    if (S.mode === 'calm' && (ok || left)) return timingTapCalm();
+    if (S.mode === 'calm' && (ok || left)) return timingTapCalm(left ? 'L' : 'R');
     if (S.mode === 'map') {
       if (S.choice) { if (key === 'ArrowUp' || key === 'ArrowDown') S.choice.sel = 1 - S.choice.sel; if (ok) pickChoice(S.choice.sel); return; }
       if (S.dialog && ok) return advanceDialog();
@@ -1397,10 +1463,11 @@
 
   // ---------- test hooks ----------
   const API = {
-    G, S, MAPS, FINDS, newGame, startDemo, dojo: () => S.dojo && { ...S.dojo, id: dojoCh() && dojoCh().id }, startFinale, lesson: () => lesson(), enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
+    G, S, MAPS, FINDS, newGame, startDemo, startInter, interPick, mapLesson: () => mapLesson() && mapLesson().id, dojo: () => S.dojo && { ...S.dojo, id: dojoCh() && dojoCh().id }, startFinale, lesson: () => lesson(), enterRegion, startBattle, pickChoice, autopilot: null, human: null, botThink: 0, step: n => game.step(n),
     get state() { return S.mode; },
     decide: () => botDecide(S.battle), ui: () => S.battle ? { right: S.battle.actor && G.party.includes(S.battle.actor) ? rightButtons() : [], chips: foeChips(), L: LPAD, R: RPAD, act: ACT } : { act: ACT },
     seed(n) { botSeed = n >>> 0 || 1; },
+    nextStep(x, y) { const p = bfs(x, y); return p[0] || null; },
     snd: SND,
     // give the party a region's companion without playing it (tests jump straight to later fights)
     recruit(id) { if (!G.party.some(p => p.id === id)) G.party.push(newMember(id)); },
