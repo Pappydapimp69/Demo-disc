@@ -587,9 +587,9 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     `trolleydash physics: road ${ph.road}, grass ${ph.grass}; a long drift fires a mini-turbo to ${ph.boostSpeed}; driving into the wall never ends up inside it`);
   const ros = await page.evaluate(() => { const g = window.__game, blank = [], sums = [];
     for (let c = 0; c < g.CHARS.length; c++) for (let v = 0; v < g.VEHS.length; v++) { const cv = g.kartSprite(c, v), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let px = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) px++; if (px < 60) blank.push(c + ':' + v); }
-    for (const x of [...g.CHARS, ...g.VEHS]) sums.push(Object.values(x.pts).reduce((a, b) => a + b, 0));
+    for (const x of [...g.CHARS, ...g.VEHS]) sums.push(Object.entries(x.pts).filter(([k]) => k !== 'weight').reduce((a, [, b]) => a + b, 0));
     return { blank, sums, traits: new Set(g.CHARS.map(c => c.trait)).size }; });
-  check(!ros.blank.length && ros.sums.every(x => x === 0) && ros.traits === 8, `trolleydash roster: all 24 shopper+vehicle sprites drawn, every stat line adds to zero, 8 different traits (${ros.blank.join() || 'ok'})`);
+  check(!ros.blank.length && ros.sums.every(x => x === 0) && ros.traits === 8, `trolleydash roster: all 24 shopper+vehicle sprites drawn, speed/accel/handling/grip add to zero on every line, 8 different traits (${ros.blank.join() || 'ok'})`);
   for (let ti = 0; ti < 3; ti++) {
     const race = await page.evaluate(ti => { const g = window.__game; g.load(ti, 1); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120);
       return { name: g.S.trk.def.name, state: g.S.state, done: g.S.order.filter(k => k.done).length, rescues: g.S.karts.reduce((a, k) => a + (k.rescues || 0), 0), first: g.S.order[0].finishT, last: g.S.order[7].finishT, skips: g.S.trk.shortcuts.map(c => Math.round(c.skip)) }; }, ti);
@@ -616,6 +616,12 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     `trolleydash events: 10 seeds give ${ev.combos} different event plans; a shut roller door walls the alley, no CPU tries it, the race still finishes (${ev.door && ev.door.finished}/8)`);
   const juice = await page.evaluate(() => { const g = window.__game, res = []; for (const shake of [false, true]) { g.load(0, 2); g.S.auto = true; for (let i = 0; i < 400 && g.S.state !== 'results'; i++) { if (shake) g.S.shake = 1; g.step(60); } res.push(g.S.order.map(k => k.id + ':' + k.finishT.toFixed(3)).join(' ')); } return res[0] === res[1]; });
   check(juice, 'trolleydash: screen shake and speed lines are presentation only (the same seed finishes identically with them on)');
+  const cup = await page.evaluate(() => { const g = window.__game, states = []; g.S.seedFixed = 7; g.startRace(); g.S.auto = true; let lastGrid = null, leaderAtBack = true;
+    for (let race = 0; race < 3; race++) { for (let i = 0; i < 400 && g.S.state !== 'results'; i++) g.step(120); g.step(1); g.advanceCup(); g.step(60); g.advanceCup(); states.push(g.S.state);
+      if (g.S.state === 'standings') { const lead = Object.entries(g.S.cup.pts).sort((a, b) => b[1] - a[1])[0][0]; g.advanceCup(); g.S.auto = true; if (+g.S.karts[7].ci !== +lead) leaderAtBack = false; } }
+    const total = Object.values(g.S.cup.pts).reduce((a, b) => a + b, 0); g.advanceCup(); g.S.seedFixed = 0; return { states, total, leaderAtBack, back: g.S.state }; });
+  check(cup.states.join() === 'standings,standings,podium' && cup.total === 3 * 58 && cup.leaderAtBack && cup.back === 'select',
+    `trolleydash cup: 3 races, standings, podium, back to the menu; ${cup.total} points handed out (58 a race); the cup leader starts each next race at the back`);
   const cheat = await page.evaluate(() => { const g = window.__game; g.load(0, 1); g.S.state = 'race'; g.S.auto = true; const k = g.S.player, t = g.S.trk, L = t.line, n = L.length;
     for (let i = 0; i < 400; i++) g.step(1);   // over the line: lap 0
     const lap0 = k.lap; const p = L[n - 5]; Object.assign(k, { x: p.x, y: p.y, li: n - 5 });   // jump back to just before the line, skipping both checkpoints

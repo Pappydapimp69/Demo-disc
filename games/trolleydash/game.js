@@ -175,22 +175,23 @@
     for (const { o, p } of vis) { const h = Math.max(1, Math.round(o.size * p.s)), w = Math.max(1, Math.round(h * o.img.width / o.img.height)); if (p.x + w < 0 || p.x - w > LW) continue; lctx.drawImage(o.img, Math.round(p.x - w / 2), Math.round(p.y - h - (o.lift || 0) * p.s), w, h); }
   }
 
-  // ---------- the roster: 8 shoppers x 3 vehicles. Stats are trade-offs (points add to zero), plus one trait each ----------
+  // ---------- the roster: 8 shoppers x 3 vehicles. Speed, accel, handling and grip are trade-offs (points add to zero);
+  // weight is flavour on top (it only matters in bumps), so it is kept out of the budget. Plus one trait each ----------
   const PT = { top: .04, accel: .10, turn: .07, grip: .10, weight: .15 };   // what one point is worth, as a fraction of the base
   const CHARS = [
-    { name: 'GLORIA', who: 'GRANDMA', body: '#c88aff', skin: '#f0c8a0', hair: '#f4f4fa', hat: 'curls', pts: { top: 2, accel: -1, weight: 2, turn: -1, grip: -2 }, trait: 'anchor', desc: 'BUMPS BARELY MOVE HER' },
-    { name: 'TODD', who: 'STOCK BOY', body: '#3a8aff', skin: '#f0c8a0', hair: '#6a3a1a', hat: 'cap', pts: { accel: 2, top: -1, weight: -1 }, trait: 'rocket', desc: 'ROCKET START ON GO' },
+    { name: 'GLORIA', who: 'GRANDMA', body: '#c88aff', skin: '#f0c8a0', hair: '#f4f4fa', hat: 'curls', pts: { top: 2, accel: -1, turn: -1, weight: 2 }, trait: 'anchor', desc: 'BUMPS BARELY MOVE HER' },
+    { name: 'TODD', who: 'STOCK BOY', body: '#3a8aff', skin: '#f0c8a0', hair: '#6a3a1a', hat: 'cap', pts: { accel: 2, top: -1, grip: -1, weight: -1 }, trait: 'rocket', desc: 'ROCKET START ON GO' },
     { name: 'MARGE', who: 'MANAGER', body: '#e83a5a', skin: '#c89070', hair: '#2a1a10', hat: 'bun', pts: { turn: 1, grip: 1, top: -1, accel: -1 }, trait: 'spark', desc: 'DRIFT TURBOS CHARGE FASTER' },
-    { name: 'BEN', who: 'BAGGER', body: '#4ad05a', skin: '#f0d0b0', hair: '#e8b030', hat: 'mop', pts: { accel: 1, weight: -1 }, trait: 'offroad', desc: 'GRASS AND SAND SLOW HIM LESS' },
+    { name: 'BEN', who: 'BAGGER', body: '#4ad05a', skin: '#f0d0b0', hair: '#e8b030', hat: 'mop', pts: { accel: 1, top: -1, weight: -1 }, trait: 'offroad', desc: 'GRASS AND SAND SLOW HIM LESS' },
     { name: 'CHEN', who: 'DELI CHEF', body: '#f4f4f4', skin: '#f0c890', hair: '#1a1a1a', hat: 'chef', pts: {}, trait: 'pads', desc: 'BOOST PADS LAST LONGER' },
-    { name: 'SAL', who: 'SECURITY', body: '#2a3a5a', skin: '#8a5a3a', hair: '#1a1a1a', hat: 'guard', pts: { weight: 2, top: 1, accel: -1, turn: -1, grip: -1 }, trait: 'draft', desc: 'FASTER IN SOMEONE\'S SLIPSTREAM' },
-    { name: 'TWINS', who: 'KIDS', body: '#ffd23a', skin: '#f0c8a0', hair: '#a04a1a', hat: 'twins', pts: { turn: 2, accel: 1, top: -2, weight: -1 }, trait: 'nimble', desc: 'TIGHTER DRIFTS' },
+    { name: 'SAL', who: 'SECURITY', body: '#2a3a5a', skin: '#8a5a3a', hair: '#1a1a1a', hat: 'guard', pts: { top: 1, accel: -1, weight: 2 }, trait: 'draft', desc: 'FASTER IN SOMEONE\'S SLIPSTREAM' },
+    { name: 'TWINS', who: 'KIDS', body: '#ffd23a', skin: '#f0c8a0', hair: '#a04a1a', hat: 'twins', pts: { turn: 2, accel: 1, top: -2, grip: -1, weight: -1 }, trait: 'nimble', desc: 'TIGHTER DRIFTS' },
     { name: 'PIDGE', who: 'STORE PIGEON', body: '#8a90a0', skin: '#8a90a0', hair: '#5a6070', hat: 'beak', pts: { top: 1, grip: -1 }, trait: 'slick', desc: 'KEEPS GRIP ON ICE AND SAND' },
   ];
   const VEHS = [
-    { name: 'TROLLEY', pts: { turn: 2, grip: 1, top: -2, weight: -1 }, desc: 'NIMBLE, GRIPPY, SLOWER' },
-    { name: 'GO-KART', pts: { top: 1, accel: 1, grip: -1, weight: -1 }, desc: 'QUICK ALL ROUND' },
-    { name: 'SCOOTER', pts: { top: 2, weight: 1, accel: -1, turn: -1, grip: -1 }, desc: 'HEAVY AND FAST, SLOW OFF THE LINE' },
+    { name: 'TROLLEY', pts: { turn: 2, grip: 1, top: -2, accel: -1, weight: -1 }, desc: 'NIMBLE, GRIPPY, SLOWER' },
+    { name: 'GO-KART', pts: { top: 1, accel: 1, turn: -1, grip: -1 }, desc: 'QUICK ALL ROUND' },
+    { name: 'SCOOTER', pts: { top: 2, accel: -1, turn: -1, weight: 2 }, desc: 'HEAVY AND FAST, SLOW OFF THE LINE' },
   ];
   function statsFor(ci, vi) {
     const out = { trait: CHARS[ci].trait };
@@ -396,7 +397,7 @@
   const dark = () => S.events && S.events.some(e => e.kind === 'power' && e.until && S.clock <= e.until);
 
   // ---------- race: progress along the centreline, laps through checkpoints, AI, bumps ----------
-  const LAPS = 3, NK = 8, KR = 6;   // laps, karts, kart radius
+  const LAPS = 3, NK = 8, KR = 6, PTS = [15, 12, 10, 8, 6, 4, 2, 1];   // laps, karts, kart radius
   // nearest centreline sample: search near the last one, fall back to a full search when far off the line
   function nearest(trk, k) {
     const L = trk.line, n = L.length; let best = k.li || 0, bd = 1e9;
@@ -468,18 +469,18 @@
     }
   }
   const S = { pick: { c: 4, v: 1 }, t: 0, clock: 0, state: 'count', trk: null, player: null, karts: [], order: [], inp: { steer: 0, gas: 1, brake: 0, drift: false }, seed: 1 };
-  function load(ti, seed = 1, pick = S.pick) {
+  function load(ti, seed = 1, pick = S.pick, grid = null) {
     S.trk = buildTrack(TRACKS[ti]); S.scenery = scenery(S.trk); S.seed = seed;
     const L = S.trk.line, n = L.length, r = mkRng(seed * 97 + ti);
-    S.karts = []; const others = CHARS.map((_, i) => i).filter(i => i !== pick.c);
-    for (let g = 0; g < NK; g++) {   // grid: two columns behind the line, the player starts at the back
+    S.karts = []; const order = grid || [...CHARS.map((_, i) => i).filter(i => i !== pick.c), pick.c];
+    for (let g = 0; g < NK; g++) {   // grid: two columns behind the line, front to back in `order` (race 1: the player at the back)
       const back = 8 + Math.floor(g / 2) * 9, p = L[(n - back) % n], side = (g % 2 ? 1 : -1) * 14;
-      // the player at the back of the grid; the other seven shoppers fill the rest, on seeded vehicles
-      const ci = g === NK - 1 ? pick.c : others[g], vi = g === NK - 1 ? pick.v : Math.floor(r() * 3);
+      const ci = order[g], me = ci === pick.c, vi = me ? pick.v : (S.cup && S.cup.veh[ci] !== undefined ? S.cup.veh[ci] : Math.floor(r() * 3));
+      if (S.cup && !me) S.cup.veh[ci] = vi;   // a CPU keeps its vehicle for the whole cup
       const k = newKart(p.x - p.dy * side, p.y + p.dx * side, Math.atan2(p.dy, p.dx), statsFor(ci, vi));
-      if (g !== NK - 1) k.st.top *= .93 + r() * .05;   // CPU pace: a touch below a clean player line
+      if (!me) k.st.top *= .93 + r() * .05;   // CPU pace: a touch below a clean player line
       Object.assign(k, { id: g, ci, vi, li: (n - back) % n, s: p.s, lap: -1, cp: [true, true], prog: p.s - S.trk.L, done: false, col: CHARS[ci].body, spr: kartSprite(ci, vi),
-        ai: g === NK - 1 ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
+        ai: me ? null : { lane: (r() - .5) * 1.0, brave: .95 + r() * .2 } });
       k.prog = p.s - S.trk.L; k.bestProg = k.prog; S.karts.push(k);
     }
     for (const c of S.trk.cones) c.down = 0;
@@ -489,7 +490,7 @@
     if (!S.noEvents && plan.door >= 0) { const roads = S.trk.shortcuts.filter(sc => sc.ter === 'ROAD'); if (roads.length) { const sc = roads[0]; sc.closed = true; const [x, y] = sc.pts[0], [x2, y2] = sc.pts[1], d = Math.hypot(x2 - x, y2 - y), ux = (x2 - x) / d, uy = (y2 - y) / d;
       sc.doorAt = { x: x + ux * 22, y: y + uy * 22 }; for (let a = -sc.width - 6; a <= sc.width + 6; a++) for (let b = 18; b <= 26; b++) { const px = Math.round(x + ux * b - uy * a), py = Math.round(y + uy * b + ux * a); if (S.trk.ter[py * S.trk.N + px] !== T.WALL) S.trk.ter[py * S.trk.N + px] = T.WALL; } S.eventLog.push('door'); } }
     S.shots = []; S.drops = []; S.puddles = []; S.flashMsg = null; for (const b of S.trk.boxes) b.back = 0;
-    S.rng = mkRng(seed * 131 + ti * 7); S.player = S.karts[NK - 1]; S.order = []; S.banner = null; S.shake = 0; S.lastPlace = 0; S.placePop = null; S.lastBeep = -1; S.clock = 0; S.t0 = S.t; S.state = 'count';
+    S.rng = mkRng(seed * 131 + ti * 7); S.player = S.karts.find(k => !k.ai); S.order = []; S.ti = ti; S.awarded = false; S.banner = null; S.shake = 0; S.lastPlace = 0; S.placePop = null; S.lastBeep = -1; S.clock = 0; S.t0 = S.t; S.state = 'count';
   }
   // a shopper seen from behind: body, head, and a hat that says who it is
   function shopper(g, c, x, y) {
@@ -531,7 +532,8 @@
     S.t += dt;
     if (S.state === 'select') return;
     if (S.state === 'count') { const c = Math.floor(S.t - S.t0); if (c !== S.lastBeep && c <= 3) { S.lastBeep = c; Snd.beep(c === 3); } if (S.t - S.t0 > 3) { S.state = 'race'; for (const k of S.karts) if (k.st.trait === 'rocket') k.boost = .9; } return; }
-    if (S.state === 'results') return;
+    if (S.state === 'results') { if (!S.awarded && S.cup) { S.awarded = true; S.order.forEach((k, i) => { S.cup.pts[k.ci] = (S.cup.pts[k.ci] || 0) + PTS[i]; }); S.cup.last = S.order.map(k => k.ci); } return; }
+    if (S.state === 'standings' || S.state === 'podium') return;
     S.clock += dt;
     { const k = S.player; if (k.boost > .9 && !(S.prevBoost > .9)) Snd.boost(); S.prevBoost = k.boost; if (k.bump > .25 && !(S.prevBump > .25)) { Snd.bump(); S.shake = Math.max(S.shake || 0, .2); } S.prevBump = k.bump; }
     { const pl = place(S.player); if (S.lastPlace && pl !== S.lastPlace) S.placePop = { up: pl < S.lastPlace, t: S.t }; S.lastPlace = pl; }
@@ -569,7 +571,25 @@
     ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14a'; ctx.fillText(`${CHARS[S.pick.c].name}: ${CHARS[S.pick.c].desc} · ${VEHS[S.pick.v].desc}`, W / 2, 826);
     ctx.fillStyle = '#4ad05a'; Draw.rr(ctx, GOB.x, GOB.y, GOB.w, GOB.h, 40); ctx.fill(); Draw.bigText(ctx, 'RACE!', W / 2, GOB.y + 42, 40, '#fff', '#0a4a1a');
   }
+  function drawCup(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2a1a5a'); g.addColorStop(1, '#5a2a6a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const table = CHARS.map((c, ci) => ({ ci, pts: S.cup.pts[ci] || 0 })).sort((a, b) => b.pts - a.pts || S.cup.last.indexOf(a.ci) - S.cup.last.indexOf(b.ci));
+    ctx.imageSmoothingEnabled = false;
+    if (S.state === 'podium') {
+      Draw.bigText(ctx, 'SUPERMARKET CUP', W / 2, 90, 44, '#ffe14a', '#3a1a00');
+      [[0, W / 2, 300], [1, 140, 360], [2, W - 140, 400]].forEach(([i, x, y]) => { const t = table[i]; ctx.fillStyle = ['#ffd23a', '#c8d0dc', '#d08a4a'][i]; Draw.rr(ctx, x - 70, y + 90, 140, 560 - y, 12); ctx.fill(); Draw.bigText(ctx, String(i + 1), x, y + 130, 48, '#fff', '#3a2a00');
+        ctx.drawImage(kartSprite(t.ci, t.ci === S.pick.c ? S.pick.v : S.cup.veh[t.ci] || 0), x - 52, y - 10, 104, 88); ctx.font = '900 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(CHARS[t.ci].name + (t.ci === S.pick.c ? ' (YOU)' : ''), x, y + 196); });
+      const mine = table.findIndex(t => t.ci === S.pick.c) + 1;
+      ctx.font = '800 22px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText(mine === 1 ? '🏆 YOU WIN THE CUP!' : `YOU FINISHED ${mine}${['ST', 'ND', 'RD'][mine - 1] || 'TH'} OVERALL`, W / 2, 720);
+      ctx.fillText('TAP FOR A NEW CUP', W / 2, 860); return;
+    }
+    Draw.bigText(ctx, `STANDINGS · AFTER RACE ${S.cup.race + 1}/3`, W / 2, 90, 30, '#ffe14a', '#3a1a00');
+    table.forEach((t, i) => { const y = 160 + i * 74, me = t.ci === S.pick.c; ctx.fillStyle = me ? '#ffe14a' : '#ffffff18'; Draw.rr(ctx, 40, y, W - 80, 64, 14); ctx.fill();
+      ctx.drawImage(kartSprite(t.ci, me ? S.pick.v : S.cup.veh[t.ci] || 0), 90, y + 6, 62, 52); ctx.font = '900 24px system-ui'; ctx.textAlign = 'left'; ctx.fillStyle = me ? '#2a1a00' : '#fff'; ctx.fillText(`${i + 1}. ${CHARS[t.ci].name}`, 170, y + 42); ctx.textAlign = 'right'; ctx.fillText(`${t.pts}`, W - 64, y + 42); });
+    ctx.font = '800 14px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8d8ff'; ctx.fillText(`NEXT: ${TRACKS[S.cup.race + 1].name} · LEADER STARTS AT THE BACK · TAP`, W / 2, 790);
+  }
   function render(ctx) {
+    if (S.state === 'standings' || S.state === 'podium') { drawCup(ctx); return; }
     if (S.state === 'select') { drawSelect(ctx); return; }
     const cam = camera(S.player), theme = THEMES[S.trk.def.theme];
     const th = dark() ? { ...theme, fog: [8, 8, 16], sky: ['#05050a', '#14142a'] } : theme; S.fogNow = dark() ? 260 : FOG;
@@ -601,7 +621,7 @@
     const pl = place(S.player); Draw.bigText(ctx, `${pl}${['ST', 'ND', 'RD'][pl - 1] || 'TH'}`, W - 80, 90, 54, '#ffe14a', '#000');
     Draw.bigText(ctx, `LAP ${clamp(S.player.lap + 1, 1, LAPS)}/${LAPS}`, 90, 90, 30, '#fff', '#000');
     if (S.state === 'count') { const n = 3 - Math.floor(S.t - S.t0); Draw.bigText(ctx, n > 0 ? String(n) : 'GO!', W / 2, 300, 120, n > 0 ? '#fff' : '#4ad05a', '#000'); }
-    if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${k === S.player ? 'YOU' : 'CPU ' + (k.id + 1)}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.finishT ? (k.est ? '~' : '') + k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
+    if (S.state === 'results') { ctx.fillStyle = '#000c'; ctx.fillRect(40, 140, W - 80, 440); if (S.cup) { ctx.font = '800 16px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe14a'; ctx.fillText(`RACE ${S.cup.race + 1}/3 · ${S.trk.def.name} · TAP TO GO ON`, W / 2, 166); } S.order.forEach((k, i) => { ctx.fillStyle = k === S.player ? '#ffe14a' : '#fff'; ctx.font = '800 26px system-ui'; ctx.textAlign = 'left'; ctx.fillText(`${i + 1}. ${CHARS[k.ci].name}${k === S.player ? ' (YOU)' : ''}`, 80, 200 + i * 46); ctx.textAlign = 'right'; ctx.fillText(k.finishT ? (k.est ? '~' : '') + k.finishT.toFixed(2) + ' s' : '—', W - 80, 200 + i * 46); }); }
   }
   // minimap: the centreline traced small, every kart a dot (you are the big one)
   function drawMinimap(ctx, x0, y0, w, h) {
@@ -616,6 +636,7 @@
   let padDown = false;
   function onPointer(type, x, y) {
     if (S.state === 'select') { if (type !== 'down') return; CHARS.forEach((_, i) => { if (inB(CARD(i), x, y)) { S.pick.c = i; Audio.sfx('select'); } }); VEHS.forEach((_, i) => { if (inB(VCARD(i), x, y)) { S.pick.v = i; Audio.sfx('select'); } }); if (inB(GOB, x, y)) startRace(); return; }
+    if (type === 'down' && advanceCup()) return;
     if (type === 'down' && inB(ITEMB, x, y)) { useItem(S.player); return; }
     if (type === 'down' && inB(DRIFTB, x, y)) { S.inp.drift = true; return; }
     if (type === 'down' && inB(PAD, x, y)) padDown = true;
@@ -629,6 +650,7 @@
     S.inp.steer = (keys.ArrowRight || keys.d ? 1 : 0) - (keys.ArrowLeft || keys.a ? 1 : 0);
     S.inp.brake = keys.ArrowDown || keys.s ? 1 : 0;
     S.inp.drift = !!(keys[' '] || keys.Shift);
+    if (down && (key === 'Enter' || key === ' ') && advanceCup()) return;
     if (down && (key === 'x' || key === 'X' || key === 'e' || key === 'Enter') && S.state === 'race') useItem(S.player);
   }
 
@@ -645,8 +667,17 @@
     }
     return 99;
   }
-  function startRace() { Audio.unlock(); Audio.sfx('start'); load(S.track || 0, S.seed || 1, S.pick); }
+  // the cup: three races, points by place; after each race the standings, the leader starts the next one at the back
+  function startRace() { Audio.unlock(); Audio.sfx('start'); S.cup = { race: 0, pts: {}, veh: {}, last: [], seed: S.seedFixed || (Date.now() % 100000) + 1 }; load(0, S.cup.seed, S.pick); }
+  function advanceCup() {
+    if (!S.cup) return false;
+    if (S.state === 'results' && S.awarded && S.t - (S.resultsAt || (S.resultsAt = S.t)) > .8) { S.resultsAt = 0; S.state = S.cup.race >= TRACKS.length - 1 ? 'podium' : 'standings'; Audio.sfx(S.state === 'podium' ? 'win' : 'select'); return true; }
+    if (S.state === 'standings') { const table = CHARS.map((c, ci) => ({ ci, pts: S.cup.pts[ci] || 0 })).sort((a, b) => a.pts - b.pts || S.cup.last.indexOf(b.ci) - S.cup.last.indexOf(a.ci));
+      S.cup.race++; load(S.cup.race, S.cup.seed + S.cup.race * 17, S.pick, table.map(t => t.ci)); return true; }
+    if (S.state === 'podium') { S.cup = null; S.state = 'select'; return true; }
+    return false;
+  }
   load(0); S.state = 'select';
   const game = createGame({ canvas: document.getElementById('c'), width: W, height: H, update, render, onPointer, onKey });
-  window.__game = { Snd, EVENTS, planEvents, timeShortcut, hitKart: (k, w) => hit(k, w), ITEMS, ODDS, rollItem, useItem, mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
+  window.__game = { advanceCup, PTS, Snd, EVENTS, planEvents, timeShortcut, hitKart: (k, w) => hit(k, w), ITEMS, ODDS, rollItem, useItem, mkRng, startRace, S, TRACKS, T, SURF, BASE, LAPS, CHARS, VEHS, statsFor, kartSprite, place, aiInput, load, buildTrack, project, camera, newKart, stepKart, terrainAt, speedOf, step: n => game.step(n), get state() { return S.state; } };
 })();
