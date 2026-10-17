@@ -387,18 +387,24 @@
   function rightButtons() {
     const B = S.battle, a = B.actor, [x, y] = RPAD;
     if (B.sub === 'item') return [{ o: 'POTION', b: [x, y, 86, 24] }, { o: 'ETHER', b: [x, y + 28, 86, 24] }, { o: 'BACK', b: [x, y + 56, 86, 24] }];
+    // the left thumb picks the stance (ATTACK or MAGIC), the right pad shows that stance's actions
     const sk = a.skills, out = [{ o: 'ITEM', b: [x, y, 41, 22] }, { o: 'RUN', b: [x + 45, y, 41, 22] }];
-    if (sk.length === 1) out.push({ o: sk[0], b: [x, y + 25, 86, 24] }); else sk.forEach((s, i) => out.push({ o: s, b: [x + i * 45, y + 25, 41, 24] }));
-    out.push({ o: 'STRIKE', b: [x, y + 52, 86, 28] });
+    if (stanceOf(a) === 'magic') { if (sk.length === 1) out.push({ o: sk[0], b: [x, y + 26, 86, 56] }); else sk.forEach((s, i) => out.push({ o: s, b: [x + i * 45, y + 26, 41, 56] })); }
+    else out.push({ o: 'STRIKE', b: [x, y + 26, 86, 56] });
     return out;
   }
+  const stanceOf = a => (a && a.stance) || 'attack';
+  const SWAP = [LPAD[0], PAD_Y + 26, 86, 56];
+  function swapStance() { const B = S.battle, a = B.actor; if (!a || B.phase !== 'menu' || B.sub) return; a.stance = stanceOf(a) === 'magic' ? 'attack' : 'magic'; S.swapT = S.t; FXS.castNote(a.stance === 'magic' ? 'L' : 'R', 1.2); ghost(SWAP[0] + 43, SWAP[1] + 28, 'L'); }
   // the left pad: one chip per foe, laid out like the field, so the left thumb aims without reaching up
   function foeChips() {
     const B = S.battle, [x, y] = LPAD, n = B.foes.length, w = n === 1 ? 86 : n === 2 ? 41 : 26;
-    return B.foes.map((f, i) => ({ i, b: [x + i * (w + 4) - (n === 3 ? 1 : 0), y + 26, w, 40] }));
+    return B.foes.map((f, i) => ({ i, b: [x + i * (w + 4) - (n === 3 ? 1 : 0), y, w, 22] }));
   }
   function choose(cmd) {
     const B = S.battle, a = B.actor;
+    if (a && SKILL[cmd] && stanceOf(a) !== 'magic') { a.stance = 'magic'; S.swapT = S.t; ghost(SWAP[0] + 43, SWAP[1] + 28, 'L'); }
+    if (a && cmd === 'STRIKE' && stanceOf(a) === 'magic') { a.stance = 'attack'; S.swapT = S.t; ghost(SWAP[0] + 43, SWAP[1] + 28, 'L'); }
     if (cmd === 'STRIKE') { B.cmd = { kind: 'fight' }; startTiming(validPick()); }
     else if (cmd === 'ITEM') { B.sub = 'item'; }
     else if (cmd === 'BACK') { B.sub = null; }
@@ -682,7 +688,7 @@
     { id: 'parry', title: 'PARRY', need: 3, hand: 'R', c: 'c2',
       lines: ['BLUE HIT = SWIFT.', 'TAP THE RIGHT PAD', 'AS ITS RING CLOSES.', 'NO DAMAGE + COUNTER.', 'EARLY = THUMB LOCKED.'] },
     { id: 'cast', title: 'CAST', actor: 'mage', need: 2, hand: 'B', c: 'p2',
-      lines: ['SPELLS: BOTH HANDS.', 'TAP FIREBALL, THEN', 'LEFT RING, THEN RIGHT', 'BOTH PERFECT = THE', 'STRONGEST HIT.'] },
+      lines: ['TAP LEFT: MAGIC.', 'TAP FIREBALL, THEN', 'LEFT RING, THEN RIGHT', 'BOTH PERFECT = THE', 'STRONGEST HIT.'] },
   ];
   function startDojo() {
     S.dojo = { ch: 0, phase: 'explain', t: 0, reps: 0, fails: 0, streak: 0, fb: null };
@@ -709,7 +715,7 @@
   function dojoStrike(B) { if (!S.dojo || B.kind !== 'dojo') return; const C = dojoCh(); if (!C) return;
     if (C.id === 'attack') { const err = B.hitT === null ? null : B.hitT - B.ring.dur; dojoTry(B.grade >= 1.2 && B.hitT !== null, { kind: 'strike', err, grade: B.hitT === null ? 0 : B.grade, win: [.07, .16] }); }
     else if (C.id === 'cast') {
-      if (!B.ring.cast) return dojoTry(false, { kind: 'msg', msg: 'TAP FIREBALL FIRST' });
+      if (!B.ring.cast) return dojoTry(false, { kind: 'msg', msg: 'TAP LEFT FOR MAGIC' });
       const r = B.ring; dojoTry((r.gL || 0) >= 1.2 && (r.gR || 0) >= 1.2, { kind: 'cast', eL: r.eL ?? null, eR: r.eR ?? null, gL: r.gL, gR: r.gR, win: [.07, .16] });
     } }
   function dojoHit(B, h) { if (!S.dojo || B.kind !== 'dojo' || dojoCh().id !== 'parry') return;
@@ -762,7 +768,7 @@
     }
     // practice: what to do, the reps, and the last try on a meter
     rect(0, 22, W, 12, 'k'); const need = C.need;
-    text(C.id === 'attack' ? 'STRIKE ON THE RING' : C.id === 'parry' ? 'PARRY THE BLUE HIT' : 'FIREBALL: L THEN R', 4, 24, C.c, 'left', null);
+    text(C.id === 'attack' ? 'STRIKE ON THE RING' : C.id === 'parry' ? 'PARRY THE BLUE HIT' : 'LEFT: MAGIC, FIREBALL', 4, 24, C.c, 'left', null);
     for (let i = 0; i < need; i++) { const x = 176 - (need - i) * 9; rect(x, 24, 7, 7, 'k'); rect(x + 1, 25, 5, 5, i < d.reps ? 'g4' : 's1'); }
     if (B && B.slow < 1 && C.id === 'parry') text('SLOW MOTION', 90, 36, 's3', 'center', null);
     const fb = d.fb; if (fb && S.t - fb.t < 2.2) {
@@ -771,6 +777,7 @@
       else if (fb.kind === 'cast') { const [v1, c1] = verdict(fb.eL, fb.gL, true), [v2, c2] = verdict(fb.eR, fb.gR, true); text(v1, 46, y, c1, 'center', null); text(v2, 134, y, c2, 'center', null); meter(8, y + 14, 76, fb.eL, fb.win, 'au'); meter(96, y + 14, 76, fb.eR, fb.win, 'c2'); }
       else { const [v, c] = fb.kind === 'parry' && fb.res === 'block' ? ['BLOCKED: USE RIGHT', 'n6'] : fb.kind === 'parry' && fb.locked ? ['TOO EARLY: LOCKED', 'r2'] : verdict(fb.err, fb.kind === 'parry' ? (fb.res === 'parry' ? 1.45 : 1) : fb.grade); text(v, 90, y, fb.ok ? (c === 'r2' ? 'c3' : c) : c, 'center'); meter(30, y + 14, 120, fb.err, fb.win, fb.kind === 'parry' ? 'c2' : 'au'); }
     }
+    if (B && B.phase === 'menu' && Math.floor(t * 3) % 2) { const want = C.id === 'cast' ? 'FIREBALL' : 'STRIKE', bb = (rightButtons().find(q => q.o === want) || { b: SWAP }).b, x = bb[0] + bb[2] / 2, y = bb[1] - 6; for (let i = 0; i < 4; i++) rect(x - 4 + i, y + i, 9 - i * 2, 1, 'au'); }
     if (d.phase === 'clear') { rect(0, 80, W, 34, 'k'); text(C.title, 90, 83, C.c, 'center', null); text('LEARNED!', 90, 94, 'g4', 'center', 'k', 16); }
   }
 
@@ -862,9 +869,9 @@
   // tutorial rule set: the fight IS the game. WATCH mode plays the same flow with the autopilot and ghost thumbs.
   const LESSONS = [
     { id: 'block', who: 'foe', pat: 'h', slow: .4, hand: 'L', l1: 'HEAVY HIT', c1: 'r2', verb: 'BLOCK', ok: (s, b) => s.block > b.block, again: 'BLOCK AS THE RING CLOSES' },
-    { id: 'guard', who: 'p', actor: 'knight', hand: 'R', l1: 'BRUNA SHIELDS EVERYONE', c1: 'c3', verb: 'GUARD', sub: 'HALF DAMAGE, 2 ROUNDS', pre: B => { B.wake = Math.max(B.wake, 1); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'guard', who: 'p', actor: 'knight', hand: 'B', l1: 'BRUNA SHIELDS EVERYONE', c1: 'c3', verb: 'GUARD', sub: 'HALF DAMAGE, 2 ROUNDS', pre: B => { B.wake = Math.max(B.wake, 1); }, ok: (s, b) => s.skills > b.skills },
     { id: 'string', who: 'foe', pat: 'shs', slow: .8, l1: 'A STRING', c1: 'wt', verb: 'READ EACH HIT', sub: 'RED=LEFT  BLUE=RIGHT', ok: (s, b) => s.strings > b.strings },
-    { id: 'skill', who: 'p', actor: 'hero', hand: 'R', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'skill', who: 'p', actor: 'hero', hand: 'B', l1: 'WAKE PAYS FOR SKILLS', c1: 'c2', verb: 'SHARD STRIKE', sub: 'PARRY+PERFECT REFILL', pre: B => { B.wake = Math.max(B.wake, 3); }, ok: (s, b) => s.skills > b.skills },
     { id: 'item', who: 'p', actor: 'mage', hand: 'R', l1: 'BRUNA IS HURT', c1: 'g4', verb: 'POTION', sub: 'ITEM > POTION > BRUNA', pre: () => { const k = G.party.find(p => p.id === 'knight'); k.hp = Math.min(k.hp, Math.round(k.maxhp * .3)); }, ok: (s, b) => (s.items || 0) > (b.items || 0) },
     { id: 'break', who: 'free', l1: 'FILL ITS BREAK BAR', c1: 'au', verb: 'BREAK IT', sub: 'PERFECTS + PARRIES', ok: (s, b) => s.breaks > b.breaks },
     { id: 'finish', who: 'free', l1: 'IT IS OPEN', c1: 'au', verb: 'FINISH IT', ok: () => false },
@@ -884,7 +891,7 @@
   }
   // the lesson fight cannot end before every verb is taught: until the break lesson, the foe stays above 30% HP
   const FINALE_LESSONS = [
-    { id: 'volley', who: 'p', actor: 'archer', hand: 'R', l1: 'WREN HITS EVERY FOE', c1: 'g4', verb: 'VOLLEY', sub: 'ONE ARROW EACH', pre: B => { B.wake = Math.max(B.wake, 2); }, ok: (s, b) => s.skills > b.skills },
+    { id: 'volley', who: 'p', actor: 'archer', hand: 'B', l1: 'WREN HITS EVERY FOE', c1: 'g4', verb: 'VOLLEY', sub: 'ONE ARROW EACH', pre: B => { B.wake = Math.max(B.wake, 2); }, ok: (s, b) => s.skills > b.skills },
     { id: 'eye', who: 'free', l1: 'THE EYE OPENS EVERY', c1: 'au', verb: 'OTHER ROUND', sub: 'SHARD STRIKE IT THEN', ok: () => false },
   ];
   function lessonFloor(f) { if (S.battle && S.battle.kind === 'dojo') { f.hp = Math.max(f.hp, 1); return; } const L = lesson(); if (L && !S.demo.finale && LESSONS.indexOf(L) < LESSONS.findIndex(q => q.id === 'break')) f.hp = Math.max(f.hp, Math.round(f.maxhp * .3)); }
@@ -928,7 +935,7 @@
     if (L.hand && Math.floor(t * 3) % 2 && (B.phase === 'foeWind' || B.phase === 'menu' || B.phase === 'timing')) {   // point at the answer
       let x = L.hand === 'L' ? LPAD[0] + 43 : RPAD[0] + 43, y = PAD_Y - 6;
       if (B.phase === 'allyTarget') { const i = G.party.findIndex(p => p.id === 'knight'); x = 4 + (i % 2) * 88 + 20; y = 193 + Math.floor(i / 2) * 13; }
-      if (B.phase === 'menu') { const want = { skill: 'SHARD STRIKE', magic: 'FIREBALL', guard: 'GUARD', volley: 'VOLLEY', item: B.sub === 'item' ? 'POTION' : 'ITEM' }[L.id] || 'STRIKE', b = rightButtons().find(q => q.o === want); if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
+      if (B.phase === 'menu') { const want = { skill: 'SHARD STRIKE', magic: 'FIREBALL', guard: 'GUARD', volley: 'VOLLEY', item: B.sub === 'item' ? 'POTION' : 'ITEM' }[L.id] || 'STRIKE', b = rightButtons().find(q => q.o === want) || { b: SWAP }; if (b) { x = b.b[0] + b.b[2] / 2; y = b.b[1] - 6; } }
       for (let i = 0; i < 4; i++) rect(x - 4 + i, y + i, 9 - i * 2, 1, 'au');
     }
   }
@@ -1169,15 +1176,16 @@
       return;
     }
     if (B.phase === 'menu') {
-      text('TARGET', L[0] + L[2] / 2, L[1] + 6, 's3', 'center', null);
       for (const c of foeChips()) { const f = B.foes[c.i], b = c.b, dead = f.hp <= 0, on = B.pick === c.i && !dead;
         panel(b[0], b[1], b[2], b[3], dead ? 's0' : on ? 'au' : f.stun > 0 ? 'n6' : 'b0');
-        if (!dead) { const nm = f.name.split(' ').pop(); text(b[2] > 40 ? nm : f.short || nm.slice(0, 3), b[0] + b[2] / 2, b[1] + 6, on ? 'au' : 'wt', 'center', null);
-          rect(b[0] + 3, b[1] + 20, b[2] - 6, 3, 'k'); rect(b[0] + 3, b[1] + 20, Math.round((b[2] - 6) * f.hp / f.maxhp), 3, 'g3');
-          if (f.brkMax) { const n = f.brkMax, w = Math.max(2, Math.floor((b[2] - 6) / n) - 1); for (let j = 0; j < n; j++) rect(b[0] + 3 + j * (w + 1), b[1] + 26, w, 3, j < f.brk ? 'au' : 's1'); }
-          if (f.weak && b[2] > 30) text(f.weak === 'fire' ? 'FIRE!' : f.weak === 'pierce' ? 'ARROW' : 'SHARD', b[0] + b[2] / 2, b[1] + 31, 'n6', 'center', null);
-        } }
-      text('◀ SWIPE ▶', L[0] + L[2] / 2, L[1] + 70, 's2', 'center', null);
+        if (!dead) { const nm = f.name.split(' ').pop(); text(b[2] > 80 ? nm : f.short || nm.slice(0, b[2] > 40 ? 5 : 3), b[0] + b[2] / 2, b[1] + 4, on ? 'au' : 'wt', 'center', null);
+          rect(b[0] + 3, b[1] + 15, b[2] - 6, 3, 'k'); rect(b[0] + 3, b[1] + 15, Math.round((b[2] - 6) * f.hp / f.maxhp), 3, 'g3'); } }
+      { const st = stanceOf(B.actor), mg = st === 'magic', b = SWAP, pulse = S.swapT && S.t - S.swapT < .15;   // the stance swap: one tap of the left thumb
+        panel(b[0], b[1], b[2], b[3], pulse ? 'wt' : mg ? 'p1' : 'r1');
+        if (mg) { for (let a = 0; a < 20; a++) { const q = a / 20 * 6.283 + t * 2; px(b[0] + 43 + Math.cos(q) * 9, b[1] + 20 + Math.sin(q) * 5, a % 3 ? 'p2' : 'wt'); } disc(b[0] + 43, b[1] + 20, 2, 'p2'); }
+        else swordIcon(b[0] + 43, b[1] + 20, 'au');
+        text(mg ? 'MAGIC' : 'ATTACK', b[0] + 43, b[1] + 33, mg ? 'p2' : 'au', 'center', null);
+        text('TAP: SWAP', b[0] + 43, b[1] + 44, 's3', 'center', null); }
       for (const btn of rightButtons()) { const o = btn.o, sk = SKILL[o]; let lab = o;
         if (sk) lab = btn.b[2] < 50 ? o.split(' ')[0].slice(0, 4) : o.split(' ').pop();
         if (o === 'POTION' || o === 'ETHER') lab = `${o} x${G.items[o]}`;
@@ -1347,7 +1355,7 @@
   function onPointer(type, X, Y, id = 0) {
     const x = X / SC, y = Y / SC;
     if (type === 'move') { const tc = touches.get(id); if (tc && tc.kind === 'stick') { tc.x = x; tc.y = y; } else if (tc && tc.kind === 'swipe') swipeMove(tc, x); return; }
-    if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; return; }
+    if (type === 'up' || type === 'cancel') { const tc = touches.get(id); touches.delete(id); if (tc && tc.kind === 'stick' && S.stick === tc) S.stick = null; if (tc && tc.kind === 'dash' && S.dash === tc) S.dash = null; if (tc && tc.kind === 'swipe' && tc.swap && !tc.done) swapStance(); return; }
     if ((type === 'up' || type === 'cancel') && S.titleHold) { for (const h of ['L', 'R']) if (S.titleHold[h] === id) delete S.titleHold[h]; }
     if (type !== 'down') return;
     Audio.unlock(); if (SND.on) sndInit(); S.scheme = COARSE ? 'touch' : 'keys'; S.idleT = S.t;
@@ -1385,9 +1393,9 @@
       if (B.phase === 'timing') { timingTap(x < 90 ? 'L' : 'R'); return; }
       if (B.phase === 'foeWind') { defend(x < 90 ? 'L' : 'R'); return; }
       if (B.phase === 'menu') {
-        if (x < 90 && y >= PAD_Y) { touches.set(id, { kind: 'swipe', x0: x, done: false });
-          for (const c of foeChips()) if (inBox(x, y, c.b) && B.foes[c.i].hp > 0) { B.pick = c.i; Audio.tone(990, .03, 'square', .04); }
-          return; }
+        if (x < 90 && y >= PAD_Y) {
+          for (const c of foeChips()) if (inBox(x, y, c.b) && B.foes[c.i].hp > 0) { B.pick = c.i; Audio.tone(990, .03, 'square', .04); return; }
+          touches.set(id, { kind: 'swipe', x0: x, done: false, swap: inBox(x, y, SWAP) && !B.sub }); return; }
         if (y < 184) {   // a tap on a foe up on the field still aims (two-handed players will not need it)
           let best = -1, bd = 1e9; B.foes.forEach((f, i) => { if (f.hp <= 0) return; const d = Math.hypot(x / 2 - foeX(i), y / 2 - aimY(i)); if (d < bd) { bd = d; best = i; } });
           if (best >= 0 && bd < 30) B.pick = best; return;
@@ -1451,7 +1459,8 @@
       if (B.phase === 'menu') {
         if (key === 'ArrowLeft' || key === 'ArrowRight') return cycleTarget(key === 'ArrowRight' ? 1 : -1);
         if (B.sub === 'item') { if (key === '1') choose('POTION'); if (key === '2') choose('ETHER'); if (left || key === 'Backspace') B.sub = null; return; }
-        if (ok) return choose('STRIKE');
+        if (left) return swapStance();
+        if (ok) { const main = rightButtons().filter(q => q.o !== 'ITEM' && q.o !== 'RUN')[0]; return main && choose(main.o); }
         if (key === '1' || key === '2') { const s = B.actor.skills[+key - 1]; if (s) choose(s); return; }
         if (key === 'i' || key === 'I') return choose('ITEM');
         if (key === 'r' || key === 'R') return choose('RUN');

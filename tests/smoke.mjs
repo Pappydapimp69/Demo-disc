@@ -661,6 +661,14 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
     for (let k = 0; k < 4000 && g.lesson() && g.lesson().id === 'guard'; k++) { g.step(4); const B = g.S.battle; if (B.phase === 'menu') { presses++; B.stats.actions++; B.phase = 'after'; B.t = 0; } }   // a wrong press: the turn passes without GUARD
     return { lesson: g.lesson() && g.lesson().id, presses }; });
   check(stuck.lesson === 'string' && stuck.presses >= 3, `stonewake-proto pitch: three wrong presses in a lesson move it on (${JSON.stringify(stuck)})`);
+  // the left thumb swaps the stance: a tap on the left pad turns STRIKE into the hero's spells and back; a slide there aims instead
+  const sw = await page.evaluate(() => { const g = window.__game; g.S.demo = null; g.autopilot = null; g.newGame(); g.finish(); g.recruit('mage'); g.setLevel(4); g.G.shards = 1; g.startBattle(['wolf', 'scorp'], 'foe');
+    g.autopilot = 'perfect'; for (let k = 0; k < 4000 && !(g.S.battle.phase === 'menu' && g.S.battle.actor.id === 'mage'); k++) g.step(1); g.autopilot = null; return g.ui().right.map(q => q.o).join(','); });
+  await touch('touchStart', [[45, 290, 21]]); await touch('touchEnd', []);
+  const magic = await page.evaluate(() => window.__game.ui().right.map(q => q.o).join(','));
+  await touch('touchStart', [[30, 290, 22]]); await touch('touchMove', [[60, 290, 22]]); await touch('touchEnd', []);
+  const slid = await page.evaluate(() => window.__game.ui().right.map(q => q.o).join(','));
+  check(sw.includes('STRIKE') && magic.includes('FIREBALL') && magic.includes('HEAL') && !magic.includes('STRIKE') && slid === magic, `stonewake-proto: a left-thumb tap swaps ATTACK and MAGIC, a slide only aims (${sw} -> ${magic})`);
   await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
   check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
   await page.close();
