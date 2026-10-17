@@ -604,6 +604,43 @@ async function runUntil(page, fn, maxTicks, chunk = 30) {
   await page.close();
 }
 
+// ---------- STONEWAKE: TWO HANDS (prototype) ----------
+{
+  const { page, errors } = await open('games/stonewake-proto/index.html');
+  const fight = (setup, auto, human) => page.evaluate(([setup, auto, human]) => { const g = window.__game, [r, foes, allies, lv, sh] = setup; g.seed(7); g.newGame(); g.finish(); g.enterRegion(r); g.finish(); allies.forEach(a => g.recruit(a)); g.G.shards = sh; g.setLevel(lv); g.autopilot = auto; g.human = human; g.startBattle(foes, 'boss');
+    let minhp = 1; for (let k = 0; k < 12000 && g.S.mode === 'battle' && !['win', 'lose'].includes(g.S.battle.phase); k++) { g.step(10); for (const p of g.G.party) minhp = Math.min(minhp, p.hp / p.maxhp); }
+    return { phase: g.S.battle.phase, minhp, stats: g.S.battle.stats }; }, [setup, auto, human]);
+  const bosses = [['forest', ['gforest'], [], 1, 0], ['cave', ['gcave'], ['knight'], 3, 1], ['desert', ['gdesert'], ['knight', 'mage'], 5, 2], ['cave', ['wraith'], ['knight', 'mage', 'archer'], 6, 3], ['titan', ['lhand', 'eye', 'rhand'], ['knight', 'mage', 'archer'], 7, 3]];
+  for (const b of bosses) { const r = await fight(b, 'perfect'); check(r.phase === 'win' && r.stats.parry + r.stats.block > 0, `stonewake-proto ${b[1].join('+')}: perfect two-hand play wins (${r.phase}, parries ${r.stats.parry}, blocks ${r.stats.block})`); }
+  // the second thumb is a decision, not decoration: parrying beats blocking everything; mashing both thumbs loses
+  const parry = await fight(bosses[2], 'human', { sd: .05, parry: true }), block = await fight(bosses[2], 'human', { sd: .05, parry: false }), mash = await fight(bosses[2], 'human', { sd: .05, parry: true, mash: true });
+  check(parry.phase === 'win' && parry.minhp > block.minhp, `stonewake-proto: parrying swift hits leaves more HP than blocking all (${parry.minhp.toFixed(2)} vs ${block.minhp.toFixed(2)})`);
+  check(mash.phase === 'lose' || mash.minhp < block.minhp, `stonewake-proto: mashing both thumbs is punished (${mash.phase}, ${mash.minhp.toFixed(2)})`);
+  // real touches: a held left thumb walks with the floating stick while the right thumb holds DASH
+  await page.evaluate(() => { const g = window.__game; g.autopilot = null; g.newGame(); g.finish(); g.enterRegion('forest'); g.finish(); for (const f of g.S.foes) f.alive = false; });
+  const box = await page.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  const at = (ax, ay) => ({ x: box.x + ax / 180 * box.w, y: box.y + ay / 320 * box.h });
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([ax, ay, id]) => ({ ...at(ax, ay), id })) });
+  const y0 = await page.evaluate(() => window.__game.S.hero.y);
+  await touch('touchStart', [[40, 286, 1]]); await touch('touchMove', [[40, 270, 1]]); await touch('touchStart', [[40, 270, 1], [150, 282, 2]]);
+  const dashing = await page.evaluate(() => !!window.__game.S.dash && !!window.__game.S.stick);
+  await page.evaluate(() => window.__game.step(30));
+  const y1 = await page.evaluate(() => window.__game.S.hero.y);
+  await touch('touchEnd', [[40, 270, 1]]); await touch('touchEnd', []);
+  check(dashing && y1 < y0 - 2, `stonewake-proto: two thumbs at once, stick + DASH walks the hero north (${y0} -> ${y1})`);
+  // in battle: one tap on STRIKE (no target step), and the left pad picks a target without reaching up
+  await page.evaluate(() => { const g = window.__game; g.startBattle(['wolf', 'slime'], 'foe'); for (let k = 0; k < 400 && g.S.battle.phase !== 'menu'; k++) g.step(5); });
+  const ui = await page.evaluate(() => window.__game.ui());
+  const c = ui.chips[1].b; await touch('touchStart', [[c[0] + c[2] / 2, c[1] + c[3] / 2, 3]]); await touch('touchEnd', []);
+  const s = ui.right.find(b => b.o === 'STRIKE').b; await touch('touchStart', [[s[0] + s[2] / 2, s[1] + s[3] / 2, 4]]); await touch('touchEnd', []);
+  const st = await page.evaluate(() => ({ pick: window.__game.S.battle.pick, phase: window.__game.S.battle.phase, target: window.__game.S.battle.target }));
+  check(st.pick === 1 && st.phase === 'timing' && st.target === 1, `stonewake-proto: left thumb aims, one right-thumb tap strikes (${JSON.stringify(st)})`);
+  await page.screenshot({ path: path.join(shots, 'stonewake-proto.png') });
+  check(errors.length === 0, `stonewake-proto runs without errors ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
